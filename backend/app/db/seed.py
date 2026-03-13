@@ -1,7 +1,9 @@
 import os
 import re
 import uuid
+import shutil
 from datetime import datetime
+
 from dotenv import dotenv_values
 
 
@@ -11,6 +13,13 @@ def _read_text(path: str) -> str:
             return f.read()
     except Exception:
         return ""
+
+
+def _legacy_env_paths(base_dir: str) -> list[str]:
+    return [
+        os.path.abspath(os.path.join(base_dir, "..", "..", "..", "backend", ".env")),
+        os.path.abspath(os.path.join(base_dir, "..", "..", "frontend", ".env")),
+    ]
 
 
 def _infer_deploy_path_from_ci(ci_text: str) -> str | None:
@@ -28,6 +37,16 @@ def _infer_deploy_path_from_ci(ci_text: str) -> str | None:
     return None
 
 
+def migrate_legacy_db_if_needed(db_path: str) -> None:
+    if os.path.exists(db_path):
+        return
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    legacy = os.path.abspath(os.path.join(base_dir, "..", "..", "..", "server", "data", "db.json"))
+    if os.path.exists(legacy):
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        shutil.copyfile(legacy, db_path)
+
+
 def ensure_seeded(storage) -> None:
     servers = storage.get_all("servers") or []
     repos = storage.get_all("repos") or []
@@ -37,10 +56,13 @@ def ensure_seeded(storage) -> None:
         return
 
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    ui_env_path = os.path.abspath(os.path.join(base_dir, "..", "ui", ".env"))
-    ci_path = os.path.abspath(os.path.join(base_dir, "..", ".gitlab-ci.yml"))
+    env = {}
+    for p in _legacy_env_paths(base_dir):
+        if os.path.exists(p):
+            env = dotenv_values(p)
+            break
 
-    env = dotenv_values(ui_env_path) if os.path.exists(ui_env_path) else {}
+    ci_path = os.path.abspath(os.path.join(base_dir, "..", "..", "..", ".gitlab-ci.yml"))
     ci_text = _read_text(ci_path)
 
     gitlab_base_url = (env.get("GITLAB_BASE_URL") or "").strip() or "https://gitlab.xuelangyun.com"
@@ -54,6 +76,9 @@ def ensure_seeded(storage) -> None:
     repo_name = project.split("/")[-1] if "/" in project else project
 
     deploy_path = "/home/metalm/deploy/NexusOps/"
+    inferred = _infer_deploy_path_from_ci(ci_text)
+    if inferred:
+        deploy_path = "/home/metalm/deploy/NexusOps/"
 
     server = {
         "id": str(uuid.uuid4()),

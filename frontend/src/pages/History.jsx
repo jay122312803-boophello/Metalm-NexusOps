@@ -1,0 +1,157 @@
+import { useEffect, useState } from 'react'
+import Drawer from '../components/Drawer.jsx'
+import Icon from '../components/Icon.jsx'
+import { api } from '../services/api.js'
+
+export default function History() {
+  const [history, setHistory] = useState([])
+  const [servers, setServers] = useState([])
+  const [statusOptions, setStatusOptions] = useState(['pending', 'running', 'success', 'failed', 'canceled'])
+  const [selectedServerId, setSelectedServerId] = useState('all')
+  const [selectedStatus, setSelectedStatus] = useState('all')
+  const [varsView, setVarsView] = useState(null)
+
+  useEffect(() => {
+    const loadHistory = async () => {
+      const qs = new URLSearchParams()
+      if (selectedServerId && selectedServerId !== 'all') qs.set('server_id', selectedServerId)
+      if (selectedStatus && selectedStatus !== 'all') qs.set('status', selectedStatus)
+      const url = qs.toString() ? `/api/history?${qs.toString()}` : '/api/history'
+      const h = await api.get(url)
+      setHistory(Array.isArray(h?.history) ? h.history : [])
+      const sv = Array.isArray(h?.filters?.servers) ? h.filters.servers : null
+      if (sv) setServers(sv)
+      const st = Array.isArray(h?.filters?.statuses) ? h.filters.statuses : null
+      if (st && st.length) setStatusOptions(st)
+    }
+    loadHistory()
+    const t = setInterval(loadHistory, 8000)
+    return () => clearInterval(t)
+  }, [selectedServerId, selectedStatus])
+
+  const getStatusIcon = (status) => {
+    if (status === 'success') return <Icon name="circle-check" style={{ color: 'var(--success)', fontSize: 20 }} />
+    if (status === 'failed') return <Icon name="circle-xmark" style={{ color: 'var(--danger)', fontSize: 20 }} />
+    if (status === 'canceled') return <Icon name="ban" style={{ color: 'var(--warning)', fontSize: 20 }} />
+    if (status === 'running' || status === 'pending')
+      return <Icon name="spinner fa-spin" style={{ color: 'var(--info)', fontSize: 20 }} />
+    return <Icon name="circle-question" style={{ color: '#cbd5e1', fontSize: 20 }} />
+  }
+
+  const statusLabel = (s) => {
+    const v = String(s || '').toLowerCase()
+    if (v === 'success') return '成功'
+    if (v === 'failed') return '失败'
+    if (v === 'running') return '运行中'
+    if (v === 'pending') return '排队中'
+    if (v === 'canceled') return '已取消'
+    return v || '未知'
+  }
+
+  return (
+    <div>
+      <div className="page-head">
+        <h2 className="page-title">审计日志</h2>
+        <div className="page-actions">
+          <select
+            className="form-input"
+            style={{ width: 180 }}
+            value={selectedServerId}
+            onChange={(e) => setSelectedServerId(e.target.value)}
+          >
+            <option value="all">全部服务器</option>
+            {servers.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          <select
+            className="form-input"
+            style={{ width: 180 }}
+            value={selectedStatus}
+            onChange={(e) => setSelectedStatus(e.target.value)}
+          >
+            <option value="all">全部状态</option>
+            {statusOptions.map((s) => (
+              <option key={s} value={s}>
+                {statusLabel(s)}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="card">
+        <table className="repo-table" style={{ width: '100%' }}>
+          <thead>
+            <tr>
+              <th style={{ width: 60 }}>状态</th>
+              <th>任务说明</th>
+              <th>CI 信息</th>
+              <th style={{ width: '42%' }}>变量参数</th>
+              <th>触发时间</th>
+            </tr>
+          </thead>
+          <tbody>
+            {history.map((h) => {
+              const sName = h.server_snapshot?.name || 'Unknown Server'
+              const rName = h.repo_snapshot?.name || 'Unknown Repo'
+              return (
+                <tr key={h.id}>
+                  <td>{getStatusIcon(h.status)}</td>
+                  <td>
+                    <div style={{ fontWeight: 500 }}>{`Deploy ${rName}`}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-sub)' }}>{`To: ${sName}`}</div>
+                  </td>
+                  <td>
+                    <div>{`Pipeline #${h.pipeline_id}`}</div>
+                    {h.web_url ? (
+                      <a href={h.web_url} target="_blank" style={{ fontSize: 12, color: 'var(--info)' }}>
+                        View in GitLab
+                      </a>
+                    ) : null}
+                  </td>
+                  <td>
+                    {!h.variables ? (
+                      '-'
+                    ) : (
+                      <span
+                        className="vars-pill"
+                        title="点击查看详情"
+                        onClick={() =>
+                          setVarsView({
+                            title: `Pipeline #${h.pipeline_id} 变量参数`,
+                            text: JSON.stringify(h.variables, null, 2)
+                          })
+                        }
+                      >
+                        <Icon name="code" style={{ fontSize: 12 }} />
+                        {`${Object.keys(h.variables || {}).length} 个变量`}
+                      </span>
+                    )}
+                  </td>
+                  <td>{new Date(h.created_at).toLocaleString()}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {varsView ? (
+        <Drawer
+          title={varsView.title}
+          onClose={() => setVarsView(null)}
+          footer={[
+            <button key="c" className="btn btn-outline" onClick={() => setVarsView(null)}>
+              关闭
+            </button>
+          ]}
+        >
+          <pre className="code-pre">{varsView.text}</pre>
+        </Drawer>
+      ) : null}
+    </div>
+  )
+}
