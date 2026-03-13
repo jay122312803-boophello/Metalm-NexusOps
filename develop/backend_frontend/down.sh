@@ -1,0 +1,1 @@
+NETWORK=metalm-dev-net docker-compose down
