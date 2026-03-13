@@ -14,6 +14,7 @@ deploy_backend_frontend:
 
   before_script:
     # 1. 安装必要的工具 (注意：如果这里报错说连不上源，说明内网也屏蔽了 apk 的公网源)
+    - sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
     - apk add --no-cache openssh-client rsync
     # 2. 启动 ssh-agent 并加载私钥
     - eval $(ssh-agent -s)
