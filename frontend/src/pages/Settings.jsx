@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Drawer from '../components/Drawer.jsx'
 import Icon from '../components/Icon.jsx'
+import Modal from '../components/Modal.jsx'
 import { api } from '../services/api.js'
 
 export default function Settings() {
@@ -12,6 +13,9 @@ export default function Settings() {
   const [showPrivateToken, setShowPrivateToken] = useState(false)
   const [formServer, setFormServer] = useState({ ssh_user: 'metalm' })
   const [formRepo, setFormRepo] = useState({ branch: 'master' })
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleteError, setDeleteError] = useState(null)
+  const [deleting, setDeleting] = useState(false)
 
   const refresh = async () => {
     const sv = await api.get('/api/servers')
@@ -57,10 +61,27 @@ export default function Settings() {
     refresh()
   }
 
-  const handleDelete = async (type, id) => {
-    if (!confirm('确认删除?')) return
-    await api.del(`/api/${type}s/${id}`)
-    refresh()
+  const openDelete = (type, item) => {
+    setDeleteError(null)
+    setDeleteTarget({ type, id: item.id, name: item.name })
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      const res = await api.del(`/api/${deleteTarget.type}s/${deleteTarget.id}`)
+      if (res?.ok) {
+        setDeleteTarget(null)
+        refresh()
+      } else {
+        const d = res?.detail
+        setDeleteError(typeof d === 'string' ? d : d ? JSON.stringify(d) : '删除失败')
+      }
+    } finally {
+      setDeleting(false)
+    }
   }
 
   return (
@@ -103,7 +124,7 @@ export default function Settings() {
               <button
                 className="btn btn-ghost btn-sm"
                 style={{ position: 'absolute', bottom: 16, right: 16, color: '#ef4444' }}
-                onClick={() => handleDelete('server', s.id)}
+                onClick={() => openDelete('server', s)}
               >
                 <Icon name="trash" />
               </button>
@@ -136,7 +157,7 @@ export default function Settings() {
                     <span style={{ color: '#94a3b8', fontSize: 12 }}>{r.url}</span>
                   </td>
                   <td>
-                    {r.trigger_token || r.private_token ? (
+                    {r?.auth?.trigger || r?.auth?.private ? (
                       <span style={{ color: 'var(--success)' }} title="Token已配置">
                         <Icon name="shield-halved" /> 已绑定
                       </span>
@@ -145,7 +166,7 @@ export default function Settings() {
                     )}
                   </td>
                   <td>
-                    <button className="btn btn-ghost btn-sm" onClick={() => handleDelete('repo', r.id)}>
+                    <button className="btn btn-ghost btn-sm" onClick={() => openDelete('repo', r)}>
                       <Icon name="trash" />
                     </button>
                   </td>
@@ -283,6 +304,51 @@ export default function Settings() {
             </>
           )}
         </Drawer>
+      ) : null}
+
+      {deleteTarget ? (
+        <Modal
+          danger
+          title={deleteTarget.type === 'server' ? '删除服务器' : '删除仓库'}
+          onClose={() => (deleting ? null : setDeleteTarget(null))}
+          footer={[
+            <button key="c" className="btn btn-outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+              取消
+            </button>,
+            <button key="ok" className="btn btn-danger" onClick={confirmDelete} disabled={deleting}>
+              <Icon name={deleting ? 'spinner fa-spin' : 'trash'} /> {deleting ? '删除中...' : '确认删除'}
+            </button>
+          ]}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 14 }}>
+            <div style={{ color: 'var(--text-sub)' }}>
+              {deleteTarget.type === 'server'
+                ? '该服务器可能被部署任务引用，删除后相关任务将无法正常工作。'
+                : '该仓库可能被部署任务引用，删除后相关任务将无法触发部署。'}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 8 }}>
+              <div style={{ color: 'var(--text-sub)' }}>名称</div>
+              <div style={{ fontWeight: 600 }}>{deleteTarget.name}</div>
+              <div style={{ color: 'var(--text-sub)' }}>ID</div>
+              <div style={{ fontFamily: 'monospace', fontSize: 12 }}>{deleteTarget.id}</div>
+            </div>
+            {deleteError ? (
+              <div
+                style={{
+                  marginTop: 4,
+                  padding: '10px 12px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(239,68,68,0.25)',
+                  background: 'rgba(239,68,68,0.06)',
+                  color: '#b91c1c',
+                  fontSize: 13
+                }}
+              >
+                {deleteError}
+              </div>
+            ) : null}
+          </div>
+        </Modal>
       ) : null}
     </div>
   )

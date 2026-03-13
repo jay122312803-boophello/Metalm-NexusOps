@@ -151,6 +151,9 @@ body {
 .btn-primary { background: var(--primary); color: white; }
 .btn-primary:hover { background: var(--primary-dark); }
 .btn-primary:disabled { background: #9ca3af; cursor: not-allowed; }
+.btn-danger { background: var(--danger); color: white; }
+.btn-danger:hover { filter: brightness(0.92); }
+.btn-danger:disabled { background: #9ca3af; cursor: not-allowed; }
 .btn-outline { background: white; border-color: var(--border); color: var(--text-main); }
 .btn-outline:hover { background: #f8fafc; border-color: #cbd5e1; }
 .btn-ghost { background: transparent; color: var(--text-sub); }

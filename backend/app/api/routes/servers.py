@@ -1,32 +1,75 @@
-import uuid
-from datetime import datetime
-
 from fastapi import APIRouter, HTTPException
 
 from ...schemas import CreateServerRequest
-from ...state import storage
+from ...db.models import Server
+from ...db.session import run_db
+import uuid
+from sqlalchemy.exc import IntegrityError
 
 router = APIRouter()
 
 
 @router.get("")
-def list_servers():
-    return storage.get_all("servers")
+async def list_servers():
+    def _work(session):
+        rows = session.query(Server).order_by(Server.created_at.asc()).all()
+        return [
+            {
+                "id": str(s.id),
+                "name": s.name,
+                "address": s.address,
+                "ssh_user": s.ssh_user,
+                "deploy_path": s.deploy_path,
+                "description": s.description,
+                "created_at": s.created_at.isoformat() if s.created_at else None,
+            }
+            for s in rows
+        ]
+
+    return await run_db(_work)
 
 
 @router.post("")
-def create_server(req: CreateServerRequest):
-    item = req.model_dump()
-    item["id"] = str(uuid.uuid4())
-    item["created_at"] = datetime.now().isoformat()
-    storage.add("servers", item)
-    return item
+async def create_server(req: CreateServerRequest):
+    data = req.model_dump()
+    def _work(session):
+        s = Server(
+            name=data["name"],
+            address=data["address"],
+            ssh_user=data.get("ssh_user") or "metalm",
+            deploy_path=data["deploy_path"],
+            description=data.get("description"),
+        )
+        session.add(s)
+        session.commit()
+        session.refresh(s)
+        return {
+            "id": str(s.id),
+            "name": s.name,
+            "address": s.address,
+            "ssh_user": s.ssh_user,
+            "deploy_path": s.deploy_path,
+            "description": s.description,
+            "created_at": s.created_at.isoformat() if s.created_at else None,
+        }
+
+    return await run_db(_work)
 
 
 @router.delete("/{server_id}")
-def delete_server(server_id: str):
-    ok = storage.delete("servers", server_id)
+async def delete_server(server_id: str):
+    def _work(session):
+        s = session.get(Server, uuid.UUID(server_id))
+        if not s:
+            return False
+        session.delete(s)
+        session.commit()
+        return True
+
+    try:
+        ok = await run_db(_work)
+    except IntegrityError:
+        raise HTTPException(status_code=409, detail="该服务器被部署任务引用，无法删除")
     if not ok:
         raise HTTPException(status_code=404, detail="Server not found")
     return {"ok": True}
-

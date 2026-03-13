@@ -13,4 +13,4 @@ __pycache__/
 
 backend/data/
 server/data/
-
+db/volumes/

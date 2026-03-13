@@ -1,95 +1,148 @@
+import os
+import uuid
+
 import requests
 from fastapi import APIRouter, HTTPException, Query
 
-from ...state import storage
+from sqlmodel import select
+
+from ...db.models import Deployment, DeploymentHistory, Repo, Server
+from ...db.session import run_db
 
 router = APIRouter()
 
 
 @router.get("")
-def get_history(
+async def get_history(
     server_id: str | None = Query(default=None),
     status: str | None = Query(default=None),
 ):
-    history = storage.get_all("history")
-    history.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    def _work(session):
+        gitlab_url = (os.getenv("GITLAB_BASE_URL") or "https://gitlab.xuelangyun.com").rstrip("/")
+        verify_tls = (os.getenv("GITLAB_TLS_INSECURE") or "").strip() != "1"
 
-    refresh_targets = []
-    for h in history[:30]:
-        st = (h.get("status") or "").lower()
-        if st not in {"pending", "running"}:
-            continue
-        repo = h.get("repo_snapshot") or {}
-        pid = h.get("pipeline_id")
-        proj_id = repo.get("project_id")
-        token = repo.get("private_token")
-        if pid and proj_id and token:
-            refresh_targets.append((h, proj_id, pid, token))
+        refresh_rows = session.exec(
+            select(
+                DeploymentHistory.id,
+                DeploymentHistory.pipeline_id,
+                DeploymentHistory.status,
+                Repo.project_id,
+                Repo.private_token,
+            )
+            .join(Deployment, Deployment.id == DeploymentHistory.deployment_id)
+            .join(Repo, Repo.id == Deployment.repo_id)
+            .where(DeploymentHistory.status.in_(["pending", "running"]))
+            .order_by(DeploymentHistory.created_at.desc())
+            .limit(30)
+        ).all()
 
-    for h, proj_id, pid, token in refresh_targets:
-        try:
-            url = f"https://gitlab.xuelangyun.com/api/v4/projects/{requests.utils.quote(proj_id, safe='')}/pipelines/{pid}"
+        for hid, pid, old_status, proj_id, private_token in refresh_rows:
+            proj = (proj_id or os.getenv("GITLAB_PROJECT") or "").strip()
+            token = (private_token or "").strip() or (os.getenv("PRIVATE_TOKEN") or "").strip() or None
+            if not pid or not proj or not token:
+                continue
+            url = f"{gitlab_url}/api/v4/projects/{requests.utils.quote(proj, safe='')}/pipelines/{pid}"
             headers = {"PRIVATE-TOKEN": token}
-            resp = requests.get(url, headers=headers, verify=False, timeout=8)
-            if resp.ok:
+            try:
+                resp = requests.get(url, headers=headers, verify=verify_tls, timeout=8)
+                if not resp.ok:
+                    continue
                 data = resp.json()
                 new_status = data.get("status")
                 new_web_url = data.get("web_url")
-                if new_status and new_status != h.get("status"):
-                    storage.update("history", h.get("id"), {"status": new_status, "web_url": new_web_url})
-                    h["status"] = new_status
-                    h["web_url"] = new_web_url
-        except Exception:
-            pass
+                if new_status and new_status != old_status:
+                    obj = session.get(DeploymentHistory, hid)
+                    if obj:
+                        obj.status = new_status
+                        obj.web_url = new_web_url
+                        session.add(obj)
+                        session.commit()
+            except Exception:
+                continue
 
-    filtered = history
-    if server_id and server_id != "all":
-        filtered = [h for h in filtered if (h.get("server_snapshot") or {}).get("id") == server_id]
-    if status and status != "all":
-        filtered = [h for h in filtered if str(h.get("status")) == status]
+        sid = None
+        if server_id and server_id != "all":
+            sid = uuid.UUID(server_id)
 
-    servers = storage.get_all("servers")
-    server_options = [{"id": s.get("id"), "name": s.get("name")} for s in servers if s.get("id") and s.get("name")]
-    server_options.sort(key=lambda x: x["name"])
+        st = None
+        if status and status != "all":
+            st = status
 
-    status_options = [
-        "pending",
-        "running",
-        "success",
-        "failed",
-        "canceled",
-    ]
+        q = (
+            select(DeploymentHistory)
+            .join(Deployment, Deployment.id == DeploymentHistory.deployment_id)
+            .order_by(DeploymentHistory.created_at.desc())
+        )
+        if sid:
+            q = q.where(Deployment.server_id == sid)
+        if st:
+            q = q.where(DeploymentHistory.status == st)
+        q = q.limit(500)
 
-    return {
-        "ok": True,
-        "history": filtered,
-        "filters": {"servers": server_options, "statuses": status_options},
-    }
+        rows = session.exec(q).all()
+
+        servers = session.exec(select(Server.id, Server.name).order_by(Server.name.asc())).all()
+        server_options = [{"id": str(i), "name": n} for i, n in servers]
+        status_options = ["pending", "running", "success", "failed", "canceled"]
+
+        history = []
+        for h in rows:
+            history.append(
+                {
+                    "id": str(h.id),
+                    "deployment_id": str(h.deployment_id),
+                    "pipeline_id": h.pipeline_id,
+                    "status": h.status,
+                    "ref": h.ref,
+                    "web_url": h.web_url,
+                    "created_at": h.created_at.isoformat() if h.created_at else None,
+                    "finished_at": h.finished_at.isoformat() if h.finished_at else None,
+                    "server_snapshot": h.server_snapshot,
+                    "repo_snapshot": h.repo_snapshot,
+                    "variables": h.variables,
+                }
+            )
+
+        return {"ok": True, "history": history, "filters": {"servers": server_options, "statuses": status_options}}
+
+    return await run_db(_work)
 
 
 @router.get("/{history_id}/status")
-def check_pipeline_status(history_id: str):
-    h = storage.get_by_id("history", history_id)
-    if not h:
-        raise HTTPException(404, "History not found")
+async def check_pipeline_status(history_id: str):
+    def _work(session):
+        gitlab_url = (os.getenv("GITLAB_BASE_URL") or "https://gitlab.xuelangyun.com").rstrip("/")
+        verify_tls = (os.getenv("GITLAB_TLS_INSECURE") or "").strip() != "1"
 
-    repo = h.get("repo_snapshot") or {}
-    pid = h.get("pipeline_id")
-    proj_id = repo.get("project_id")
-    token = repo.get("private_token")
+        h = session.get(DeploymentHistory, uuid.UUID(history_id))
+        if not h:
+            raise HTTPException(404, "History not found")
 
-    if pid and proj_id and token:
-        try:
-            url = f"https://gitlab.xuelangyun.com/api/v4/projects/{requests.utils.quote(proj_id, safe='')}/pipelines/{pid}"
+        d = session.get(Deployment, h.deployment_id)
+        r = session.get(Repo, d.repo_id) if d else None
+
+        pid = h.pipeline_id
+        proj = ((r.project_id if r else None) or os.getenv("GITLAB_PROJECT") or "").strip()
+        token = ((r.private_token if r else None) or "").strip() or (os.getenv("PRIVATE_TOKEN") or "").strip() or None
+
+        if pid and proj and token:
+            url = f"{gitlab_url}/api/v4/projects/{requests.utils.quote(proj, safe='')}/pipelines/{pid}"
             headers = {"PRIVATE-TOKEN": token}
-            resp = requests.get(url, headers=headers, verify=False, timeout=8)
-            if resp.ok:
-                data = resp.json()
-                new_status = data.get("status")
-                new_web_url = data.get("web_url")
-                storage.update("history", history_id, {"status": new_status, "web_url": new_web_url})
-                return {"status": new_status, "pipeline": data}
-        except Exception:
-            pass
+            try:
+                resp = requests.get(url, headers=headers, verify=verify_tls, timeout=8)
+                if resp.ok:
+                    data = resp.json()
+                    new_status = data.get("status")
+                    new_web_url = data.get("web_url")
+                    if new_status:
+                        h.status = new_status
+                        h.web_url = new_web_url
+                        session.add(h)
+                        session.commit()
+                    return {"status": new_status or h.status, "pipeline": data}
+            except Exception:
+                pass
 
-    return {"status": h.get("status"), "pipeline": None}
+        return {"status": h.status, "pipeline": None}
+
+    return await run_db(_work)

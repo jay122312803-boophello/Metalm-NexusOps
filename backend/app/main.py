@@ -4,11 +4,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from dotenv import load_dotenv
 
 from .api.router import api_router
 
 
 def create_app() -> FastAPI:
+    load_dotenv()
     app = FastAPI(title="NexusOps API")
 
     app.add_middleware(
