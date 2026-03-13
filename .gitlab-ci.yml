@@ -40,7 +40,7 @@ deploy_backend_frontend:
         chmod +x down.sh up.sh
         
         # 服务器登录私有镜像仓库
-        docker login registry.xuelangyun.com -u \$REGISTRY_USER -p \$REGISTRY_PASSWORD
+        echo "$REGISTRY_PASSWORD" | docker login registry.xuelangyun.com -u "$REGISTRY_USER" --password-stdin
         
         # 确保网络存在
         docker network create metalm-dev-net || true
