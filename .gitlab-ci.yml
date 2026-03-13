@@ -5,7 +5,9 @@ deploy_backend_frontend:
   stage: deploy
   # 直接使用你们私有仓库的镜像作为 CI 跑腿环境
   image: registry.xuelangyun.com/shuzhi-amd64/alpine:3.20
-  
+  tags:
+    - nexus-tag
+
   only:
     refs:
       - master
