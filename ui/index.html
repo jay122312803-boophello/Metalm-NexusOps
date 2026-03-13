@@ -262,6 +262,9 @@
     .badge { padding: 2px 8px; border-radius: 4px; font-size: 12px; font-family: monospace; }
     .badge-blue { background: #eff6ff; color: #1d4ed8; }
     .badge-gray { background: #f1f5f9; color: #475569; }
+    .badge-prod { background: rgba(239,68,68,0.10); color: #b91c1c; }
+    .badge-dev { background: rgba(16,185,129,0.10); color: #047857; }
+    .badge-test { background: rgba(59,130,246,0.10); color: #1d4ed8; }
 
     /* --- 模块：部署大盘 --- */
     .deploy-grid {
@@ -275,12 +278,53 @@
       flex-direction: column;
       height: 100%;
       cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+      position: relative;
+      overflow: visible;
     }
+    .task-card:hover { transform: translateY(-2px); }
     .task-header {
       padding: 20px;
       border-bottom: 1px solid var(--border);
       background: linear-gradient(to right, #ffffff, #f8fafc);
     }
+    .task-actions { display: flex; align-items: center; gap: 8px; }
+    .icon-btn {
+      width: 30px; height: 30px;
+      border-radius: 8px;
+      display: inline-flex; align-items: center; justify-content: center;
+      color: #64748b;
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+    .icon-btn:hover { background: #f1f5f9; color: #0f172a; }
+    .menu-pop {
+      position: absolute;
+      top: 46px;
+      right: 16px;
+      min-width: 160px;
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: var(--shadow-md);
+      padding: 6px;
+      z-index: 10;
+    }
+    .menu-item-btn {
+      width: 100%;
+      border: 0;
+      background: transparent;
+      padding: 10px 10px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      font-size: 13px;
+      color: var(--text-main);
+    }
+    .menu-item-btn:hover { background: #f1f5f9; }
+    .menu-item-danger { color: var(--danger); }
     .task-body { padding: 20px; flex: 1; }
     .task-footer {
       padding: 12px 20px;
@@ -300,12 +344,37 @@
     .status-node:not(:last-child)::after {
       content: ''; position: absolute; left: 20px; top: 48px; bottom: -24px; width: 2px; background: #e2e8f0;
     }
+    .status-node.flow:not(:last-child)::after {
+      background: linear-gradient(180deg, rgba(59,130,246,0), rgba(59,130,246,0.9), rgba(59,130,246,0));
+      background-size: 100% 200%;
+      animation: flowline 1.6s ease-in-out infinite;
+    }
+    @keyframes flowline { 0% { background-position: 0% 0%; } 100% { background-position: 0% 100%; } }
     .node-icon { 
       width: 40px; height: 40px; border-radius: 50%; background: #f1f5f9; color: #94a3b8;
       display: flex; align-items: center; justify-content: center; font-size: 18px; z-index: 1;
       border: 2px solid white; box-shadow: 0 0 0 1px #e2e8f0;
     }
     .node-icon.active { background: #dcfce7; color: var(--primary); border-color: var(--primary); }
+    .node-icon.pulsing { animation: pulseRing 1.2s ease-in-out infinite; }
+    @keyframes pulseRing {
+      0% { box-shadow: 0 0 0 1px #e2e8f0, 0 0 0 0 rgba(59,130,246,0.0); }
+      50% { box-shadow: 0 0 0 1px #e2e8f0, 0 0 0 8px rgba(59,130,246,0.12); }
+      100% { box-shadow: 0 0 0 1px #e2e8f0, 0 0 0 0 rgba(59,130,246,0.0); }
+    }
+    .node-icon.spin i { animation: spinGear 1s linear infinite; }
+    @keyframes spinGear { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .deploy-meta {
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px dashed var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--text-sub);
+    }
+    .deploy-meta code { font-family: 'Fira Code', monospace; font-size: 12px; color: #0f172a; background: #f1f5f9; padding: 2px 6px; border-radius: 6px; }
     .node-content h4 { margin: 0 0 4px 0; font-size: 14px; }
     .node-content p { margin: 0; font-size: 12px; color: var(--text-sub); }
 
@@ -315,12 +384,94 @@
       display: flex; flex-direction: column;
       overflow: hidden;
     }
-    .term-header { padding: 8px 16px; background: #0f172a; color: #94a3b8; font-size: 12px; display: flex; justify-content: space-between; }
+    .term-header { padding: 8px 12px; background: #0f172a; color: #94a3b8; font-size: 12px; display: flex; align-items: center; justify-content: space-between; }
+    .term-actions { display: flex; align-items: center; gap: 6px; }
+    .term-action-btn {
+      width: 28px; height: 28px;
+      border-radius: 8px;
+      display: inline-flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      color: #94a3b8;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+    .term-action-btn:hover { background: rgba(148,163,184,0.12); color: #e2e8f0; }
     .term-body { padding: 16px; flex: 1; overflow-y: auto; white-space: pre-wrap; line-height: 1.5; }
     .log-line { margin-bottom: 2px; }
     .log-info { color: #94a3b8; }
     .log-success { color: #4ade80; }
     .log-error { color: #f87171; }
+
+    .terminal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 60;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .terminal-full {
+      width: min(1200px, calc(100vw - 48px));
+      height: min(760px, calc(100vh - 48px));
+      box-shadow: 0 16px 60px rgba(0,0,0,0.4);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .vars-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      background: rgba(59,130,246,0.10);
+      color: #1d4ed8;
+      cursor: pointer;
+      user-select: none;
+    }
+    .vars-pill:hover { background: rgba(59,130,246,0.14); }
+    .code-pre {
+      background: #0b1220;
+      color: #e2e8f0;
+      padding: 16px;
+      border-radius: 12px;
+      font-family: 'Fira Code', monospace;
+      font-size: 12px;
+      overflow: auto;
+      white-space: pre;
+      border: 1px solid rgba(148,163,184,0.16);
+    }
+
+    .input-wrap { position: relative; }
+    .input-wrap .form-input { padding-right: 40px; }
+    .input-icon {
+      position: absolute;
+      top: 50%;
+      right: 12px;
+      transform: translateY(-50%);
+      font-size: 14px;
+      pointer-events: none;
+    }
+    .input-icon.ok { color: var(--success); }
+    .input-icon.bad { color: var(--danger); }
+    .input-icon.neutral { color: #cbd5e1; }
+    .input-toggle {
+      position: absolute;
+      top: 50%;
+      right: 10px;
+      transform: translateY(-50%);
+      width: 32px; height: 32px;
+      border-radius: 10px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: #94a3b8;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+    .input-toggle:hover { background: #f1f5f9; color: #0f172a; }
 
     .kv-table { display: flex; flex-direction: column; gap: 12px; max-height: 260px; overflow: auto; }
     .kv-row { display: grid; grid-template-columns: 240px 1fr; gap: 12px; align-items: start; }
@@ -432,9 +583,32 @@
       const [repos, setRepos] = useState([]);
       const [drawerType, setDrawerType] = useState(null); // 'server' | 'repo' | null
       const [activeTab, setActiveTab] = useState('servers');
+      const [showTriggerToken, setShowTriggerToken] = useState(false);
+      const [showPrivateToken, setShowPrivateToken] = useState(false);
       
       const [formServer, setFormServer] = useState({ ssh_user: 'metalm' });
       const [formRepo, setFormRepo] = useState({ branch: 'master' });
+
+      const isValidHost = (v) => {
+        const s = (v || '').trim();
+        if (!s) return false;
+        const ip = /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$/;
+        const host = /^(?=.{1,253}$)(?!-)([a-zA-Z0-9-]{1,63}(?<!-)\.)+[a-zA-Z]{2,63}$|^[a-zA-Z0-9-]{1,63}$/;
+        return ip.test(s) || host.test(s);
+      };
+      const isValidGitUrl = (v) => {
+        const s = (v || '').trim();
+        if (!s) return false;
+        if (/^https?:\/\//i.test(s)) return true;
+        if (/^ssh:\/\//i.test(s)) return true;
+        if (/^git@[^:\s]+:[^\s]+$/i.test(s)) return true;
+        return false;
+      };
+
+      const addr = (formServer.address || '').trim();
+      const addrOk = addr ? isValidHost(addr) : null;
+      const gitUrl = (formRepo.url || '').trim();
+      const gitOk = gitUrl ? isValidGitUrl(gitUrl) : null;
 
       const refresh = async () => {
         const sv = await api.get('/api/servers');
@@ -451,6 +625,7 @@
           await api.post('/api/repos', formRepo);
         }
         setDrawerType(null);
+        setShowTriggerToken(false); setShowPrivateToken(false);
         setFormServer({ ssh_user: 'metalm' }); setFormRepo({ branch: 'master' });
         refresh();
       };
@@ -523,7 +698,12 @@
           ]),
           e('div', { className: 'form-item' }, [
             e('label', { className: 'form-label' }, 'IP 地址 / 域名'),
-            e('input', { className: 'form-input', placeholder: '192.168.x.x', value: formServer.address || '', onChange: e => setFormServer({...formServer, address: e.target.value}) })
+            e('div', { className: 'input-wrap' }, [
+              e('input', { className: 'form-input', placeholder: '192.168.x.x', value: formServer.address || '', onChange: e => setFormServer({...formServer, address: e.target.value}) }),
+              addrOk === null
+                ? e('i', { className: 'fa-solid fa-circle input-icon neutral', style: { fontSize: 9 } })
+                : e('i', { className: `fa-solid fa-${addrOk ? 'circle-check' : 'circle-xmark'} input-icon ${addrOk ? 'ok' : 'bad'}` })
+            ])
           ]),
           e('div', { className: 'form-item' }, [
             e('label', { className: 'form-label' }, '部署路径'),
@@ -540,7 +720,12 @@
           ]),
           e('div', { className: 'form-item' }, [
             e('label', { className: 'form-label' }, 'Git URL'),
-            e('input', { className: 'form-input', placeholder: 'https://gitlab.com/...', value: formRepo.url || '', onChange: e => setFormRepo({...formRepo, url: e.target.value}) })
+            e('div', { className: 'input-wrap' }, [
+              e('input', { className: 'form-input', placeholder: 'https://gitlab.com/... 或 git@host:group/repo.git', value: formRepo.url || '', onChange: e => setFormRepo({...formRepo, url: e.target.value}) }),
+              gitOk === null
+                ? e('i', { className: 'fa-solid fa-circle input-icon neutral', style: { fontSize: 9 } })
+                : e('i', { className: `fa-solid fa-${gitOk ? 'circle-check' : 'circle-xmark'} input-icon ${gitOk ? 'ok' : 'bad'}` })
+            ])
           ]),
           e('div', { className: 'form-item' }, [
             e('label', { className: 'form-label' }, '分支'),
@@ -548,11 +733,17 @@
           ]),
           e('div', { className: 'form-item' }, [
             e('label', { className: 'form-label' }, 'Trigger Token (CI)'),
-            e('input', { className: 'form-input', placeholder: '可选', value: formRepo.trigger_token || '', onChange: e => setFormRepo({...formRepo, trigger_token: e.target.value}) })
+            e('div', { className: 'input-wrap' }, [
+              e('input', { className: 'form-input', type: showTriggerToken ? 'text' : 'password', placeholder: '可选', value: formRepo.trigger_token || '', onChange: e => setFormRepo({...formRepo, trigger_token: e.target.value}) }),
+              e('div', { className: 'input-toggle', onClick: () => setShowTriggerToken(v => !v), title: showTriggerToken ? '隐藏' : '显示' }, e(Icon, { name: showTriggerToken ? 'eye-slash' : 'eye' }))
+            ])
           ]),
           e('div', { className: 'form-item' }, [
             e('label', { className: 'form-label' }, 'Private Token (API)'),
-            e('input', { className: 'form-input', placeholder: '可选', value: formRepo.private_token || '', onChange: e => setFormRepo({...formRepo, private_token: e.target.value}) })
+            e('div', { className: 'input-wrap' }, [
+              e('input', { className: 'form-input', type: showPrivateToken ? 'text' : 'password', placeholder: '可选', value: formRepo.private_token || '', onChange: e => setFormRepo({...formRepo, private_token: e.target.value}) }),
+              e('div', { className: 'input-toggle', onClick: () => setShowPrivateToken(v => !v), title: showPrivateToken ? '隐藏' : '显示' }, e(Icon, { name: showPrivateToken ? 'eye-slash' : 'eye' }))
+            ])
           ])
         ])
       ]);
@@ -565,6 +756,7 @@
       const [repos, setRepos] = useState([]);
       const [drawerOpen, setDrawerOpen] = useState(false);
       const [newTask, setNewTask] = useState({});
+      const [openMenuId, setOpenMenuId] = useState(null);
 
       const load = async () => {
         const ts = await api.get('/api/deployments');
@@ -584,10 +776,24 @@
       };
 
       const handleDelete = async (id, e) => {
-        e.stopPropagation();
         if(!confirm('删除任务?')) return;
         await api.del(`/api/deployments/${id}`);
         load();
+      };
+
+      useEffect(() => {
+        const onDoc = () => setOpenMenuId(null);
+        document.addEventListener('click', onDoc);
+        return () => document.removeEventListener('click', onDoc);
+      }, []);
+
+      const envBadge = (serverName) => {
+        const name = serverName || '';
+        const low = name.toLowerCase();
+        if (name.includes('生产') || low.includes('prod')) return e('span', { className: 'badge badge-prod' }, 'PROD');
+        if (name.includes('测试') || low.includes('test')) return e('span', { className: 'badge badge-test' }, 'TEST');
+        if (name.includes('开发') || low.includes('dev')) return e('span', { className: 'badge badge-dev' }, 'DEV');
+        return null;
       };
 
       return e('div', null, [
@@ -604,16 +810,22 @@
             const r = repos.find(x => x.id === t.repo_id) || {};
             return e('div', { key: t.id, className: 'card task-card', onClick: () => onNavigate('detail', t.id) }, [
               e('div', { className: 'task-header' }, [
-                e('div', { style: { display: 'flex', justifyContent: 'space-between' } }, [
+                e('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, [
                   e('div', { style: { fontWeight: 600, fontSize: 16 } }, t.name),
-                  e('div', { style: { color: '#ef4444', opacity: 0.5 }, onClick: (ev) => handleDelete(t.id, ev) }, e(Icon, { name: 'trash' }))
+                  e('div', { className: 'task-actions' }, [
+                    e('div', { className: 'icon-btn', title: '更多操作', onClick: (ev) => { ev.stopPropagation(); setOpenMenuId(openMenuId === t.id ? null : t.id); } }, e(Icon, { name: 'ellipsis' })),
+                    openMenuId === t.id && e('div', { className: 'menu-pop', onClick: ev => ev.stopPropagation() }, [
+                      e('button', { className: 'menu-item-btn menu-item-danger', onClick: async (ev) => { ev.stopPropagation(); setOpenMenuId(null); await handleDelete(t.id); } }, ['删除任务', e(Icon, { name: 'trash' })])
+                    ])
+                  ])
                 ])
               ]),
               e('div', { className: 'task-body' }, [
                 e('div', { className: 'info-row' }, [
                   e(Icon, { name: 'server' }), 
                   e('span', null, '目标: '), 
-                  e('span', { className: 'info-val' }, s.name || 'Unknown')
+                  e('span', { className: 'info-val' }, s.name || 'Unknown'),
+                  envBadge(s.name)
                 ]),
                 e('div', { className: 'info-row' }, [
                   e(Icon, { name: 'code-branch' }), 
@@ -680,6 +892,7 @@
       const [logs, setLogs] = useState([]);
       const [activeHistoryId, setActiveHistoryId] = useState(null);
       const [pipelineStatus, setPipelineStatus] = useState('unknown');
+      const [terminalFull, setTerminalFull] = useState(false);
 
       // 初始化加载
       useEffect(() => {
@@ -727,6 +940,35 @@
         setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
       };
 
+      const copyText = async (text) => {
+        const t = text || '';
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(t);
+            return true;
+          }
+        } catch (_) {}
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = t;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select();
+          const ok = document.execCommand('copy');
+          document.body.removeChild(ta);
+          return ok;
+        } catch (_) {
+          return false;
+        }
+      };
+
+      const handleCopyLogs = async () => {
+        const ok = await copyText(logs.join('\n'));
+        addLog(ok ? '>> Copied logs to clipboard' : '!! Copy failed');
+      };
+      const handleClearLogs = () => setLogs([]);
+
       const handleTrigger = async () => {
         if (!confirm('确认触发部署?')) return;
         setDeploying(true);
@@ -751,6 +993,22 @@
 
       if (!task) return e('div', { className: 'empty-state' }, 'Loading...');
 
+      const busy = deploying || pipelineStatus === 'running' || pipelineStatus === 'pending';
+      const renderTerminal = (full) => e('div', { className: full ? 'terminal-window terminal-full' : 'terminal-window', style: full ? undefined : { flex: 1, minHeight: 0 } }, [
+        e('div', { className: 'term-header' }, [
+          e('span', null, `TERMINAL - ${activeHistoryId ? `pipeline #${activeHistoryId}` : 'ssh output stream'}`),
+          e('div', { className: 'term-actions' }, [
+            e('div', { className: 'term-action-btn', title: full ? '退出全屏' : '全屏查看', onClick: () => setTerminalFull(v => !v) }, e(Icon, { name: full ? 'compress' : 'expand' })),
+            e('div', { className: 'term-action-btn', title: '复制日志', onClick: handleCopyLogs }, e(Icon, { name: 'copy' })),
+            e('div', { className: 'term-action-btn', title: '清空面板', onClick: handleClearLogs }, e(Icon, { name: 'trash' }))
+          ])
+        ]),
+        e('div', { className: 'term-body', ref: (el) => { if(el) el.scrollTop = el.scrollHeight; } }, [
+          logs.length === 0 ? e('span', { className: 'log-info' }, '> Ready to deploy...') : null,
+          logs.map((line, i) => e('div', { key: i, className: 'log-line' }, line))
+        ])
+      ]);
+
       return e('div', { style: { height: '100%', display: 'flex', flexDirection: 'column' } }, [
         // Header
         e('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 0 20px 0' } }, [
@@ -769,7 +1027,7 @@
           // Left: Status Panel
           e('div', { className: 'card status-panel' }, [
             // Node 1: Repo
-            e('div', { className: 'status-node' }, [
+            e('div', { className: `status-node ${busy ? 'flow' : ''}` }, [
               e('div', { className: `node-icon active` }, e(Icon, { name: 'code-branch' })),
               e('div', { className: 'node-content' }, [
                 e('h4', null, '仓库连通性'),
@@ -779,8 +1037,8 @@
               ])
             ]),
             // Node 2: Pipeline
-            e('div', { className: 'status-node' }, [
-              e('div', { className: `node-icon ${deploying || pipelineStatus==='running' ? 'active' : ''}` }, e(Icon, { name: 'gears' })),
+            e('div', { className: `status-node ${busy ? 'flow' : ''}` }, [
+              e('div', { className: `node-icon ${busy ? 'active pulsing spin' : ''}` }, e(Icon, { name: 'gears' })),
               e('div', { className: 'node-content' }, [
                 e('h4', null, 'CI/CD 流水线'),
                 e('p', null, pipelineStatus === 'unknown' ? 'Ready' : `Status: ${pipelineStatus}`),
@@ -796,23 +1054,23 @@
                 e('p', null, server?.address),
                 e('div', { style: { marginTop: 4, color: 'var(--success)', fontSize: 12 } }, [e(Icon, { name: 'check' }), ' Online'])
               ])
+            ]),
+            e('div', { className: 'deploy-meta' }, [
+              e('div', null, ['Branch: ', e('code', null, repo?.branch || '-')]),
+              e('div', null, ['SERVER_HOST: ', e('code', null, server?.address || '-')]),
+              e('div', null, ['SERVER_USER: ', e('code', null, server?.ssh_user || 'metalm')]),
+              e('div', null, ['Deploy Path: ', e('code', null, server?.deploy_path || '-')]),
             ])
           ]),
 
           // Right: Terminal & Config
           e('div', { style: { display: 'flex', flexDirection: 'column', gap: 24, height: '100%', minHeight: 0 } }, [
-            e('div', { className: 'terminal-window', style: { flex: 1, minHeight: 0 } }, [
-              e('div', { className: 'term-header' }, [
-                e('span', null, 'TERMINAL - ssh output stream'),
-                e('span', null, 'bash')
-              ]),
-              e('div', { className: 'term-body', ref: (el) => { if(el) el.scrollTop = el.scrollHeight; } }, [
-                logs.length === 0 ? e('span', { className: 'log-info' }, '> Ready to deploy...') : null,
-                logs.map((line, i) => e('div', { key: i, className: 'log-line' }, line))
-              ])
-            ])
+            renderTerminal(false)
           ])
-        ])
+        ]),
+        terminalFull && e('div', { className: 'terminal-overlay', onClick: () => setTerminalFull(false) }, 
+          e('div', { onClick: ev => ev.stopPropagation() }, renderTerminal(true))
+        )
       ]);
     }
 
@@ -821,6 +1079,7 @@
       const [history, setHistory] = useState([]);
       const [servers, setServers] = useState([]);
       const [repos, setRepos] = useState([]);
+      const [varsView, setVarsView] = useState(null);
 
       useEffect(() => {
         const load = async () => {
@@ -873,12 +1132,29 @@
                   e('div', null, `Pipeline #${h.pipeline_id}`),
                   h.web_url && e('a', { href: h.web_url, target: '_blank', style: { fontSize: 12, color: 'var(--info)' } }, 'View in GitLab')
                 ]),
-                e('td', null, h.variables ? e('code', { style: { fontSize: 12, background: '#f1f5f9', padding: '2px 4px' } }, JSON.stringify(h.variables)) : '-'),
+                e('td', null, (() => {
+                  if (!h.variables) return '-';
+                  const keys = Object.keys(h.variables || {});
+                  const text = JSON.stringify(h.variables, null, 2);
+                  return e('span', { className: 'vars-pill', title: '点击查看详情', onClick: () => setVarsView({ title: `Pipeline #${h.pipeline_id} 变量参数`, text }) }, [
+                    e(Icon, { name: 'code', style: { fontSize: 12 } }),
+                    `${keys.length} 个变量`
+                  ]);
+                })()),
                 e('td', null, new Date(h.created_at).toLocaleString())
               ]);
             }))
           ])
-        )
+        ),
+        varsView && e(Drawer, {
+          title: varsView.title,
+          onClose: () => setVarsView(null),
+          footer: [
+            e('button', { className: 'btn btn-outline', onClick: () => setVarsView(null) }, '关闭')
+          ]
+        }, [
+          e('pre', { className: 'code-pre' }, varsView.text)
+        ])
       ]);
     }
 
