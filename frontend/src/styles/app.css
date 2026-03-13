@@ -227,6 +227,15 @@ body {
 .terminal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 60; display: flex; align-items: center; justify-content: center; padding: 24px; }
 .terminal-full { width: min(1200px, calc(100vw - 48px)); height: min(760px, calc(100vh - 48px)); box-shadow: 0 16px 60px rgba(0,0,0,0.4); border-radius: 12px; overflow: hidden; }
 
+.modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.45); z-index: 55; display: flex; align-items: center; justify-content: center; padding: 24px; backdrop-filter: blur(2px); }
+.modal { width: min(520px, calc(100vw - 48px)); background: white; border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 16px 60px rgba(0,0,0,0.28); overflow: hidden; }
+.modal-header { padding: 16px 18px; border-bottom: 1px solid var(--border); font-weight: 600; display: flex; align-items: center; justify-content: space-between; }
+.modal-close { cursor: pointer; color: #94a3b8; }
+.modal-close:hover { color: #0f172a; }
+.modal-body { padding: 18px; color: var(--text-main); }
+.modal-footer { padding: 16px 18px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 12px; background: #f8fafc; }
+.modal-danger-icon { width: 28px; height: 28px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; background: rgba(239,68,68,0.10); color: #b91c1c; }
+
 .drawer-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 50; backdrop-filter: blur(2px); display: flex; justify-content: flex-end; }
 .drawer { width: 480px; background: white; height: 100%; box-shadow: -4px 0 20px rgba(0,0,0,0.1); display: flex; flex-direction: column; animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
 @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
@@ -254,4 +263,3 @@ body {
 .input-icon.neutral { color: #cbd5e1; }
 .input-toggle { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); width: 32px; height: 32px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: #94a3b8; transition: background 0.15s ease, color 0.15s ease; }
 .input-toggle:hover { background: #f1f5f9; color: #0f172a; }
-

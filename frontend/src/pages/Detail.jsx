@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import Icon from '../components/Icon.jsx'
+import Modal from '../components/Modal.jsx'
 import { api } from '../services/api.js'
 
 export default function Detail({ taskId, onBack }) {
@@ -11,6 +12,7 @@ export default function Detail({ taskId, onBack }) {
   const [activeHistoryId, setActiveHistoryId] = useState(null)
   const [pipelineStatus, setPipelineStatus] = useState('unknown')
   const [terminalFull, setTerminalFull] = useState(false)
+  const [triggerOpen, setTriggerOpen] = useState(false)
   const termRef = useRef(null)
 
   const addLog = (msg) => {
@@ -91,7 +93,6 @@ export default function Detail({ taskId, onBack }) {
   const handleClearLogs = () => setLogs([])
 
   const handleTrigger = async () => {
-    if (!confirm('确认触发部署?')) return
     setDeploying(true)
     setLogs(['>> Initializing deployment sequence...', '>> Connecting to GitLab API...'])
     setPipelineStatus('pending')
@@ -151,7 +152,7 @@ export default function Detail({ taskId, onBack }) {
           </button>
           <h2 style={{ margin: 0 }}>{task.name}</h2>
         </div>
-        <button className="btn btn-primary" onClick={handleTrigger} disabled={deploying}>
+        <button className="btn btn-primary" onClick={() => setTriggerOpen(true)} disabled={deploying}>
           <Icon name={deploying ? 'spinner fa-spin' : 'rocket'} /> {deploying ? '部署中...' : '触发部署'}
         </button>
       </div>
@@ -218,6 +219,49 @@ export default function Detail({ taskId, onBack }) {
         <div className="terminal-overlay" onClick={() => setTerminalFull(false)}>
           <div onClick={(ev) => ev.stopPropagation()}>{renderTerminal(true)}</div>
         </div>
+      ) : null}
+
+      {triggerOpen ? (
+        <Modal
+          title="触发部署"
+          onClose={() => setTriggerOpen(false)}
+          footer={[
+            <button key="c" className="btn btn-outline" onClick={() => setTriggerOpen(false)}>
+              取消
+            </button>,
+            <button
+              key="ok"
+              className="btn btn-primary"
+              onClick={async () => {
+                setTriggerOpen(false)
+                await handleTrigger()
+              }}
+              disabled={deploying}
+            >
+              <Icon name="rocket" /> 确认触发
+            </button>
+          ]}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 14 }}>
+            <div style={{ color: 'var(--text-sub)' }}>将触发一次新的流水线部署，请确认目标信息无误。</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 8, marginTop: 8 }}>
+              <div style={{ color: 'var(--text-sub)' }}>任务</div>
+              <div style={{ fontWeight: 600 }}>{task?.name}</div>
+              <div style={{ color: 'var(--text-sub)' }}>仓库</div>
+              <div>{repo?.name || '-'}</div>
+              <div style={{ color: 'var(--text-sub)' }}>分支</div>
+              <div>
+                <span className="badge badge-gray" style={{ fontFamily: 'inherit' }}>
+                  {repo?.branch || 'master'}
+                </span>
+              </div>
+              <div style={{ color: 'var(--text-sub)' }}>服务器</div>
+              <div>{server?.name || '-'}</div>
+              <div style={{ color: 'var(--text-sub)' }}>地址</div>
+              <div style={{ fontFamily: 'monospace' }}>{server?.address || '-'}</div>
+            </div>
+          </div>
+        </Modal>
       ) : null}
     </div>
   )
