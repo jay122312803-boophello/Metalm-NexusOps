@@ -1,0 +1,59 @@
+stages:
+  - deploy
+
+deploy_backend_frontend:
+  stage: deploy
+  # 使用轻量级的 alpine 镜像作为执行 CI 脚本的环境
+  image: registry.xuelangyun.com/shuzhi-amd64/alpine:3.20
+  
+  # 触发条件：仅在推送到 main 分支，且 backend_frontend 目录有修改时触发
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - develop/backend_frontend/**/*
+
+  before_script:
+    # 1. 安装必要的工具 (SSH 客户端和文件同步工具 rsync)
+    - apk add --no-cache openssh-client rsync
+    # 2. 启动 ssh-agent 并加载私钥 (私钥存放在 GitLab 变量中)
+    - eval $(ssh-agent -s)
+    - echo "$SERVER_SSH_KEY" | tr -d '\r' | ssh-add -
+    # 3. 配置 SSH 忽略主机指纹检查，防止 CI 过程中断
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
+
+  script:
+    # 4. 将最新代码同步到目标部署服务器的新路径
+    - echo "开始同步文件到服务器..."
+    # 注意这里目标路径改成了你要求的路径
+    - rsync -avz ./develop/backend_frontend/ $SERVER_USER@$SERVER_HOST:/home/metalm/deploy/NexusOps/
+    
+    # 5. SSH 登录服务器执行部署脚本
+    - echo "登录服务器执行部署..."
+    - |
+      ssh $SERVER_USER@$SERVER_HOST "
+        # 极其重要：这里也要改成新路径，确保进入正确的文件夹执行脚本
+        cd /home/metalm/deploy/NexusOps/
+        
+        # 赋予脚本执行权限
+        chmod +x down.sh up.sh
+        
+        # 登录你的私有镜像仓库
+        docker login registry.xuelangyun.com -u \$REGISTRY_USER -p \$REGISTRY_PASSWORD
+        
+        # 确保外部网络存在
+        docker network create metalm-dev-net || true
+        
+        # 停止旧容器
+        sh down.sh
+        
+        # 拉取新镜像
+        docker-compose pull
+        
+        # 启动新容器
+        sh up.sh
+      "
+  
+  environment:
+    name: production
