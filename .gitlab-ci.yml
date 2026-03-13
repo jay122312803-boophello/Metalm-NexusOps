@@ -9,8 +9,6 @@ deploy_backend_frontend:
   only:
     refs:
       - master
-    changes:
-      - develop/backend_frontend/**/*
 
   before_script:
     # 1. 安装必要的工具 (注意：如果这里报错说连不上源，说明内网也屏蔽了 apk 的公网源)
