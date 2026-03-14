@@ -1,17 +1,28 @@
-#!/usr/bin/env sh
-set -eu
+#!/usr/bin/env bash
+set -euo pipefail
 
-IMAGE="${NEXUSOPS_FRONTEND_IMAGE:-nexusops-frontend:latest}"
-BASE_IMAGE="${NEXUSOPS_BASE_IMAGE:-registry.xuelangyun.com/shuzhi-amd64/alpine:3.20}"
-PLATFORM="${NEXUSOPS_PLATFORM:-}"
+tag_prefix="${1:-dev}"
+push_image="${2:-}"
 
 ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 
-args=""
-if [ -n "$PLATFORM" ]; then
-  args="$args --platform $PLATFORM"
-fi
+platform="${NEXUSOPS_PLATFORM:-linux/amd64}"
+base_image="${NEXUSOPS_BASE_IMAGE:-registry.xuelangyun.com/shuzhi-amd64/alpine:3.20}"
+registry_base="${NEXUSOPS_REGISTRY_BASE:-registry.xuelangyun.com/shuzhi-amd64/metalm}"
 
 cd "$ROOT_DIR"
 
-sh -c "docker build $args -f docker/frontend/Dockerfile -t \"$IMAGE\" --build-arg BASE_IMAGE=\"$BASE_IMAGE\" ."
+pkg_version="$(grep -E '"version"[[:space:]]*:' frontend/package.json | head -n 1 | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')"
+time_now="$(date "+%Y%m%d")"
+git_commit_id="$(git rev-parse --short HEAD 2>/dev/null || echo nogit)"
+tag_suffix="${tag_prefix}_${time_now}_${git_commit_id}_${pkg_version}"
+
+image="${NEXUSOPS_FRONTEND_IMAGE:-${registry_base}/nexusops-frontend:${tag_suffix}}"
+
+echo "$image"
+
+docker build --platform "$platform" -f docker/frontend/Dockerfile -t "$image" --build-arg BASE_IMAGE="$base_image" .
+
+if [ "${push_image}" = "push" ] || [ "${NEXUSOPS_PUSH:-0}" = "1" ]; then
+  docker push "$image"
+fi

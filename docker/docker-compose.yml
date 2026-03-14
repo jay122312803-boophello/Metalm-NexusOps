@@ -1,6 +1,6 @@
 services:
   backend:
-    image: ${NEXUSOPS_BACKEND_IMAGE:-nexusops-backend:latest}
+    image: ${NEXUSOPS_BACKEND_IMAGE:-registry.xuelangyun.com/shuzhi-amd64/metalm/nexusops-backend:latest}
     platform: ${NEXUSOPS_PLATFORM:-linux/amd64}
     restart: unless-stopped
     environment:
@@ -12,7 +12,7 @@ services:
       - nexusops-net
 
   frontend:
-    image: ${NEXUSOPS_FRONTEND_IMAGE:-nexusops-frontend:latest}
+    image: ${NEXUSOPS_FRONTEND_IMAGE:-registry.xuelangyun.com/shuzhi-amd64/metalm/nexusops-frontend:latest}
     platform: ${NEXUSOPS_PLATFORM:-linux/amd64}
     restart: unless-stopped
     ports:
