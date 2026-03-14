@@ -16,7 +16,7 @@ services:
     platform: ${NEXUSOPS_PLATFORM:-linux/amd64}
     restart: unless-stopped
     ports:
-      - "18088:80"
+      - "18488:80"
     depends_on:
       - backend
     networks:
