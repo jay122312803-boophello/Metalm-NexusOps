@@ -109,6 +109,35 @@ async def update_task_config(dep_id: str, config_id: str, body: dict):
     return await run_db(_work)
 
 
+@router.put("/deployments/{dep_id}/configs/{config_id}/rename")
+async def rename_task_config(dep_id: str, config_id: str, body: dict):
+    rel_path = _validate_rel_path(body.get("rel_path"))
+
+    def _work(session):
+        did = uuid.UUID(dep_id)
+        cid = uuid.UUID(config_id)
+        c = session.get(TaskConfig, cid)
+        if not c or c.deployment_id != did:
+            raise HTTPException(404, "Config not found")
+        if c.rel_path == rel_path:
+            return {"ok": True, "rel_path": c.rel_path, "updated_at": c.updated_at.isoformat() if c.updated_at else None}
+
+        exists = session.exec(
+            select(TaskConfig).where(TaskConfig.deployment_id == did, TaskConfig.rel_path == rel_path)
+        ).first()
+        if exists:
+            raise HTTPException(409, "Config file already exists")
+
+        c.rel_path = rel_path
+        c.updated_at = datetime.utcnow()
+        session.add(c)
+        session.commit()
+        session.refresh(c)
+        return {"ok": True, "rel_path": c.rel_path, "updated_at": c.updated_at.isoformat() if c.updated_at else None}
+
+    return await run_db(_work)
+
+
 @router.delete("/deployments/{dep_id}/configs/{config_id}")
 async def delete_task_config(dep_id: str, config_id: str):
     def _work(session):

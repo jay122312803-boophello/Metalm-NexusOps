@@ -29,6 +29,11 @@ export default function Detail({ taskId, historyId, onBack }) {
   const [addConfigOpen, setAddConfigOpen] = useState(false)
   const [newRelPath, setNewRelPath] = useState('')
   const [mountedFiles, setMountedFiles] = useState([])
+  const [renameOpen, setRenameOpen] = useState(null)
+  const [renamePath, setRenamePath] = useState('')
+  const [deleteOpen, setDeleteOpen] = useState(null)
+  const [deletingConfig, setDeletingConfig] = useState(false)
+  const [renamingConfig, setRenamingConfig] = useState(false)
   const sseRef = useRef(null)
   const termApiRef = useRef(null)
   const viewHistory = !!historyId
@@ -279,6 +284,74 @@ export default function Detail({ taskId, historyId, onBack }) {
     }
   }
 
+  const openRename = (f) => {
+    setRenameOpen({ id: f.id, rel_path: f.rel_path })
+    setRenamePath(f.rel_path || '')
+  }
+
+  const submitRename = async () => {
+    if (viewHistory) return
+    if (!renameOpen) return
+    const next = (renamePath || '').trim()
+    if (!next) return toast.error('请输入文件路径')
+    setRenamingConfig(true)
+    try {
+      const res = await api.put(`/api/deployments/${taskId}/configs/${renameOpen.id}/rename`, { rel_path: next })
+      if (res?.ok) {
+        await loadConfigs()
+        if (activeConfigId === renameOpen.id) setActiveConfigPath(res.rel_path || next)
+        setRenameOpen(null)
+        toast.success('已更新文件路径')
+      } else {
+        toast.error(typeof res?.detail === 'string' ? res.detail : '更新失败')
+      }
+    } finally {
+      setRenamingConfig(false)
+    }
+  }
+
+  const openDeleteConfig = (f) => {
+    setDeleteOpen({ id: f.id, rel_path: f.rel_path })
+  }
+
+  const submitDeleteConfig = async () => {
+    if (viewHistory) return
+    if (!deleteOpen) return
+    setDeletingConfig(true)
+    try {
+      const res = await api.del(`/api/deployments/${taskId}/configs/${deleteOpen.id}`)
+      if (res?.ok) {
+        const deletedId = deleteOpen.id
+        setDeleteOpen(null)
+        if (activeConfigId === deletedId) {
+          setActiveConfigId(null)
+          setActiveConfigPath(null)
+        }
+        setSavedById((p) => {
+          const n = { ...p }
+          delete n[deletedId]
+          return n
+        })
+        setDraftById((p) => {
+          const n = { ...p }
+          delete n[deletedId]
+          return n
+        })
+        setDirtyById((p) => {
+          const n = { ...p }
+          delete n[deletedId]
+          return n
+        })
+        await loadConfigs()
+        toast.success('已删除')
+      } else {
+        toast.error(typeof res?.detail === 'string' ? res.detail : '删除失败')
+      }
+    } finally {
+      setDeletingConfig(false)
+    }
+  }
+
   const renderTerminal = () => (
     <div className={`terminal-shell ${terminalFull ? 'terminal-fullscreen' : ''}`} style={terminalFull ? undefined : { flex: 1, minHeight: 0 }}>
       <div className="term-header">
@@ -442,7 +515,35 @@ export default function Detail({ taskId, historyId, onBack }) {
                             <Icon name="file-lines" />
                             <span title={f.rel_path}>{f.rel_path}</span>
                           </div>
-                          {dirty ? <span className="config-dirty">*</span> : null}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {dirty ? <span className="config-dirty">*</span> : null}
+                            {!viewHistory ? (
+                              <>
+                                <button
+                                  className="icon-btn"
+                                  style={{ width: 26, height: 26 }}
+                                  title="修改路径"
+                                  onClick={(ev) => {
+                                    ev.stopPropagation()
+                                    openRename(f)
+                                  }}
+                                >
+                                  <Icon name="pen-to-square" />
+                                </button>
+                                <button
+                                  className="icon-btn"
+                                  style={{ width: 26, height: 26, color: 'var(--danger)' }}
+                                  title="删除"
+                                  onClick={(ev) => {
+                                    ev.stopPropagation()
+                                    openDeleteConfig(f)
+                                  }}
+                                >
+                                  <Icon name="trash" />
+                                </button>
+                              </>
+                            ) : null}
+                          </div>
                         </div>
                       )
                     })
@@ -622,6 +723,52 @@ export default function Detail({ taskId, historyId, onBack }) {
           <div className="form-item">
             <label className="form-label">请输入相对路径（如 agents/backend/config.toml）</label>
             <input className="form-input" value={newRelPath} onChange={(e) => setNewRelPath(e.target.value)} />
+          </div>
+        </Modal>
+      ) : null}
+
+      {renameOpen ? (
+        <Modal
+          title="修改文件路径"
+          onClose={() => (renamingConfig ? null : setRenameOpen(null))}
+          footer={[
+            <button key="c" className="btn btn-outline" onClick={() => setRenameOpen(null)} disabled={renamingConfig}>
+              取消
+            </button>,
+            <button key="ok" className="btn btn-primary" onClick={submitRename} disabled={renamingConfig}>
+              <Icon name={renamingConfig ? 'spinner fa-spin' : 'floppy-disk'} /> {renamingConfig ? '保存中...' : '保存'}
+            </button>
+          ]}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ color: 'var(--text-sub)', fontSize: 13 }}>填写相对路径（会落在 DEST_DIR 下），例如 agents/backend/config.toml</div>
+            <input className="form-input" value={renamePath} onChange={(e) => setRenamePath(e.target.value)} />
+          </div>
+        </Modal>
+      ) : null}
+
+      {deleteOpen ? (
+        <Modal
+          danger
+          title="删除配置文件"
+          onClose={() => (deletingConfig ? null : setDeleteOpen(null))}
+          footer={[
+            <button key="c" className="btn btn-outline" onClick={() => setDeleteOpen(null)} disabled={deletingConfig}>
+              取消
+            </button>,
+            <button key="ok" className="btn btn-danger" onClick={submitDeleteConfig} disabled={deletingConfig}>
+              <Icon name={deletingConfig ? 'spinner fa-spin' : 'trash'} /> {deletingConfig ? '删除中...' : '确认删除'}
+            </button>
+          ]}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 14 }}>
+            <div style={{ color: 'var(--text-sub)' }}>删除后无法恢复，且会从配置 ZIP 中移除。</div>
+            <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', fontSize: 12 }}>
+              {deleteOpen.rel_path}
+            </div>
+            {deleteOpen.id === activeConfigId && dirtyById[activeConfigId] ? (
+              <div style={{ color: 'var(--danger)', fontSize: 13 }}>当前文件有未保存修改，删除会丢失这些改动。</div>
+            ) : null}
           </div>
         </Modal>
       ) : null}
