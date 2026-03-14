@@ -1,0 +1,34 @@
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/backend/Dockerfile
+      args:
+        BASE_IMAGE: ${NEXUSOPS_BASE_IMAGE:-registry.xuelangyun.com/shuzhi-amd64/alpine:3.20}
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:${NEXUSOPS_PG_PASS:-metalm2024}@${NEXUSOPS_PG_HOST:-nexusops-pg}:5432/nexusops_db
+      NEXUSOPS_DB_INIT: "0"
+    ports:
+      - "18070:8000"
+    networks:
+      - nexusops-net
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/frontend/Dockerfile
+      args:
+        BASE_IMAGE: ${NEXUSOPS_BASE_IMAGE:-registry.xuelangyun.com/shuzhi-amd64/alpine:3.20}
+    restart: unless-stopped
+    ports:
+      - "18088:80"
+    depends_on:
+      - backend
+    networks:
+      - nexusops-net
+
+networks:
+  nexusops-net:
+    name: nexusops-dev-net
+    external: true
