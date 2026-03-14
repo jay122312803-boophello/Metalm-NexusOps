@@ -26,6 +26,13 @@ deploy:
       : "${DEST_DIR:?DEST_DIR is required}"
       : "${SERVER_HOST:?SERVER_HOST is required}"
       : "${SERVER_USER:=metalm}"
+      NEXUSOPS_CONFIG_ZIP_URL="$(printf "%s" "${NEXUSOPS_CONFIG_ZIP_URL:-}" | tr -d '\r\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+      if [ -n "${NEXUSOPS_CONFIG_ZIP_URL:-}" ]; then
+        case "$NEXUSOPS_CONFIG_ZIP_URL" in
+          http://*|https://*) ;;
+          *) echo "!! [NexusOps] NEXUSOPS_CONFIG_ZIP_URL 非法: 必须是 http/https 直链"; exit 3 ;;
+        esac
+      fi
 
       if [ "$SERVER_HOST" = "10.88.36.61" ]; then
         case "${DEST_DIR%/}/" in
@@ -54,15 +61,23 @@ deploy:
         if [ -n \"${NEXUSOPS_CONFIG_ZIP_URL:-}\" ]; then \
           echo '====== [NexusOps] Inject Configs ======'; \
           tmp=\"${DEST_DIR%/}/.nexusops/configs.zip\"; \
+          tmp_local=\"/tmp/nexusops-configs.zip\"; \
+          rm -f \"\$tmp_local\"; \
           mkdir -p \"${DEST_DIR%/}/.nexusops\"; \
           if command -v curl >/dev/null 2>&1; then \
-            curl -fsSL \"$NEXUSOPS_CONFIG_ZIP_URL\" -o \"$tmp\"; \
+            curl -fsSL \"$NEXUSOPS_CONFIG_ZIP_URL\" -o \"\$tmp_local\"; \
           elif command -v wget >/dev/null 2>&1; then \
-            wget -qO \"$tmp\" \"$NEXUSOPS_CONFIG_ZIP_URL\"; \
+            wget -qO \"\$tmp_local\" \"$NEXUSOPS_CONFIG_ZIP_URL\"; \
           else \
             true; \
           fi; \
-          if [ -s \"$tmp\" ]; then \
+          if [ -s \"\$tmp_local\" ]; then \
+            if ! mv -f \"\$tmp_local\" \"$tmp\"; then \
+              echo \"!! [NexusOps] 无法写入: $tmp\"; \
+              ls -ld \"${DEST_DIR%/}\" \"${DEST_DIR%/}/.nexusops\" || true; \
+              df -h \"${DEST_DIR%/}\" || true; \
+              exit 23; \
+            fi; \
             if command -v unzip >/dev/null 2>&1; then unzip -o \"$tmp\" -d \"${DEST_DIR%/}\" >/dev/null; \
             elif command -v python3 >/dev/null 2>&1; then python3 -m zipfile -e \"$tmp\" \"${DEST_DIR%/}\" >/dev/null; \
             else echo unzip/python3 not found; exit 1; fi; \
