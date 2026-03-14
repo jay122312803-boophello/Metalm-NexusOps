@@ -9,7 +9,7 @@ from sqlmodel import select
 
 from ...db.models import Deployment, DeploymentHistory, Repo, Server, TaskConfig
 from ...db.session import run_db
-from ...schemas import CreateDeploymentRequest, TriggerDeploymentRequest
+from ...schemas import CreateDeploymentRequest, TriggerDeploymentRequest, UpdateDeploymentRequest
 
 router = APIRouter()
 
@@ -40,8 +40,14 @@ async def create_deployment(req: CreateDeploymentRequest):
     data = req.model_dump()
 
     def _work(session):
+        name = (data.get("name") or "").strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="name required")
+        exists = session.query(Deployment).filter(Deployment.name == name).first()
+        if exists:
+            raise HTTPException(status_code=409, detail="任务名称已存在，请更换")
         d = Deployment(
-            name=data["name"],
+            name=name,
             server_id=uuid.UUID(data["server_id"]),
             repo_id=uuid.UUID(data["repo_id"]),
             input_dir=(data.get("input_dir") or None),
@@ -61,6 +67,62 @@ async def create_deployment(req: CreateDeploymentRequest):
             "deploy_script": d.deploy_script,
             "created_at": d.created_at.isoformat() if d.created_at else None,
         }
+
+    return await run_db(_work)
+
+
+@router.get("/{dep_id}")
+async def get_deployment(dep_id: str):
+    def _work(session):
+        d = session.get(Deployment, uuid.UUID(dep_id))
+        if not d:
+            raise HTTPException(status_code=404, detail="Deployment not found")
+        return {
+            "id": str(d.id),
+            "name": d.name,
+            "server_id": str(d.server_id),
+            "repo_id": str(d.repo_id),
+            "input_dir": d.input_dir,
+            "dest_dir": d.dest_dir,
+            "deploy_script": d.deploy_script,
+            "created_at": d.created_at.isoformat() if d.created_at else None,
+        }
+
+    return await run_db(_work)
+
+
+@router.put("/{dep_id}")
+async def update_deployment(dep_id: str, req: UpdateDeploymentRequest):
+    data = req.model_dump(exclude_unset=True)
+
+    def _work(session):
+        d = session.get(Deployment, uuid.UUID(dep_id))
+        if not d:
+            raise HTTPException(status_code=404, detail="Deployment not found")
+
+        if "name" in data and data["name"] is not None:
+            name = str(data["name"]).strip()
+            if not name:
+                raise HTTPException(status_code=400, detail="name required")
+            exists = session.query(Deployment).filter(Deployment.name == name, Deployment.id != d.id).first()
+            if exists:
+                raise HTTPException(status_code=409, detail="任务名称已存在，请更换")
+            data["name"] = name
+
+        if "server_id" in data and data["server_id"] is not None:
+            data["server_id"] = uuid.UUID(str(data["server_id"]))
+        if "repo_id" in data and data["repo_id"] is not None:
+            data["repo_id"] = uuid.UUID(str(data["repo_id"]))
+
+        for k, v in data.items():
+            if k in {"input_dir", "dest_dir", "deploy_script"} and v is not None and str(v).strip() == "":
+                v = None
+            setattr(d, k, v)
+
+        session.add(d)
+        session.commit()
+        session.refresh(d)
+        return {"ok": True}
 
     return await run_db(_work)
 

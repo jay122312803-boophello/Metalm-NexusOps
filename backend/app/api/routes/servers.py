@@ -33,8 +33,14 @@ async def list_servers():
 async def create_server(req: CreateServerRequest):
     data = req.model_dump()
     def _work(session):
+        name = (data.get("name") or "").strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="name required")
+        exists = session.query(Server).filter(Server.name == name).first()
+        if exists:
+            raise HTTPException(status_code=409, detail="服务器名称已存在，请更换")
         s = Server(
-            name=data["name"],
+            name=name,
             address=data["address"],
             ssh_user=data.get("ssh_user") or "metalm",
             deploy_path=data["deploy_path"],
@@ -83,6 +89,14 @@ async def update_server(server_id: str, req: UpdateServerRequest):
         s = session.get(Server, uuid.UUID(server_id))
         if not s:
             raise HTTPException(status_code=404, detail="Server not found")
+        if "name" in data and data["name"] is not None:
+            name = str(data["name"]).strip()
+            if not name:
+                raise HTTPException(status_code=400, detail="name required")
+            exists = session.query(Server).filter(Server.name == name, Server.id != s.id).first()
+            if exists:
+                raise HTTPException(status_code=409, detail="服务器名称已存在，请更换")
+            data["name"] = name
         for k, v in data.items():
             if k == "ssh_user" and v is not None and str(v).strip() == "":
                 v = "metalm"

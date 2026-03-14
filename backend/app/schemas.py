@@ -98,5 +98,14 @@ class CreateDeploymentRequest(BaseModel):
     deploy_script: Optional[str] = None
 
 
+class UpdateDeploymentRequest(BaseModel):
+    name: Optional[str] = None
+    server_id: Optional[str] = None
+    repo_id: Optional[str] = None
+    input_dir: Optional[str] = None
+    dest_dir: Optional[str] = None
+    deploy_script: Optional[str] = None
+
+
 class TriggerDeploymentRequest(BaseModel):
     variables: Optional[Dict[str, Any]] = None

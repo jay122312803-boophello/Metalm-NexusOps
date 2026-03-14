@@ -34,8 +34,14 @@ async def list_repos():
 async def create_repo(req: CreateRepoRequest):
     data = req.model_dump()
     def _work(session):
+        name = (data.get("name") or "").strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="name required")
+        exists = session.query(Repo).filter(Repo.name == name).first()
+        if exists:
+            raise HTTPException(status_code=409, detail="仓库名称已存在，请更换")
         r = Repo(
-            name=data["name"],
+            name=name,
             url=data["url"],
             branch=data.get("branch") or "master",
             project_id=data.get("project_id"),
@@ -90,6 +96,15 @@ async def update_repo(repo_id: str, req: UpdateRepoRequest):
         r = session.get(Repo, uuid.UUID(repo_id))
         if not r:
             raise HTTPException(status_code=404, detail="Repo not found")
+
+        if "name" in data and data["name"] is not None:
+            name = str(data["name"]).strip()
+            if not name:
+                raise HTTPException(status_code=400, detail="name required")
+            exists = session.query(Repo).filter(Repo.name == name, Repo.id != r.id).first()
+            if exists:
+                raise HTTPException(status_code=409, detail="仓库名称已存在，请更换")
+            data["name"] = name
 
         for k, v in data.items():
             if k in {"trigger_token", "private_token"}:

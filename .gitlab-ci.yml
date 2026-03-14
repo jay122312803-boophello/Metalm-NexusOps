@@ -13,7 +13,7 @@ deploy:
 
   before_script:
     - sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
-    - apk add --no-cache openssh-client rsync curl bash
+    - apk add --no-cache openssh-client rsync curl
     - eval $(ssh-agent -s)
     - echo "$SERVER_SSH_KEY" | tr -d '\r' | ssh-add -
     - mkdir -p ~/.ssh
@@ -27,21 +27,28 @@ deploy:
       : "${SERVER_HOST:?SERVER_HOST is required}"
       : "${SERVER_USER:=metalm}"
 
+      if [ "$SERVER_HOST" = "10.88.36.61" ]; then
+        case "${DEST_DIR%/}/" in
+          /home/metalm/deploy/NexusOps/*) ;;
+          *) echo "!! [NexusOps] 安全拦截: 10.88.36.61 仅允许部署到 /home/metalm/deploy/NexusOps/ 下，当前 DEST_DIR=$DEST_DIR"; exit 1 ;;
+        esac
+      fi
+
       echo "INPUT_DIR=$INPUT_DIR"
       echo "DEST_DIR=$DEST_DIR"
       echo "SERVER=$SERVER_USER@$SERVER_HOST"
       echo "====== [NexusOps] Start Sync ======"
 
       printf "%s\n" "${CUSTOM_DEPLOY_SCRIPT:-}" > remote_executor.sh
-      chmod 700 remote_executor.sh
+      chmod 600 remote_executor.sh
 
       ssh "$SERVER_USER@$SERVER_HOST" "mkdir -p '${DEST_DIR%/}'"
 
-      rsync -az --delete "${INPUT_DIR%/}/" "$SERVER_USER@$SERVER_HOST:${DEST_DIR%/}/"
+      rsync -rz --no-perms --no-owner --no-group "${INPUT_DIR%/}/" "$SERVER_USER@$SERVER_HOST:${DEST_DIR%/}/"
       echo "====== [NexusOps] Sync Done ======"
 
       ssh "$SERVER_USER@$SERVER_HOST" "mkdir -p '${DEST_DIR%/}/.nexusops'"
-      rsync -az remote_executor.sh "$SERVER_USER@$SERVER_HOST:${DEST_DIR%/}/.nexusops/remote_executor.sh"
+      rsync -rz --no-perms --no-owner --no-group remote_executor.sh "$SERVER_USER@$SERVER_HOST:${DEST_DIR%/}/.nexusops/remote_executor.sh"
 
       ssh "$SERVER_USER@$SERVER_HOST" "set -e; \
         if [ -n \"${NEXUSOPS_CONFIG_ZIP_URL:-}\" ]; then \
@@ -65,6 +72,7 @@ deploy:
         fi; \
         echo '====== [NexusOps] Execute Script ======'; \
         cd \"${DEST_DIR%/}\"; \
+        chmod 700 .nexusops/remote_executor.sh; \
         if command -v bash >/dev/null 2>&1; then bash .nexusops/remote_executor.sh; else sh .nexusops/remote_executor.sh; fi; \
         echo '====== [NexusOps] Script Done ======'; \
         rm -f .nexusops/remote_executor.sh"

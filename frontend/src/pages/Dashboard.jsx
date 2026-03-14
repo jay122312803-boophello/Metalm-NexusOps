@@ -10,6 +10,7 @@ export default function Dashboard({ onNavigate }) {
   const [lastByDeployment, setLastByDeployment] = useState({})
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [newTask, setNewTask] = useState({})
+  const [editingTaskId, setEditingTaskId] = useState(null)
   const [openMenuId, setOpenMenuId] = useState(null)
 
   const load = async () => {
@@ -57,10 +58,31 @@ export default function Dashboard({ onNavigate }) {
   const handleCreate = async () => {
     if (!newTask.name || !newTask.server_id || !newTask.repo_id) return alert('请完善必填项')
     if (!newTask.input_dir || !newTask.dest_dir) return alert('请填写同步源目录与目标路径')
-    await api.post('/api/deployments', newTask)
+    if (editingTaskId) await api.put(`/api/deployments/${editingTaskId}`, newTask)
+    else await api.post('/api/deployments', newTask)
     setDrawerOpen(false)
     setNewTask({})
+    setEditingTaskId(null)
     load()
+  }
+
+  const openCreate = () => {
+    setEditingTaskId(null)
+    setNewTask({})
+    setDrawerOpen(true)
+  }
+
+  const openEdit = (t) => {
+    setEditingTaskId(t.id)
+    setNewTask({
+      name: t.name,
+      server_id: t.server_id,
+      repo_id: t.repo_id,
+      input_dir: t.input_dir || './',
+      dest_dir: t.dest_dir || '',
+      deploy_script: t.deploy_script || ''
+    })
+    setDrawerOpen(true)
   }
 
   const handleDelete = async (id) => {
@@ -74,7 +96,7 @@ export default function Dashboard({ onNavigate }) {
       <div className="page-head">
         <h2 className="page-title">部署任务大盘</h2>
         <div className="page-actions">
-          <button className="btn btn-primary" onClick={() => setDrawerOpen(true)}>
+          <button className="btn btn-primary" onClick={openCreate}>
             <Icon name="plus" /> 创建新任务
           </button>
         </div>
@@ -89,7 +111,10 @@ export default function Dashboard({ onNavigate }) {
             <div key={t.id} className="card task-card" onClick={() => onNavigate('detail', t.id)}>
               <div className="task-header">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ fontWeight: 600, fontSize: 16 }}>{t.name}</div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                    <div style={{ fontWeight: 600, fontSize: 16 }}>{t.name}</div>
+                    <span style={{ color: 'var(--text-sub)', fontSize: 12, fontFamily: 'monospace' }}>{String(t.id || '').slice(0, 6)}</span>
+                  </div>
                   <div className="task-actions">
                     <div
                       className="icon-btn"
@@ -103,6 +128,17 @@ export default function Dashboard({ onNavigate }) {
                     </div>
                     {openMenuId === t.id ? (
                       <div className="menu-pop" onClick={(ev) => ev.stopPropagation()}>
+                        <button
+                          className="menu-item-btn"
+                          onClick={(ev) => {
+                            ev.stopPropagation()
+                            setOpenMenuId(null)
+                            openEdit(t)
+                          }}
+                        >
+                          编辑任务 <Icon name="pen-to-square" />
+                        </button>
+                        <div style={{ height: 1, background: 'var(--border)', margin: '6px 0' }} />
                         <button
                           className="menu-item-btn menu-item-danger"
                           onClick={async (ev) => {
@@ -202,14 +238,14 @@ export default function Dashboard({ onNavigate }) {
 
       {drawerOpen ? (
         <Drawer
-          title="创建部署任务"
-          onClose={() => setDrawerOpen(false)}
+          title={editingTaskId ? '编辑部署任务' : '创建部署任务'}
+          onClose={() => { setDrawerOpen(false); setEditingTaskId(null) }}
           footer={[
-            <button key="c" className="btn btn-outline" onClick={() => setDrawerOpen(false)}>
+            <button key="c" className="btn btn-outline" onClick={() => { setDrawerOpen(false); setEditingTaskId(null) }}>
               取消
             </button>,
             <button key="ok" className="btn btn-primary" onClick={handleCreate}>
-              创建
+              {editingTaskId ? '保存' : '创建'}
             </button>
           ]}
         >
@@ -232,7 +268,7 @@ export default function Dashboard({ onNavigate }) {
               <option value="">请选择...</option>
               {servers.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.name}
+                  {`${s.name} (${s.address})`}
                 </option>
               ))}
             </select>
@@ -247,7 +283,7 @@ export default function Dashboard({ onNavigate }) {
               <option value="">请选择...</option>
               {repos.map((r) => (
                 <option key={r.id} value={r.id}>
-                  {r.name}
+                  {`${r.name} [${r.branch || 'master'}]`}
                 </option>
               ))}
             </select>

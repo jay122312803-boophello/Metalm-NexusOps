@@ -169,7 +169,10 @@ export default function Settings() {
               <div className="server-icon">
                 <Icon name="server" />
               </div>
-              <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>{s.name}</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
+                <div style={{ fontSize: 16, fontWeight: 600 }}>{s.name}</div>
+                <span style={{ color: 'var(--text-sub)', fontSize: 12, fontFamily: 'monospace' }}>{String(s.id || '').slice(0, 6)}</span>
+              </div>
               <div style={{ color: 'var(--text-sub)', fontSize: 13 }}>{s.address}</div>
               <div style={{ color: 'var(--text-sub)', fontSize: 12, marginTop: 8, fontFamily: 'monospace' }}>{s.deploy_path}</div>
               <button
@@ -207,7 +210,10 @@ export default function Settings() {
               {repos.map((r) => (
                 <tr key={r.id}>
                   <td>
-                    <strong>{r.name}</strong>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                      <strong>{r.name}</strong>
+                      <span style={{ color: 'var(--text-sub)', fontSize: 12, fontFamily: 'monospace' }}>{String(r.id || '').slice(0, 6)}</span>
+                    </div>
                   </td>
                   <td>
                     <span className="badge badge-blue">{r.branch}</span>
