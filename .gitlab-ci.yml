@@ -72,16 +72,16 @@ deploy:
             true; \
           fi; \
           if [ -s \"\$tmp_local\" ]; then \
-            if ! mv -f \"\$tmp_local\" \"$tmp\"; then \
-              echo \"!! [NexusOps] 无法写入: $tmp\"; \
+            if ! mv -f \"\$tmp_local\" \"\$tmp\"; then \
+              echo \"!! [NexusOps] 无法写入: \$tmp\"; \
               ls -ld \"${DEST_DIR%/}\" \"${DEST_DIR%/}/.nexusops\" || true; \
               df -h \"${DEST_DIR%/}\" || true; \
               exit 23; \
             fi; \
-            if command -v unzip >/dev/null 2>&1; then unzip -o \"$tmp\" -d \"${DEST_DIR%/}\" >/dev/null; \
-            elif command -v python3 >/dev/null 2>&1; then python3 -m zipfile -e \"$tmp\" \"${DEST_DIR%/}\" >/dev/null; \
+            if command -v unzip >/dev/null 2>&1; then unzip -o \"\$tmp\" -d \"${DEST_DIR%/}\" >/dev/null; \
+            elif command -v python3 >/dev/null 2>&1; then python3 -m zipfile -e \"\$tmp\" \"${DEST_DIR%/}\" >/dev/null; \
             else echo unzip/python3 not found; exit 1; fi; \
-            rm -f \"$tmp\"; \
+            rm -f \"\$tmp\"; \
           fi; \
           echo '====== [NexusOps] Configs Ready ======'; \
         fi; \
