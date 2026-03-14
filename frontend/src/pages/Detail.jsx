@@ -514,21 +514,27 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
 
   if (!task) return <div className="empty-state">Loading...</div>
 
-  const modeLabel =
-    mode === 'monitor' ? '实时监控' : mode === 'diagnose' ? '故障诊断' : mode === 'history' ? '历史查看' : '准备就绪'
+  const modeLabel = viewHistory ? '历史' : mode === 'monitor' ? '监控' : mode === 'diagnose' ? '诊断' : '就绪'
+  const modeDotClass = viewHistory ? 'idle' : mode === 'monitor' ? 'busy' : mode === 'diagnose' ? 'offline' : 'online'
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 0 20px 0' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <button className="btn btn-ghost" onClick={onBack}>
-            <Icon name="arrow-left" /> 返回
-          </button>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-            <h2 style={{ margin: 0 }}>{task.name}</h2>
-            <span className="badge badge-gray">{`模式：${modeLabel}`}</span>
+    <div className="panel-canvas">
+      <div className="panel-frame">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button className="icon-btn back-btn" onClick={onBack} title="返回">
+              <Icon name="arrow-left" />
+            </button>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 0 }}>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, letterSpacing: 0.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {task.name}
+              </h2>
+              <span className="mode-pill">
+                <span className={`status-dot ${modeDotClass}`} />
+                {modeLabel}
+              </span>
+            </div>
           </div>
-        </div>
         <button
           className="btn btn-primary"
           onClick={() => {
@@ -545,7 +551,7 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
         >
           <Icon name={deploying ? 'spinner fa-spin' : 'rocket'} /> {deploying ? '部署中...' : '触发部署'}
         </button>
-      </div>
+        </div>
 
       {mode === 'diagnose' && !viewHistory ? (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
@@ -579,7 +585,7 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
         </div>
       ) : null}
 
-      <div style={{ marginBottom: 14 }}>
+        <div style={{ marginTop: 16, marginBottom: 14 }}>
         <div className="tabs">
           <button className={`tab ${rightTab === 'terminal' ? 'active' : ''}`} onClick={() => setRightTab('terminal')}>
             运行状态与日志
@@ -595,6 +601,7 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
         </div>
       </div>
 
+        <div className="panel-body">
       <div className="cockpit-grid">
         <div className="card status-panel">
           <div className={`status-node ${busy ? 'flow' : ''}`}>
@@ -820,6 +827,8 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
               </div>
             </div>
           )}
+        </div>
+      </div>
         </div>
       </div>
 

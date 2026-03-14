@@ -367,7 +367,7 @@ export default function Settings({ initialTab }) {
           {drawerType === 'server' ? (
             <>
               <div className="form-item">
-                <label className="form-label">服务器别名</label>
+                <label className="form-label">服务器名称</label>
                 <input
                   className="form-input"
                   placeholder="如: 生产环境-01"
@@ -376,11 +376,11 @@ export default function Settings({ initialTab }) {
                 />
               </div>
               <div className="form-item">
-                <label className="form-label">IP 地址 / 域名</label>
+                <label className="form-label">主机地址</label>
                 <div className="input-wrap">
                   <input
                     className="form-input"
-                    placeholder="192.168.x.x"
+                    placeholder="IP 或域名，如 192.168.1.10"
                     value={formServer.address || ''}
                     onChange={(e) => setFormServer({ ...formServer, address: e.target.value })}
                   />
@@ -414,7 +414,7 @@ export default function Settings({ initialTab }) {
                 </select>
               </div>
               <div className="form-item">
-                <label className="form-label">SSH 用户 (SERVER_USER)</label>
+                <label className="form-label">SSH 登录用户</label>
                 <input
                   className="form-input"
                   placeholder="如: metalm"
@@ -423,7 +423,7 @@ export default function Settings({ initialTab }) {
                 />
               </div>
               <div className="form-item">
-                <label className="form-label">服务器 SSH 私钥 (SERVER_SSH_KEY)</label>
+                <label className="form-label">SSH 私钥</label>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                   <div style={{ color: 'var(--text-sub)', fontSize: 12 }}>
                     {editingId && serverKeyConfigured ? '已配置（留空不变，输入新值覆盖）' : '可选'}
