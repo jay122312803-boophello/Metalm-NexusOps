@@ -72,7 +72,9 @@ deploy:
       rsync -rz --no-perms --no-owner --no-group remote_executor.sh "$SERVER_USER@$SERVER_HOST:${DEST_DIR%/}/.nexusops/remote_executor.sh"
 
       ssh "$SERVER_USER@$SERVER_HOST" "set -e; \
-        if [ -n \"${NEXUSOPS_CONFIG_ZIP_URL:-}\" ]; then \
+        if [ \"${test:-}\" = \"true\" ]; then \
+          echo '====== [NexusOps] Test Mode: Skip Config Inject ======'; \
+        elif [ -n \"${NEXUSOPS_CONFIG_ZIP_URL:-}\" ]; then \
           echo '====== [NexusOps] Inject Configs ======'; \
           tmp=\"${DEST_DIR%/}/.nexusops/configs.zip\"; \
           tmp_local=\"/tmp/nexusops-configs.zip\"; \

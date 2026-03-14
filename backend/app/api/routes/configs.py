@@ -181,8 +181,13 @@ async def download_current_configs_zip(dep_id: str):
 
 @router.get("/history/{history_id}/configs")
 async def list_snapshot_configs(history_id: str):
+    hid = uuid.UUID(history_id)
+    try:
+        await ensure_snapshot_if_success(hid)
+    except Exception:
+        pass
+
     def _work(session):
-        hid = uuid.UUID(history_id)
         snap = session.exec(select(TaskConfigSnapshot).where(TaskConfigSnapshot.history_id == hid)).first()
         if not snap:
             return {"ok": True, "readonly": True, "snapshot_ready": False, "files": []}

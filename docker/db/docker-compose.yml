@@ -15,7 +15,7 @@ services:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes:/var/lib/postgresql/data
       - ${DOCKER_VOLUME_DIRECTORY:-.}/configdata:/docker-entrypoint-initdb.d:ro
     ports:
-      - "18077:5432"
+      - "23012:5432"
 
 networks:
   nexusops-net:

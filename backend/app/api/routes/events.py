@@ -11,6 +11,7 @@ from sqlmodel import select
 
 from ...db.models import Deployment, DeploymentHistory, Repo, TaskConfig, TaskConfigSnapshot, TaskConfigSnapshotFile
 from ...db.session import run_db
+from .configs import ensure_snapshot_if_success
 
 router = APIRouter()
 
@@ -185,6 +186,11 @@ async def history_events(history_id: str):
                             break
 
                 if status_now in {"success", "failed", "canceled"}:
+                    if status_now == "success":
+                        try:
+                            await ensure_snapshot_if_success(hid)
+                        except Exception:
+                            pass
                     yield _sse("log", {"line": f"====== [NexusOps] Pipeline finished: {status_now} ======"})
                     yield _sse("done", {"status": status_now, "ts": datetime.utcnow().isoformat()})
                     break
