@@ -297,6 +297,25 @@ body {
 .drawer-body { padding: 24px; flex: 1; overflow-y: auto; }
 .drawer-footer { padding: 20px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 12px; }
 
+.overview-grid { display: flex; flex-direction: column; gap: 24px; }
+.overview-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.overview-charts { display: grid; grid-template-columns: 1.3fr 0.7fr; gap: 16px; align-items: stretch; }
+.overview-bottom { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 16px; align-items: stretch; }
+
+.metric-card { padding: 16px 18px; }
+.metric-icon { width: 44px; height: 44px; border-radius: 14px; background: #e8f5e9; color: var(--primary); display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid rgba(22,163,74,0.14); }
+.metric-icon i { font-size: 18px; }
+.metric-value { font-size: 30px; font-weight: 900; color: var(--text-main); letter-spacing: 0.2px; line-height: 1; }
+.metric-value.warn { color: var(--warning); }
+.metric-value.bad { color: var(--danger); }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+.feed-list { display: flex; flex-direction: column; gap: 10px; overflow: auto; min-height: 0; }
+.feed-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 10px; border-radius: 12px; cursor: pointer; transition: background 0.15s ease; }
+.feed-item:hover { background: #f1f5f9; }
+
+.quick-actions { display: flex; flex-direction: column; gap: 12px; }
+
 .form-item { margin-bottom: 20px; }
 .form-label { display: block; margin-bottom: 8px; font-weight: 500; font-size: 14px; }
 .form-input { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; transition: all 0.2s; }

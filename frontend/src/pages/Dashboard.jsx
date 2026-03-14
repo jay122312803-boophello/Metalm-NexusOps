@@ -46,7 +46,11 @@ export default function Dashboard({ onNavigate }) {
     return () => document.removeEventListener('click', onDoc)
   }, [])
 
-  const envBadge = (serverName) => {
+  const envBadge = (env, serverName) => {
+    const e = String(env || '').toUpperCase()
+    if (e === 'PROD') return <span className="badge badge-prod">PROD</span>
+    if (e === 'TEST') return <span className="badge badge-test">TEST</span>
+    if (e === 'DEV') return <span className="badge badge-dev">DEV</span>
     const name = serverName || ''
     const low = name.toLowerCase()
     if (name.includes('生产') || low.includes('prod')) return <span className="badge badge-prod">PROD</span>
@@ -185,7 +189,7 @@ export default function Dashboard({ onNavigate }) {
                   <Icon name="server" />
                   <span>目标: </span>
                   <span className="info-val">{s.name || 'Unknown'}</span>
-                  {envBadge(s.name)}
+                  {envBadge(s.environment, s.name)}
                 </div>
                 <div className="info-row">
                   <Icon name="code-branch" />

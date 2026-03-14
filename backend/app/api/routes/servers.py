@@ -8,6 +8,23 @@ from sqlalchemy.exc import IntegrityError
 
 router = APIRouter()
 
+def _infer_env(name: str) -> str:
+    s = (name or "").lower()
+    if "生产" in (name or "") or "prod" in s:
+        return "PROD"
+    if "测试" in (name or "") or "test" in s:
+        return "TEST"
+    if "开发" in (name or "") or "dev" in s:
+        return "DEV"
+    return "OTHER"
+
+
+def _norm_env(v: str | None, name: str) -> str:
+    s = (v or "").strip().upper()
+    if s in {"PROD", "TEST", "DEV", "OTHER"}:
+        return s
+    return _infer_env(name)
+
 
 @router.get("")
 async def list_servers():
@@ -17,6 +34,7 @@ async def list_servers():
             {
                 "id": str(s.id),
                 "name": s.name,
+                "environment": (s.environment or "").strip() or _infer_env(s.name),
                 "address": s.address,
                 "ssh_user": s.ssh_user,
                 "ssh_key_configured": bool(s.ssh_key),
@@ -43,8 +61,10 @@ async def create_server(req: CreateServerRequest):
         ssh_key = data.get("ssh_key")
         if ssh_key is not None and str(ssh_key).strip() == "":
             ssh_key = None
+        env = _norm_env(data.get("environment"), name)
         s = Server(
             name=name,
+            environment=env,
             address=data["address"],
             ssh_user=data.get("ssh_user") or "metalm",
             ssh_key=ssh_key,
@@ -57,6 +77,7 @@ async def create_server(req: CreateServerRequest):
         return {
             "id": str(s.id),
             "name": s.name,
+            "environment": (s.environment or "").strip() or _infer_env(s.name),
             "address": s.address,
             "ssh_user": s.ssh_user,
             "ssh_key_configured": bool(s.ssh_key),
@@ -77,6 +98,7 @@ async def get_server(server_id: str):
         return {
             "id": str(s.id),
             "name": s.name,
+            "environment": (s.environment or "").strip() or _infer_env(s.name),
             "address": s.address,
             "ssh_user": s.ssh_user,
             "ssh_key_configured": bool(s.ssh_key),
@@ -104,6 +126,8 @@ async def update_server(server_id: str, req: UpdateServerRequest):
             if exists:
                 raise HTTPException(status_code=409, detail="服务器名称已存在，请更换")
             data["name"] = name
+        if "environment" in data:
+            data["environment"] = _norm_env(data.get("environment"), data.get("name") or s.name)
         for k, v in data.items():
             if k == "ssh_user" and v is not None and str(v).strip() == "":
                 v = "metalm"

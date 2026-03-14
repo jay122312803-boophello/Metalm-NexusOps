@@ -3,6 +3,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE TABLE IF NOT EXISTS servers (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL,
+  environment text NOT NULL DEFAULT 'OTHER',
   address text NOT NULL,
   ssh_user text NOT NULL DEFAULT 'metalm',
   ssh_key text,
@@ -91,8 +92,8 @@ CREATE INDEX IF NOT EXISTS idx_task_configs_deployment_id ON task_configs(deploy
 CREATE INDEX IF NOT EXISTS idx_task_config_snapshots_history_id ON task_config_snapshots(history_id);
 CREATE INDEX IF NOT EXISTS idx_task_config_snapshot_files_snapshot_id ON task_config_snapshot_files(snapshot_id);
 
-INSERT INTO servers (name, address, ssh_user, deploy_path, description)
-VALUES ('生产环境-01', '10.88.36.61', 'metalm', '/home/metalm/deploy/NexusOps/', 'seed')
+INSERT INTO servers (name, environment, address, ssh_user, deploy_path, description)
+VALUES ('生产环境-01', 'PROD', '10.88.36.61', 'metalm', '/home/metalm/deploy/NexusOps/', 'seed')
 ON CONFLICT (name) DO NOTHING;
 
 INSERT INTO repos (name, url, branch, project_id, description)

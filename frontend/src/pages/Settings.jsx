@@ -4,14 +4,14 @@ import Icon from '../components/Icon.jsx'
 import Modal from '../components/Modal.jsx'
 import { api } from '../services/api.js'
 
-export default function Settings() {
+export default function Settings({ initialTab }) {
   const [servers, setServers] = useState([])
   const [repos, setRepos] = useState([])
   const [drawerType, setDrawerType] = useState(null)
   const [activeTab, setActiveTab] = useState('servers')
   const [showTriggerToken, setShowTriggerToken] = useState(false)
   const [showPrivateToken, setShowPrivateToken] = useState(false)
-  const [formServer, setFormServer] = useState({ ssh_user: 'metalm' })
+  const [formServer, setFormServer] = useState({ ssh_user: 'metalm', environment: 'OTHER' })
   const [formRepo, setFormRepo] = useState({ branch: 'master' })
   const [editingId, setEditingId] = useState(null)
   const [repoAuth, setRepoAuth] = useState({ trigger: false, private: false })
@@ -33,6 +33,11 @@ export default function Settings() {
   useEffect(() => {
     refresh()
   }, [])
+
+  useEffect(() => {
+    if (!initialTab) return
+    if (initialTab === 'repos' || initialTab === 'servers') setActiveTab(initialTab)
+  }, [initialTab])
 
   const isValidHost = (v) => {
     const s = (v || '').trim()
@@ -79,7 +84,7 @@ export default function Settings() {
     setServerKey('')
     setServerKeyConfigured(false)
     setShowServerKey(false)
-    setFormServer({ ssh_user: 'metalm' })
+    setFormServer({ ssh_user: 'metalm', environment: 'OTHER' })
     setFormRepo({ branch: 'master' })
     refresh()
   }
@@ -93,14 +98,21 @@ export default function Settings() {
     setServerKey('')
     setServerKeyConfigured(false)
     setShowServerKey(false)
-    setFormServer({ ssh_user: 'metalm' })
+    setFormServer({ ssh_user: 'metalm', environment: 'OTHER' })
     setFormRepo({ branch: 'master' })
     setDrawerType(type)
   }
 
   const openEditServer = (s) => {
     setEditingId(s.id)
-    setFormServer({ name: s.name, address: s.address, ssh_user: s.ssh_user || 'metalm', deploy_path: s.deploy_path, description: s.description || '' })
+    setFormServer({
+      name: s.name,
+      environment: s.environment || 'OTHER',
+      address: s.address,
+      ssh_user: s.ssh_user || 'metalm',
+      deploy_path: s.deploy_path,
+      description: s.description || ''
+    })
     setServerKey('')
     setServerKeyConfigured(!!s.ssh_key_configured)
     setShowServerKey(false)
@@ -328,6 +340,19 @@ export default function Settings() {
                   value={formServer.deploy_path || ''}
                   onChange={(e) => setFormServer({ ...formServer, deploy_path: e.target.value })}
                 />
+              </div>
+              <div className="form-item">
+                <label className="form-label">环境标识</label>
+                <select
+                  className="form-input"
+                  value={formServer.environment || 'OTHER'}
+                  onChange={(e) => setFormServer({ ...formServer, environment: e.target.value })}
+                >
+                  <option value="PROD">PROD（生产）</option>
+                  <option value="TEST">TEST（测试）</option>
+                  <option value="DEV">DEV（开发）</option>
+                  <option value="OTHER">OTHER（其他）</option>
+                </select>
               </div>
               <div className="form-item">
                 <label className="form-label">SSH 用户 (SERVER_USER)</label>

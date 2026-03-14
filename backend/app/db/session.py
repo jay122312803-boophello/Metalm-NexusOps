@@ -50,6 +50,23 @@ async def init_db() -> None:
             SQLModel.metadata.create_all(engine)
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE servers ADD COLUMN IF NOT EXISTS ssh_key text"))
+            conn.execute(text("ALTER TABLE servers ADD COLUMN IF NOT EXISTS environment text"))
+            conn.execute(text("ALTER TABLE servers ALTER COLUMN environment SET DEFAULT 'OTHER'"))
+            conn.execute(text("UPDATE servers SET environment = 'OTHER' WHERE environment IS NULL OR btrim(environment) = ''"))
+            conn.execute(
+                text(
+                    """
+                    UPDATE servers
+                    SET environment = CASE
+                      WHEN name ILIKE '%生产%' OR name ILIKE '%prod%' THEN 'PROD'
+                      WHEN name ILIKE '%测试%' OR name ILIKE '%test%' THEN 'TEST'
+                      WHEN name ILIKE '%开发%' OR name ILIKE '%dev%' THEN 'DEV'
+                      ELSE environment
+                    END
+                    WHERE environment = 'OTHER'
+                    """
+                )
+            )
             conn.execute(text("ALTER TABLE deployments ADD COLUMN IF NOT EXISTS input_dir text"))
             conn.execute(text("ALTER TABLE deployments ADD COLUMN IF NOT EXISTS dest_dir text"))
             conn.execute(text("ALTER TABLE deployments ADD COLUMN IF NOT EXISTS deploy_script text"))

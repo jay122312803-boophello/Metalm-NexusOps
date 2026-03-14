@@ -9,6 +9,7 @@ from pydantic import BaseModel
 class Server(BaseModel):
     id: Optional[str] = None
     name: str
+    environment: Optional[str] = None
     address: str
     ssh_user: str = "metalm"
     deploy_path: str
@@ -55,6 +56,7 @@ class History(BaseModel):
 
 class CreateServerRequest(BaseModel):
     name: str
+    environment: Optional[str] = None
     address: str
     ssh_user: str = "metalm"
     ssh_key: Optional[str] = None
@@ -64,6 +66,7 @@ class CreateServerRequest(BaseModel):
 
 class UpdateServerRequest(BaseModel):
     name: Optional[str] = None
+    environment: Optional[str] = None
     address: Optional[str] = None
     ssh_user: Optional[str] = None
     ssh_key: Optional[str] = None

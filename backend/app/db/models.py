@@ -14,6 +14,7 @@ class Server(SQLModel, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     name: str
+    environment: Optional[str] = Field(default="OTHER")
     address: str
     ssh_user: str = Field(default="metalm")
     ssh_key: Optional[str] = Field(default=None)

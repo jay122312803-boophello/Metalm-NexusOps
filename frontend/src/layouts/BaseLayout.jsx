@@ -11,6 +11,10 @@ export default function BaseLayout({ page, setPage, breadcrumb, children }) {
           NexusOps
         </div>
         <div className="menu">
+          <div className={`menu-item ${page === 'overview' ? 'active' : ''}`} onClick={() => setPage('overview')}>
+            <Icon name="chart-line" />
+            概览大屏
+          </div>
           <div
             className={`menu-item ${page === 'dashboard' || page === 'detail' ? 'active' : ''}`}
             onClick={() => setPage('dashboard')}
