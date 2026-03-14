@@ -308,13 +308,32 @@ body {
 .metric-value { font-size: 30px; font-weight: 900; color: var(--text-main); letter-spacing: 0.2px; line-height: 1; }
 .metric-value.warn { color: var(--warning); }
 .metric-value.bad { color: var(--danger); }
-.legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.legend-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
 
 .feed-list { display: flex; flex-direction: column; gap: 10px; overflow: auto; min-height: 0; }
 .feed-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 10px; border-radius: 12px; cursor: pointer; transition: background 0.15s ease; }
 .feed-item:hover { background: #f1f5f9; }
 
 .quick-actions { display: flex; flex-direction: column; gap: 12px; }
+
+.trend-wrap { position: relative; }
+.chart-tooltip {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.78);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  box-shadow: 0 10px 32px rgba(0,0,0,0.20);
+  backdrop-filter: blur(10px);
+  color: rgba(226, 232, 240, 0.95);
+  min-width: 140px;
+}
+.chart-tooltip-title { font-weight: 800; font-size: 12px; margin-bottom: 6px; color: rgba(226, 232, 240, 0.92); }
+.chart-tooltip-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 11px; color: rgba(226, 232, 240, 0.84); }
+.chart-tooltip-row + .chart-tooltip-row { margin-top: 5px; }
+.chart-tooltip-val { font-weight: 800; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Courier New', monospace; }
 
 .form-item { margin-bottom: 20px; }
 .form-label { display: block; margin-bottom: 8px; font-weight: 500; font-size: 14px; }

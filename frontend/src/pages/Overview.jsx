@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Icon from '../components/Icon.jsx'
 import { api } from '../services/api.js'
 
@@ -9,23 +9,52 @@ const fmtPct = (v) => {
   return `${(n * 100).toFixed(1)}%`
 }
 
-const smoothPath = (pts) => {
+const monotonePath = (pts) => {
   if (!pts || pts.length === 0) return ''
-  if (pts.length === 1) return `M ${pts[0].x} ${pts[0].y}`
+  if (pts.length === 1) return `M ${Number(pts[0].x).toFixed(2)} ${Number(pts[0].y).toFixed(2)}`
+
   const p = pts.map((x) => ({ x: Number(x.x), y: Number(x.y) }))
-  let d = `M ${p[0].x.toFixed(2)} ${p[0].y.toFixed(2)}`
-  for (let i = 0; i < p.length - 1; i++) {
-    const p0 = p[i - 1] || p[i]
-    const p1 = p[i]
-    const p2 = p[i + 1]
-    const p3 = p[i + 2] || p2
-    const c1x = p1.x + (p2.x - p0.x) / 6
-    const c1y = p1.y + (p2.y - p0.y) / 6
-    const c2x = p2.x - (p3.x - p1.x) / 6
-    const c2y = p2.y - (p3.y - p1.y) / 6
-    d += ` C ${c1x.toFixed(2)} ${c1y.toFixed(2)}, ${c2x.toFixed(2)} ${c2y.toFixed(2)}, ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`
+  const n = p.length
+  const d = new Array(n - 1)
+  for (let i = 0; i < n - 1; i++) {
+    const dx = p[i + 1].x - p[i].x
+    d[i] = dx === 0 ? 0 : (p[i + 1].y - p[i].y) / dx
   }
-  return d
+
+  const m = new Array(n)
+  m[0] = d[0]
+  m[n - 1] = d[n - 2]
+  for (let i = 1; i < n - 1; i++) {
+    if (d[i - 1] === 0 || d[i] === 0 || d[i - 1] * d[i] < 0) m[i] = 0
+    else m[i] = (d[i - 1] + d[i]) / 2
+  }
+
+  for (let i = 0; i < n - 1; i++) {
+    if (d[i] === 0) {
+      m[i] = 0
+      m[i + 1] = 0
+      continue
+    }
+    const a = m[i] / d[i]
+    const b = m[i + 1] / d[i]
+    const s = a * a + b * b
+    if (s > 9) {
+      const t = 3 / Math.sqrt(s)
+      m[i] = t * a * d[i]
+      m[i + 1] = t * b * d[i]
+    }
+  }
+
+  let path = `M ${p[0].x.toFixed(2)} ${p[0].y.toFixed(2)}`
+  for (let i = 0; i < n - 1; i++) {
+    const dx = p[i + 1].x - p[i].x
+    const c1x = p[i].x + dx / 3
+    const c1y = p[i].y + (m[i] * dx) / 3
+    const c2x = p[i + 1].x - dx / 3
+    const c2y = p[i + 1].y - (m[i + 1] * dx) / 3
+    path += ` C ${c1x.toFixed(2)} ${c1y.toFixed(2)}, ${c2x.toFixed(2)} ${c2y.toFixed(2)}, ${p[i + 1].x.toFixed(2)} ${p[i + 1].y.toFixed(2)}`
+  }
+  return path
 }
 
 const statusDotClass = (status) => {
@@ -45,29 +74,34 @@ const dayLabel = (isoDate) => {
 
 function TrendChart({ data }) {
   const height = 220
-  const padX = 12
+  const padX = 24
   const padTop = 16
   const padBottom = 44
   const w = 1000
   const h = height
+  const wrapRef = useRef(null)
+  const tooltipRef = useRef(null)
+  const [hover, setHover] = useState(null)
+  const [tipSize, setTipSize] = useState({ w: 0, h: 0 })
 
   const series = useMemo(() => {
     const arr = Array.isArray(data) ? data : []
     const pts = arr.map((d) => ({
       date: d.date,
       success: Number(d.success || 0),
-      failed: Number(d.failed || 0)
+      failed: Number(d.failed || 0),
+      total: Number(d.total || 0)
     }))
     const max = Math.max(1, ...pts.flatMap((p) => [p.success, p.failed]))
     const n = Math.max(1, pts.length)
     const step = (w - padX * 2) / (n - 1 || 1)
     const toY = (v) => padTop + (h - padTop - padBottom) * (1 - v / max)
     const toX = (i) => padX + step * i
-    const sucPts = pts.map((p, i) => ({ x: toX(i), y: toY(p.success), date: p.date, v: p.success }))
-    const failPts = pts.map((p, i) => ({ x: toX(i), y: toY(p.failed), date: p.date, v: p.failed }))
+    const sucPts = pts.map((p, i) => ({ x: toX(i), y: toY(p.success), date: p.date, v: p.success, total: p.total }))
+    const failPts = pts.map((p, i) => ({ x: toX(i), y: toY(p.failed), date: p.date, v: p.failed, total: p.total }))
     const baseY = h - padBottom
-    const sucD = smoothPath(sucPts)
-    const failD = smoothPath(failPts)
+    const sucD = monotonePath(sucPts)
+    const failD = monotonePath(failPts)
     const area = (d, a) => {
       if (!a.length) return ''
       const first = a[0]
@@ -76,6 +110,41 @@ function TrendChart({ data }) {
     }
     return { pts, max, toX, toY, sucPts, failPts, baseY, sucD, failD, sucArea: area(sucD, sucPts), failArea: area(failD, failPts) }
   }, [data])
+
+  const setHoverFromEvent = (ev, i) => {
+    const el = wrapRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    const suc = series.sucPts[i]
+    const fail = series.failPts[i]
+    const x = Math.max(0, Math.min(rect.width, (Number(suc?.x || 0) / w) * rect.width))
+    const y = Math.max(0, Math.min(rect.height, (Math.min(Number(suc?.y || 0), Number(fail?.y || 0)) / h) * rect.height))
+    setHover({
+      i,
+      x,
+      y,
+      rectW: rect.width,
+      rectH: rect.height,
+      date: suc?.date,
+      success: suc?.v ?? 0,
+      failed: fail?.v ?? 0,
+      total: suc?.total ?? 0,
+      sx: suc?.x ?? 0,
+      sy: suc?.y ?? 0,
+      fx: fail?.x ?? 0,
+      fy: fail?.y ?? 0
+    })
+  }
+
+  const clearHover = () => setHover(null)
+
+  useEffect(() => {
+    if (!hover) return
+    const el = tooltipRef.current
+    if (!el) return
+    const next = { w: el.offsetWidth || 0, h: el.offsetHeight || 0 }
+    setTipSize((p) => (p.w === next.w && p.h === next.h ? p : next))
+  }, [hover?.i, hover?.date])
 
   return (
     <div className="card" style={{ padding: 18 }}>
@@ -91,34 +160,99 @@ function TrendChart({ data }) {
         </div>
       </div>
 
-      <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={height} style={{ display: 'block' }}>
-        <defs>
-          <linearGradient id="gradSuccess" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="rgba(16,185,129,0.22)" />
-            <stop offset="1" stopColor="rgba(16,185,129,0.02)" />
-          </linearGradient>
-          <linearGradient id="gradFailed" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="rgba(239,68,68,0.18)" />
-            <stop offset="1" stopColor="rgba(239,68,68,0.02)" />
-          </linearGradient>
-        </defs>
+      <div className="trend-wrap" ref={wrapRef} onMouseLeave={clearHover}>
+        {hover ? (() => {
+          const margin = 10
+          const halfW = (tipSize.w || 0) / 2
+          const left = Math.max(margin + halfW, Math.min((hover.rectW || 0) - margin - halfW, hover.x))
+          const preferAbove = hover.y - (tipSize.h || 0) - 14 > 0
+          const top = preferAbove ? hover.y - 12 : hover.y + 14
+          const transform = preferAbove ? 'translate(-50%, -100%)' : 'translate(-50%, 0)'
+          return (
+          <div
+            className="chart-tooltip"
+            ref={tooltipRef}
+            style={{
+              left,
+              top,
+              transform
+            }}
+          >
+            <div className="chart-tooltip-title">{dayLabel(hover.date)}</div>
+            <div className="chart-tooltip-row">
+              <span className="legend-dot" style={{ background: 'var(--success)' }} /> 成功
+              <span className="chart-tooltip-val">{hover.success}</span>
+            </div>
+            <div className="chart-tooltip-row">
+              <span className="legend-dot" style={{ background: 'var(--danger)' }} /> 失败
+              <span className="chart-tooltip-val">{hover.failed}</span>
+            </div>
+            <div className="chart-tooltip-row" style={{ opacity: 0.78 }}>
+              <span className="legend-dot" style={{ background: 'rgba(148,163,184,0.9)' }} /> 总计
+              <span className="chart-tooltip-val">{hover.total}</span>
+            </div>
+          </div>
+          )
+        })() : null}
 
-        <line x1={padX} y1={series.baseY} x2={w - padX} y2={series.baseY} stroke="rgba(148,163,184,0.32)" strokeWidth="1" />
-        <path d={series.sucArea} fill="url(#gradSuccess)" />
-        <path d={series.failArea} fill="url(#gradFailed)" />
-        <path d={series.sucD} fill="none" stroke="var(--success)" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
-        <path d={series.failD} fill="none" stroke="var(--danger)" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" opacity="0.9" />
+        <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={height} style={{ display: 'block' }}>
+          <defs>
+            <linearGradient id="gradSuccess" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor="rgba(16,185,129,0.22)" />
+              <stop offset="1" stopColor="rgba(16,185,129,0.02)" />
+            </linearGradient>
+            <linearGradient id="gradFailed" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor="rgba(239,68,68,0.18)" />
+              <stop offset="1" stopColor="rgba(239,68,68,0.02)" />
+            </linearGradient>
+          </defs>
 
-        {series.sucPts.map((p, i) => (
-          <g key={p.date || i}>
-            <circle cx={p.x} cy={p.y} r="4" fill="var(--success)" />
-            <circle cx={series.failPts[i]?.x} cy={series.failPts[i]?.y} r="4" fill="var(--danger)" opacity="0.9" />
-            <text x={p.x} y={h - 12} textAnchor="middle" fontSize="22" fill="rgba(148,163,184,0.95)">
-              {dayLabel(p.date)}
-            </text>
-          </g>
-        ))}
-      </svg>
+          <line x1={padX} y1={series.baseY} x2={w - padX} y2={series.baseY} stroke="rgba(148,163,184,0.32)" strokeWidth="1" />
+          {hover ? (
+            <line
+              x1={series.sucPts[hover.i]?.x}
+              y1={padTop}
+              x2={series.sucPts[hover.i]?.x}
+              y2={series.baseY}
+              stroke="rgba(148,163,184,0.32)"
+              strokeWidth="1"
+              strokeDasharray="4 6"
+            />
+          ) : null}
+          <path d={series.sucArea} fill="url(#gradSuccess)" />
+          <path d={series.failArea} fill="url(#gradFailed)" />
+          <path d={series.sucD} fill="none" stroke="var(--success)" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+          <path d={series.failD} fill="none" stroke="var(--danger)" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" opacity="0.9" />
+
+          {series.sucPts.map((p, i) => {
+            const isFirst = i === 0
+            const isLast = i === series.sucPts.length - 1
+            const anchor = isFirst ? 'start' : isLast ? 'end' : 'middle'
+            const dx = isFirst ? 6 : isLast ? -6 : 0
+            const active = hover?.i === i
+            return (
+              <g key={p.date || i}>
+                <rect
+                  x={i === 0 ? 0 : (series.sucPts[i - 1].x + p.x) / 2}
+                  y={0}
+                  width={i === series.sucPts.length - 1 ? w : (series.sucPts[i + 1]?.x + p.x) / 2 - (i === 0 ? 0 : (series.sucPts[i - 1].x + p.x) / 2)}
+                  height={h}
+                  fill="transparent"
+                  onMouseEnter={(ev) => setHoverFromEvent(ev, i)}
+                  onMouseMove={(ev) => setHoverFromEvent(ev, i)}
+                />
+                <circle cx={p.x} cy={p.y} r={active ? 5 : 4} fill="var(--success)" />
+                <circle cx={series.failPts[i]?.x} cy={series.failPts[i]?.y} r={active ? 5 : 4} fill="var(--danger)" opacity="0.9" />
+                {active ? <circle cx={p.x} cy={p.y} r="10" fill="rgba(16,185,129,0.10)" /> : null}
+                {active ? <circle cx={series.failPts[i]?.x} cy={series.failPts[i]?.y} r="10" fill="rgba(239,68,68,0.10)" /> : null}
+                <text x={p.x + dx} y={h - 12} textAnchor={anchor} fontSize="22" fill="rgba(148,163,184,0.95)">
+                  {dayLabel(p.date)}
+                </text>
+              </g>
+            )
+          })}
+        </svg>
+      </div>
     </div>
   )
 }
@@ -155,7 +289,7 @@ function Donut({ data }) {
       <div style={{ fontWeight: 800, color: 'var(--text-main)', marginBottom: 10 }}>环境分布</div>
       <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 14, alignItems: 'center' }}>
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ display: 'block' }}>
-          <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(148,163,184,0.22)" strokeWidth="12" />
+          <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(148,163,184,0.22)" strokeWidth="10" />
           {segs.map((s) => (
             <circle
               key={s.key}
@@ -164,7 +298,7 @@ function Donut({ data }) {
               r={r}
               fill="none"
               stroke={s.stroke}
-              strokeWidth="12"
+              strokeWidth="10"
               strokeDasharray={s.dash}
               strokeDashoffset={-s.off}
               strokeLinecap="butt"
@@ -295,7 +429,7 @@ export default function Overview({ onNavigate }) {
               ) : (
                 <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8 }}>
                   <span>{m?.servers_online ?? 0}</span>
-                  <span style={{ color: 'rgba(100,116,139,0.95)', fontWeight: 700, fontSize: 16 }}>{`/ ${m?.servers_total ?? 0}`}</span>
+                  <span style={{ color: 'rgba(148,163,184,0.95)', fontWeight: 700, fontSize: 14 }}>{`/ ${m?.servers_total ?? 0}`}</span>
                 </span>
               )
             }
