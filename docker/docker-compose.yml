@@ -1,5 +1,6 @@
 services:
   backend:
+    platform: linux/amd64
     build:
       context: ..
       dockerfile: docker/backend/Dockerfile
@@ -15,6 +16,7 @@ services:
       - nexusops-net
 
   frontend:
+    platform: linux/amd64
     build:
       context: ..
       dockerfile: docker/frontend/Dockerfile
