@@ -148,11 +148,35 @@ async def trigger_deployment(dep_id: str, request: Request, req: TriggerDeployme
     payload = req.model_dump()
     api_base = (os.getenv("NEXUSOPS_PUBLIC_API_BASE_URL") or os.getenv("NEXUSOPS_API_BASE_URL") or "").rstrip("/")
     if not api_base:
+        forwarded = (request.headers.get("forwarded") or "").split(",")[0].strip()
+        f_proto = ""
+        f_host = ""
+        if forwarded:
+            parts = [x.strip() for x in forwarded.split(";") if x.strip()]
+            for p in parts:
+                if "=" not in p:
+                    continue
+                k, v = p.split("=", 1)
+                k = k.strip().lower()
+                v = v.strip().strip('"')
+                if k == "proto" and not f_proto:
+                    f_proto = v
+                if k == "host" and not f_host:
+                    f_host = v
+
         xf_proto = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip()
         xf_host = (request.headers.get("x-forwarded-host") or "").split(",")[0].strip()
-        host = xf_host or (request.headers.get("host") or "").strip()
-        scheme = xf_proto or request.url.scheme
+        xf_port = (request.headers.get("x-forwarded-port") or "").split(",")[0].strip()
+        host = f_host or xf_host or (request.headers.get("host") or "").strip()
+        scheme = f_proto or xf_proto or request.url.scheme
         if host:
+            if xf_port and ":" not in host:
+                try:
+                    p = int(xf_port)
+                    if (scheme == "http" and p != 80) or (scheme == "https" and p != 443):
+                        host = f"{host}:{p}"
+                except ValueError:
+                    pass
             api_base = f"{scheme}://{host}".rstrip("/")
 
     def _work(session):
