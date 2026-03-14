@@ -17,6 +17,7 @@ router = APIRouter()
 async def get_history(
     server_id: str | None = Query(default=None),
     status: str | None = Query(default=None),
+    deployment_id: str | None = Query(default=None),
 ):
     def _work(session):
         gitlab_url = (os.getenv("GITLAB_BASE_URL") or "https://gitlab.xuelangyun.com").rstrip("/")
@@ -69,6 +70,10 @@ async def get_history(
         if status and status != "all":
             st = status
 
+        did = None
+        if deployment_id:
+            did = uuid.UUID(deployment_id)
+
         q = (
             select(DeploymentHistory)
             .join(Deployment, Deployment.id == DeploymentHistory.deployment_id)
@@ -78,6 +83,8 @@ async def get_history(
             q = q.where(Deployment.server_id == sid)
         if st:
             q = q.where(DeploymentHistory.status == st)
+        if did:
+            q = q.where(DeploymentHistory.deployment_id == did)
         q = q.limit(500)
 
         rows = session.exec(q).all()

@@ -55,6 +55,25 @@ export default function Dashboard({ onNavigate }) {
     return null
   }
 
+  const statusDotClass = (status) => {
+    const s = String(status || '').toLowerCase()
+    if (s === 'running' || s === 'pending') return 'busy'
+    if (s === 'success') return 'online'
+    if (s === 'failed') return 'offline'
+    if (s === 'canceled') return 'canceled'
+    return 'idle'
+  }
+
+  const statusLabel = (status) => {
+    const s = String(status || '').toLowerCase()
+    if (s === 'running') return '运行中'
+    if (s === 'pending') return '排队中'
+    if (s === 'success') return '成功'
+    if (s === 'failed') return '失败'
+    if (s === 'canceled') return '已取消'
+    return '就绪'
+  }
+
   const handleCreate = async () => {
     if (!newTask.name || !newTask.server_id || !newTask.repo_id) return alert('请完善必填项')
     if (!newTask.input_dir || !newTask.dest_dir) return alert('请填写同步源目录与目标路径')
@@ -117,6 +136,7 @@ export default function Dashboard({ onNavigate }) {
               <div className="task-header">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                    <span className={`status-dot ${statusDotClass(last?.status)}`} title={statusLabel(last?.status)} />
                     <div style={{ fontWeight: 600, fontSize: 16 }}>{t.name}</div>
                     <span style={{ color: 'var(--text-sub)', fontSize: 12, fontFamily: 'monospace' }}>{String(t.id || '').slice(0, 6)}</span>
                   </div>
@@ -216,7 +236,7 @@ export default function Dashboard({ onNavigate }) {
 
               <div className="task-footer">
                 <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span className="status-dot online" /> 就绪
+                  <span className={`status-dot ${statusDotClass(last?.status)}`} /> {statusLabel(last?.status)}
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <button

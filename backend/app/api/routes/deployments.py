@@ -257,8 +257,27 @@ async def trigger_deployment(dep_id: str, request: Request, req: TriggerDeployme
         session.add(h)
         session.commit()
 
-        cfg_rows = session.exec(select(TaskConfig.rel_path).where(TaskConfig.deployment_id == d.id)).all()
-        config_files = [x if isinstance(x, str) else x[0] for x in cfg_rows]
+        cfg_rows = session.exec(select(TaskConfig.rel_path, TaskConfig.content).where(TaskConfig.deployment_id == d.id)).all()
+        config_files = [rp for rp, _ in cfg_rows]
+        try:
+            from ...db.models import TaskConfigSnapshot, TaskConfigSnapshotFile
+
+            snap = TaskConfigSnapshot(history_id=h.id, deployment_id=d.id, created_at=datetime.utcnow())
+            session.add(snap)
+            session.commit()
+            session.refresh(snap)
+            for rel_path, content in cfg_rows:
+                session.add(
+                    TaskConfigSnapshotFile(
+                        snapshot_id=snap.id,
+                        rel_path=rel_path,
+                        content=content or "",
+                        created_at=datetime.utcnow(),
+                    )
+                )
+            session.commit()
+        except Exception:
+            pass
 
         resp = None
         try:

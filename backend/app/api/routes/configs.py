@@ -183,7 +183,7 @@ async def download_current_configs_zip(dep_id: str):
 async def list_snapshot_configs(history_id: str):
     hid = uuid.UUID(history_id)
     try:
-        await ensure_snapshot_if_success(hid)
+        await ensure_snapshot(hid)
     except Exception:
         pass
 
@@ -247,21 +247,42 @@ async def ensure_snapshot_if_success(history_id: uuid.UUID) -> None:
         h = session.get(DeploymentHistory, hid)
         if not h or h.status != "success":
             return
-        exists = session.exec(select(TaskConfigSnapshot).where(TaskConfigSnapshot.history_id == hid)).first()
-        if exists:
-            return
-        d = session.get(Deployment, h.deployment_id)
-        if not d:
-            return
-        snap = TaskConfigSnapshot(history_id=hid, deployment_id=d.id, created_at=datetime.utcnow())
-        session.add(snap)
-        session.commit()
-        session.refresh(snap)
-
-        rows = session.exec(select(TaskConfig.rel_path, TaskConfig.content).where(TaskConfig.deployment_id == d.id)).all()
-        for rel_path, content in rows:
-            f = TaskConfigSnapshotFile(snapshot_id=snap.id, rel_path=rel_path, content=content or "", created_at=datetime.utcnow())
-            session.add(f)
-        session.commit()
+        _ensure_snapshot(session, hid, h.deployment_id)
 
     await run_db(_work)
+
+
+async def ensure_snapshot(history_id: uuid.UUID) -> None:
+    def _work(session):
+        hid = history_id
+        h = session.get(DeploymentHistory, hid)
+        if not h:
+            return
+        _ensure_snapshot(session, hid, h.deployment_id)
+
+    await run_db(_work)
+
+
+def _ensure_snapshot(session, history_id: uuid.UUID, deployment_id: uuid.UUID) -> None:
+    exists = session.exec(select(TaskConfigSnapshot).where(TaskConfigSnapshot.history_id == history_id)).first()
+    if exists:
+        return
+    d = session.get(Deployment, deployment_id)
+    if not d:
+        return
+    snap = TaskConfigSnapshot(history_id=history_id, deployment_id=d.id, created_at=datetime.utcnow())
+    session.add(snap)
+    session.commit()
+    session.refresh(snap)
+
+    rows = session.exec(select(TaskConfig.rel_path, TaskConfig.content).where(TaskConfig.deployment_id == d.id)).all()
+    for rel_path, content in rows:
+        session.add(
+            TaskConfigSnapshotFile(
+                snapshot_id=snap.id,
+                rel_path=rel_path,
+                content=content or "",
+                created_at=datetime.utcnow(),
+            )
+        )
+    session.commit()

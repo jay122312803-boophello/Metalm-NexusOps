@@ -171,6 +171,8 @@ body {
 .status-dot.online { background: var(--success); box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2); }
 .status-dot.offline { background: var(--danger); }
 .status-dot.busy { background: var(--info); animation: pulse 1.5s infinite; }
+.status-dot.canceled { background: var(--warning); box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2); }
+.status-dot.idle { background: #94a3b8; box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.25); }
 @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
 
 .grid-servers { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 360px)); gap: 24px; justify-content: start; }

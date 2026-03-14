@@ -11,7 +11,7 @@ from sqlmodel import select
 
 from ...db.models import Deployment, DeploymentHistory, Repo, TaskConfig, TaskConfigSnapshot, TaskConfigSnapshotFile
 from ...db.session import run_db
-from .configs import ensure_snapshot_if_success
+from .configs import ensure_snapshot, ensure_snapshot_if_success
 
 router = APIRouter()
 
@@ -20,9 +20,37 @@ def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
+async def _append_history_log_tail(history_id: uuid.UUID, lines: list[str]) -> None:
+    if not lines:
+        return
+
+    def _work(session):
+        h = session.get(DeploymentHistory, history_id)
+        if not h:
+            return
+        ss = h.server_snapshot or {}
+        tail = str(ss.get("log_tail") or "")
+        add = "\n".join([str(x) for x in lines if x is not None and str(x) != ""]).strip("\n")
+        if add:
+            tail = f"{tail}\n{add}" if tail else add
+        limit = 200000
+        if len(tail) > limit:
+            tail = tail[-limit:]
+        ss["log_tail"] = tail
+        h.server_snapshot = ss
+        session.add(h)
+        session.commit()
+
+    await run_db(_work)
+
+
 @router.get("/history/{history_id}/events")
 async def history_events(history_id: str):
     hid = uuid.UUID(history_id)
+    try:
+        await ensure_snapshot(hid)
+    except Exception:
+        pass
 
     async def _load_base():
         def _work(session):
@@ -31,7 +59,13 @@ async def history_events(history_id: str):
                 return None
             d = session.get(Deployment, h.deployment_id)
             r = session.get(Repo, d.repo_id) if d else None
-            cfg_rows = session.exec(select(TaskConfig.rel_path).where(TaskConfig.deployment_id == h.deployment_id)).all()
+            snap = session.exec(select(TaskConfigSnapshot).where(TaskConfigSnapshot.history_id == hid)).first()
+            if snap:
+                cfg_rows = session.exec(
+                    select(TaskConfigSnapshotFile.rel_path).where(TaskConfigSnapshotFile.snapshot_id == snap.id).order_by(TaskConfigSnapshotFile.rel_path.asc())
+                ).all()
+            else:
+                cfg_rows = session.exec(select(TaskConfig.rel_path).where(TaskConfig.deployment_id == h.deployment_id)).all()
             cfg_files = [x if isinstance(x, str) else x[0] for x in cfg_rows]
             return {
                 "history": h,
@@ -58,6 +92,45 @@ async def history_events(history_id: str):
             jobs: list[dict] = []
             job_offsets: dict[int, int] = {}
             job_announced: set[int] = set()
+            pending_logs: list[str] = []
+            last_flush_ts = anyio.current_time()
+            warned_missing_pipeline = False
+            warned_missing_proj = False
+            warned_missing_token = False
+            warned_jobs_fetch = False
+            warned_trace_fetch: set[int] = set()
+
+            saved_tail = ""
+            try:
+                ss = base["history"].server_snapshot or {}
+                saved_tail = str(ss.get("log_tail") or "")
+            except Exception:
+                saved_tail = ""
+            persist_enabled = True
+            try:
+                if saved_tail and (base["history"].status or "") in {"success", "failed", "canceled"}:
+                    persist_enabled = False
+            except Exception:
+                pass
+
+            async def _flush(force: bool = False):
+                nonlocal last_flush_ts
+                if not persist_enabled:
+                    pending_logs.clear()
+                    return
+                if not pending_logs:
+                    return
+                now = anyio.current_time()
+                if not force and (len(pending_logs) < 120 and now - last_flush_ts < 3.0):
+                    return
+                await _append_history_log_tail(hid, pending_logs)
+                pending_logs.clear()
+                last_flush_ts = now
+
+            def _log(line: str) -> str:
+                pending_logs.append(line)
+                return _sse("log", {"line": line})
+
             yield _sse(
                 "init",
                 {
@@ -65,19 +138,27 @@ async def history_events(history_id: str):
                     "deployment_id": base["deployment_id"],
                     "created_at": base["history"].created_at.isoformat() if base["history"].created_at else None,
                     "config_files": base["config_files"],
+                    "pipeline_id": base["history"].pipeline_id,
+                    "status": base["history"].status,
                 },
             )
 
+            if saved_tail:
+                yield _log("====== [NexusOps] 历史日志回放 ======")
+                for line in saved_tail.splitlines()[-2000:]:
+                    if line:
+                        yield _log(line)
+                yield _log("====== [NexusOps] 历史日志回放结束 ======")
+                await _flush(force=True)
+
 
             if base["config_files"]:
-                yield _sse(
-                    "log",
-                    {"line": f"====== [NexusOps] 本次部署挂载配置 ({len(base['config_files'])}) ======"},
-                )
+                yield _log(f"====== [NexusOps] 本次部署挂载配置 ({len(base['config_files'])}) ======")
                 for p in base["config_files"][:50]:
-                    yield _sse("log", {"line": f"- {p}"})
+                    yield _log(f"- {p}")
 
-            yield _sse("log", {"line": "====== [NexusOps] 开始监控 CI/CD 状态 ======"})
+            yield _log("====== [NexusOps] 开始监控 CI/CD 状态 ======")
+            await _flush(force=True)
 
             async def _gitlab_get(url: str, token: str, headers: dict | None = None):
                 h = {"PRIVATE-TOKEN": token}
@@ -139,11 +220,25 @@ async def history_events(history_id: str):
                             "ts": datetime.utcnow().isoformat(),
                         },
                     )
-                    yield _sse("log", {"line": f">> Pipeline status: {status_now}"})
+                    yield _log(f">> Pipeline status: {status_now}")
+                    await _flush(force=True)
 
                 r = base["repo"]
                 proj = ((r.project_id if r else None) or os.getenv("GITLAB_PROJECT") or "").strip()
                 token = ((r.private_token if r else None) or "").strip() or (os.getenv("PRIVATE_TOKEN") or "").strip() or None
+
+                if enable_trace and not pipeline_id and not warned_missing_pipeline:
+                    warned_missing_pipeline = True
+                    yield _log("!! 未获取到 pipeline_id，无法回放/拉取 CI/CD 日志")
+                    await _flush()
+                if enable_trace and pipeline_id and not proj and not warned_missing_proj:
+                    warned_missing_proj = True
+                    yield _log("!! 未配置 GitLab Project ID，无法回放/拉取 CI/CD 日志")
+                    await _flush()
+                if enable_trace and pipeline_id and proj and not token and not warned_missing_token:
+                    warned_missing_token = True
+                    yield _log("!! 未配置 GitLab PRIVATE_TOKEN，无法获取 CI/CD 任务日志")
+                    await _flush()
 
                 if enable_trace and pipeline_id and proj and token:
                     if last_pipeline_id != pipeline_id:
@@ -152,10 +247,22 @@ async def history_events(history_id: str):
                         job_announced = set()
                         last_pipeline_id = pipeline_id
                         last_job_poll_ts = 0.0
+                        warned_jobs_fetch = False
+                        warned_trace_fetch = set()
 
                     now = anyio.current_time()
                     if not jobs or now - last_job_poll_ts >= 5.0:
-                        jobs = await _refresh_jobs(proj, int(pipeline_id), token)
+                        url = f"{gitlab_url}/api/v4/projects/{requests.utils.quote(proj, safe='')}/pipelines/{int(pipeline_id)}/jobs?per_page=100"
+                        resp = await _gitlab_get(url, token)
+                        if not resp.ok:
+                            if not warned_jobs_fetch:
+                                warned_jobs_fetch = True
+                                yield _log(f"!! 拉取 GitLab jobs 失败: HTTP {resp.status_code}")
+                                await _flush()
+                            jobs = []
+                        else:
+                            data = resp.json()
+                            jobs = data if isinstance(data, list) else []
                         last_job_poll_ts = now
 
                     emitted = 0
@@ -168,22 +275,45 @@ async def history_events(history_id: str):
                         if jid not in job_announced:
                             name = (j.get("name") or "job").strip()
                             stj = (j.get("status") or "").strip() or "unknown"
-                            yield _sse("log", {"line": f"====== [GitLab Job] {name} ({stj}) ======"})
+                            yield _log(f"====== [GitLab Job] {name} ({stj}) ======")
                             job_announced.add(jid)
 
-                        chunk, next_off = await _read_job_trace(proj, jid, token, job_offsets[jid])
+                        url = f"{gitlab_url}/api/v4/projects/{requests.utils.quote(proj, safe='')}/jobs/{jid}/trace"
+                        resp = await _gitlab_get(url, token, headers={"Range": f"bytes={job_offsets[jid]}-"})
+                        if resp.status_code == 416:
+                            chunk = ""
+                            next_off = job_offsets[jid]
+                        elif not resp.ok:
+                            if jid not in warned_trace_fetch:
+                                warned_trace_fetch.add(jid)
+                                yield _log(f"!! 拉取 GitLab trace 失败(job {jid}): HTTP {resp.status_code}")
+                            chunk = ""
+                            next_off = job_offsets[jid]
+                        else:
+                            raw = resp.content or b""
+                            if job_offsets[jid] > 0 and resp.status_code == 200:
+                                raw = raw[job_offsets[jid] :] if job_offsets[jid] < len(raw) else b""
+                                chunk = raw.decode("utf-8", errors="replace")
+                                next_off = max(job_offsets[jid], len(resp.content or b""))
+                            else:
+                                chunk = raw.decode("utf-8", errors="replace")
+                                next_off = job_offsets[jid] + len(raw)
                         job_offsets[jid] = next_off
                         if not chunk:
                             continue
                         for line in chunk.splitlines():
                             if not line:
                                 continue
-                            yield _sse("log", {"line": line})
+                            yield _log(line)
                             emitted += 1
                             if emitted >= 400:
                                 break
                         if emitted >= 400:
                             break
+                    await _flush()
+                elif not enable_trace:
+                    yield _log("!! 已禁用 CI/CD trace 拉取（NEXUSOPS_SSE_TRACE=0）")
+                    await _flush()
 
                 if status_now in {"success", "failed", "canceled"}:
                     if status_now == "success":
@@ -191,7 +321,8 @@ async def history_events(history_id: str):
                             await ensure_snapshot_if_success(hid)
                         except Exception:
                             pass
-                    yield _sse("log", {"line": f"====== [NexusOps] Pipeline finished: {status_now} ======"})
+                    yield _log(f"====== [NexusOps] Pipeline finished: {status_now} ======")
+                    await _flush(force=True)
                     yield _sse("done", {"status": status_now, "ts": datetime.utcnow().isoformat()})
                     break
 
@@ -222,6 +353,20 @@ async def history_events(history_id: str):
                 yield ":keepalive\n\n"
                 await anyio.sleep(2)
         except anyio.get_cancelled_exc_class():
+            try:
+                await _append_history_log_tail(hid, pending_logs)
+            except Exception:
+                pass
+            return
+        except Exception as e:
+            try:
+                yield _sse("log", {"line": f"!! SSE error: {type(e).__name__}: {str(e)[:200]}"})
+            except Exception:
+                pass
+            try:
+                await _append_history_log_tail(hid, pending_logs)
+            except Exception:
+                pass
             return
 
     headers = {

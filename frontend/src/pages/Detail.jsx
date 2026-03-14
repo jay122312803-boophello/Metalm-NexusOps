@@ -57,6 +57,24 @@ export default function Detail({ taskId, historyId, onBack }) {
       const repos = await api.get('/api/repos')
       const rp = Array.isArray(repos) ? repos : []
       setRepo(rp.find((x) => x.id === t.repo_id) || null)
+
+      if (!historyId) {
+        try {
+          const h = await api.get(`/api/history?deployment_id=${encodeURIComponent(taskId)}`)
+          const items = Array.isArray(h?.history) ? h.history : []
+          if (items.length) {
+            const latest = items[0]
+            if (latest?.id) {
+              setActiveHistoryId(latest.id)
+              if (latest?.status) setPipelineStatus(latest.status)
+              const tail = latest?.server_snapshot?.log_tail
+              if (typeof tail === 'string' && tail.trim() !== '') {
+                setLogs(tail.split('\n').slice(-2000))
+              }
+            }
+          }
+        } catch (_) {}
+      }
     }
     init()
   }, [taskId])
@@ -90,9 +108,11 @@ export default function Detail({ taskId, historyId, onBack }) {
         }
         if (['success', 'failed', 'canceled'].includes(st)) {
           finished = true
-          try {
-            es.close()
-          } catch (_) {}
+          if (!viewHistory) {
+            try {
+              es.close()
+            } catch (_) {}
+          }
         }
       } catch (_) {}
     })
@@ -161,6 +181,7 @@ export default function Detail({ taskId, historyId, onBack }) {
       setPendingTrigger(true)
       return
     }
+    setRightTab('terminal')
     setDeploying(true)
     setLogs(['>> Initializing deployment sequence...', '>> Connecting to GitLab API...'])
     setPipelineStatus('pending')
