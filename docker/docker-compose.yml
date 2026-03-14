@@ -1,11 +1,7 @@
 services:
   backend:
-    platform: linux/amd64
-    build:
-      context: ..
-      dockerfile: docker/backend/Dockerfile
-      args:
-        BASE_IMAGE: ${NEXUSOPS_BASE_IMAGE:-registry.xuelangyun.com/shuzhi-amd64/alpine:3.20}
+    image: ${NEXUSOPS_BACKEND_IMAGE:-nexusops-backend:latest}
+    platform: ${NEXUSOPS_PLATFORM:-linux/amd64}
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:${NEXUSOPS_PG_PASS:-metalm2024}@${NEXUSOPS_PG_HOST:-nexusops-pg}:5432/nexusops_db
@@ -16,12 +12,8 @@ services:
       - nexusops-net
 
   frontend:
-    platform: linux/amd64
-    build:
-      context: ..
-      dockerfile: docker/frontend/Dockerfile
-      args:
-        BASE_IMAGE: ${NEXUSOPS_BASE_IMAGE:-registry.xuelangyun.com/shuzhi-amd64/alpine:3.20}
+    image: ${NEXUSOPS_FRONTEND_IMAGE:-nexusops-frontend:latest}
+    platform: ${NEXUSOPS_PLATFORM:-linux/amd64}
     restart: unless-stopped
     ports:
       - "18088:80"
