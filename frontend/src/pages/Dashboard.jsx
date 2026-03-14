@@ -94,7 +94,12 @@ export default function Dashboard({ onNavigate }) {
   return (
     <div>
       <div className="page-head">
-        <h2 className="page-title">部署任务大盘</h2>
+        <div className="page-head-left">
+          <div className="page-title-row">
+            <Icon name="table-columns" style={{ color: 'var(--text-sub)' }} />
+            <h2 className="page-title">部署大盘</h2>
+          </div>
+        </div>
         <div className="page-actions">
           <button className="btn btn-primary" onClick={openCreate}>
             <Icon name="plus" /> 创建新任务

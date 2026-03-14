@@ -55,7 +55,12 @@ export default function History({ onNavigate }) {
   return (
     <div>
       <div className="page-head">
-        <h2 className="page-title">审计日志</h2>
+        <div className="page-head-left">
+          <div className="page-title-row">
+            <Icon name="clock-rotate-left" style={{ color: 'var(--text-sub)' }} />
+            <h2 className="page-title">审计日志</h2>
+          </div>
+        </div>
         <div className="page-actions">
           <select
             className="form-input"

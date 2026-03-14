@@ -136,8 +136,10 @@ body {
 .scroll-view { flex: 1; overflow-y: auto; padding: 24px 0; }
 .scroll-inner { width: 100%; max-width: var(--content-max); margin: 0 auto; padding: 0 32px; }
 
-.page-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; width: 100%; }
-.page-title { margin: 0; font-size: 24px; }
+.page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 24px; width: 100%; }
+.page-head-left { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.page-title-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.page-title { margin: 0; font-size: 22px; font-weight: 700; }
 .page-actions { display: flex; gap: 12px; align-items: center; }
 
 .tabs { display: inline-flex; gap: 18px; padding: 0; border: 0; background: transparent; border-bottom: 1px solid var(--border); }

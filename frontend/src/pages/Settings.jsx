@@ -150,13 +150,19 @@ export default function Settings() {
   return (
     <div>
       <div className="page-head">
-        <div className="tabs">
-          <button className={`tab ${activeTab === 'servers' ? 'active' : ''}`} onClick={() => setActiveTab('servers')}>
-            服务器管理
-          </button>
-          <button className={`tab ${activeTab === 'repos' ? 'active' : ''}`} onClick={() => setActiveTab('repos')}>
-            仓库配置
-          </button>
+        <div className="page-head-left">
+          <div className="page-title-row">
+            <Icon name="gears" style={{ color: 'var(--text-sub)' }} />
+            <h2 className="page-title">系统设置</h2>
+          </div>
+          <div className="tabs">
+            <button className={`tab ${activeTab === 'servers' ? 'active' : ''}`} onClick={() => setActiveTab('servers')}>
+              服务器管理
+            </button>
+            <button className={`tab ${activeTab === 'repos' ? 'active' : ''}`} onClick={() => setActiveTab('repos')}>
+              仓库配置
+            </button>
+          </div>
         </div>
         <div className="page-actions">
           {activeTab === 'servers' ? (
