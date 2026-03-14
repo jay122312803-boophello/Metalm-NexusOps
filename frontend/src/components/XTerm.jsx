@@ -8,6 +8,11 @@ export default function XTerm({ lines, onReady }) {
   const termRef = useRef(null)
   const fitRef = useRef(null)
   const lastLenRef = useRef(0)
+  const onReadyRef = useRef(onReady)
+
+  useEffect(() => {
+    onReadyRef.current = onReady
+  }, [onReady])
 
   useEffect(() => {
     if (!hostRef.current) return
@@ -17,6 +22,7 @@ export default function XTerm({ lines, onReady }) {
       cursorBlink: false,
       fontSize: 13,
       fontFamily: "Consolas, 'Fira Code', Menlo, Monaco, monospace",
+      scrollback: 10000,
       theme: {
         background: '#0b1220',
         foreground: '#e2e8f0'
@@ -28,7 +34,7 @@ export default function XTerm({ lines, onReady }) {
     fit.fit()
     termRef.current = term
     fitRef.current = fit
-    if (onReady) onReady({ term, fit })
+    if (onReadyRef.current) onReadyRef.current({ term, fit })
 
     const onResize = () => fit.fit()
     window.addEventListener('resize', onResize)
@@ -37,8 +43,9 @@ export default function XTerm({ lines, onReady }) {
       term.dispose()
       termRef.current = null
       fitRef.current = null
+      lastLenRef.current = 0
     }
-  }, [onReady])
+  }, [])
 
   useEffect(() => {
     const term = termRef.current
@@ -53,8 +60,8 @@ export default function XTerm({ lines, onReady }) {
       term.writeln(next[i] ?? '')
     }
     lastLenRef.current = next.length
+    term.scrollToBottom()
   }, [lines])
 
   return <div ref={hostRef} style={{ width: '100%', height: '100%' }} />
 }
-

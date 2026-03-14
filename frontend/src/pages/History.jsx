@@ -162,18 +162,18 @@ export default function History({ onNavigate }) {
                   </td>
                   <td>{new Date(h.created_at).toLocaleString()}</td>
                   <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div className="history-actions">
                       <button
-                        className="btn btn-outline btn-sm"
+                        className="btn btn-primary btn-action"
                         onClick={(ev) => {
                           ev.stopPropagation()
                           onNavigate ? onNavigate('detail', h.deployment_id, { historyId: h.id }) : null
                         }}
                       >
-                        查看详情
+                        <Icon name="circle-info" /> 查看详情
                       </button>
                       <button
-                        className="btn btn-primary btn-sm"
+                        className="btn btn-primary btn-action"
                         onClick={async (ev) => {
                           ev.stopPropagation()
                           if (!confirm('重新触发该任务部署？')) return
@@ -188,7 +188,7 @@ export default function History({ onNavigate }) {
                         <Icon name="rocket" /> 重新部署
                       </button>
                       <button
-                        className="btn btn-danger btn-sm"
+                        className="btn btn-danger btn-action"
                         onClick={(ev) => {
                           ev.stopPropagation()
                           setDeleteError(null)

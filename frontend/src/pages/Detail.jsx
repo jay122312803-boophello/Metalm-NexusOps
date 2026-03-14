@@ -71,6 +71,8 @@ export default function Detail({ taskId, historyId, onBack }) {
     }
     const es = new EventSource(`/api/history/${activeHistoryId}/events`)
     sseRef.current = es
+    let finished = false
+    let warned = false
     es.addEventListener('init', (ev) => {
       try {
         const d = JSON.parse(ev.data || '{}')
@@ -86,6 +88,12 @@ export default function Detail({ taskId, historyId, onBack }) {
         if (['success', 'failed', 'canceled'].includes(st) && !viewHistory) {
           setDeploying(false)
         }
+        if (['success', 'failed', 'canceled'].includes(st)) {
+          finished = true
+          try {
+            es.close()
+          } catch (_) {}
+        }
       } catch (_) {}
     })
     es.addEventListener('log', (ev) => {
@@ -94,7 +102,17 @@ export default function Detail({ taskId, historyId, onBack }) {
         if (d.line) addLog(d.line)
       } catch (_) {}
     })
+    es.addEventListener('done', () => {
+      finished = true
+      try {
+        es.close()
+      } catch (_) {}
+    })
     es.onerror = () => {
+      if (finished) return
+      if (es.readyState === EventSource.CLOSED) return
+      if (warned) return
+      warned = true
       addLog('!! SSE disconnected')
     }
     return () => {
