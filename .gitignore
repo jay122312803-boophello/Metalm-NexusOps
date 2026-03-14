@@ -14,3 +14,6 @@ __pycache__/
 backend/data/
 server/data/
 db/volumes/
+
+develop/backend_frontend/private_configs/
+develop/backend_frontend/private_configs.zip

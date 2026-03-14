@@ -2,9 +2,19 @@ services:
   hello-world:
     image: registry.xuelangyun.com/shuzhi-amd64/alpine:3.20
     container_name: hello-world
-    command: ["sh", "-c", "echo hello-world && sleep infinity"]
+    environment:
+      DEST_DIR: ${DEST_DIR:-/home/metalm/deploy/NexusOps}
+    volumes:
+      - ${NEXUSOPS_CONFIG_TOML:-./config.toml}:/config.toml:ro
+      - ${NEXUSOPS_CONFIG_DEV_TOML:-./config.dev.toml}:/config.dev.toml:ro
+    command:
+      [
+        "sh",
+        "-c",
+        "set -e; echo hello-world; echo \"DEST_DIR=$$DEST_DIR\"; cfg=/config.toml; mode=base; if [ -s /config.dev.toml ] && grep -q \"^[[:space:]]*test_key[[:space:]]*=\" /config.dev.toml 2>/dev/null; then cfg=/config.dev.toml; mode=dev; fi; echo \"CONFIG_MODE=$$mode\"; echo \"CONFIG_FILE=$$cfg\"; echo \"====== [NexusOps] Config Content ======\"; cat \"$$cfg\" || true; val=$$(awk -F= '/^[[:space:]]*test_key[[:space:]]*=/{gsub(/^[[:space:]]+|[[:space:]]+$$/,\"\",$$2); gsub(/^\"|\"$$/,\"\",$$2); gsub(/^\\x27|\\x27$$/ ,\"\",$$2); print $$2; exit}' \"$$cfg\" 2>/dev/null || true); echo \"metalm.test.test_key=$$val\"; sleep infinity"
+      ]
 
 networks:
   default:
-    name: "${NETWORK}"
+    name: "${NETWORK:-metalm-dev-net}"
     external: true
