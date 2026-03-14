@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import BaseLayout from './layouts/BaseLayout.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import Detail from './pages/Detail.jsx'
@@ -12,6 +12,11 @@ export default function App() {
   const [detailHistoryId, setDetailHistoryId] = useState(null)
   const [returnPage, setReturnPage] = useState('dashboard')
   const [settingsTab, setSettingsTab] = useState(null)
+  const [historyPreset, setHistoryPreset] = useState(null)
+
+  useEffect(() => {
+    if (page !== 'history' && historyPreset) setHistoryPreset(null)
+  }, [page, historyPreset])
 
   const breadcrumb = useMemo(() => {
     if (page === 'settings') return '系统设置'
@@ -32,6 +37,13 @@ export default function App() {
     } else {
       setSettingsTab(null)
     }
+    if (p === 'history') {
+      const date = opts?.date ? String(opts.date) : null
+      const status = opts?.status ? String(opts.status) : null
+      setHistoryPreset(date || status ? { date, status } : null)
+    } else {
+      setHistoryPreset(null)
+    }
     setPage(p)
     if (id) setDetailId(id)
   }
@@ -40,7 +52,7 @@ export default function App() {
     page === 'settings' ? (
       <Settings initialTab={settingsTab} />
     ) : page === 'history' ? (
-      <History onNavigate={navigate} />
+      <History onNavigate={navigate} initialPreset={historyPreset} />
     ) : page === 'overview' ? (
       <Overview onNavigate={navigate} />
     ) : page === 'detail' ? (

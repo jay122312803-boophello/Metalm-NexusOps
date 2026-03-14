@@ -4,7 +4,7 @@ import Icon from '../components/Icon.jsx'
 import Modal from '../components/Modal.jsx'
 import { api } from '../services/api.js'
 
-export default function History({ onNavigate }) {
+export default function History({ onNavigate, initialPreset }) {
   const [history, setHistory] = useState([])
   const [servers, setServers] = useState([])
   const [statusOptions, setStatusOptions] = useState(['pending', 'running', 'success', 'failed', 'canceled'])
@@ -16,6 +16,12 @@ export default function History({ onNavigate }) {
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState(null)
+
+  useEffect(() => {
+    if (!initialPreset) return
+    if (initialPreset?.status) setSelectedStatus(String(initialPreset.status))
+    if (initialPreset?.date) setQuery(String(initialPreset.date))
+  }, [initialPreset])
 
   useEffect(() => {
     const loadHistory = async () => {
@@ -62,7 +68,8 @@ export default function History({ onNavigate }) {
     const ref = String(h.ref || h.repo_snapshot?.branch || '').toLowerCase()
     const pid = h.pipeline_id ? String(h.pipeline_id) : ''
     const st = String(h.status || '').toLowerCase()
-    return sName.includes(q) || rName.includes(q) || ref.includes(q) || pid.includes(q) || st.includes(q)
+    const created = String(h.created_at || '').slice(0, 10).toLowerCase()
+    return sName.includes(q) || rName.includes(q) || ref.includes(q) || pid.includes(q) || st.includes(q) || created.includes(q)
   })
 
   const pageSize = 20

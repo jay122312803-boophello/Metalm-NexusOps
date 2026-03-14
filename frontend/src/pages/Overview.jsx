@@ -72,15 +72,33 @@ const dayLabel = (isoDate) => {
   return s.slice(5).replace('-', '/')
 }
 
-function TrendChart({ data }) {
+const fullDateLabel = (isoDate) => {
+  const s = String(isoDate || '')
+  if (!s) return ''
+  return s.slice(0, 10).replaceAll('-', '/')
+}
+
+const niceStep = (maxVal) => {
+  const m = Math.max(1, Math.ceil(Number(maxVal) || 1))
+  if (m <= 5) return 1
+  if (m <= 10) return 2
+  if (m <= 25) return 5
+  if (m <= 50) return 10
+  if (m <= 100) return 20
+  return 50
+}
+
+function TrendChart({ data, onNavigate }) {
   const height = 220
-  const padX = 24
+  const padLeft = 54
+  const padRight = 24
   const padTop = 16
   const padBottom = 44
   const w = 1000
   const h = height
   const wrapRef = useRef(null)
   const tooltipRef = useRef(null)
+  const hideTimerRef = useRef(null)
   const [hover, setHover] = useState(null)
   const [tipSize, setTipSize] = useState({ w: 0, h: 0 })
 
@@ -92,11 +110,16 @@ function TrendChart({ data }) {
       failed: Number(d.failed || 0),
       total: Number(d.total || 0)
     }))
-    const max = Math.max(1, ...pts.flatMap((p) => [p.success, p.failed]))
+    const maxRaw = Math.max(1, ...pts.flatMap((p) => [p.success, p.failed]))
+    const stepY = niceStep(maxRaw)
+    const max = Math.ceil(maxRaw / stepY) * stepY
+    const ticks = []
+    for (let v = 0; v <= max; v += stepY) ticks.push(v)
+    const failMax = Math.max(0, ...pts.map((p) => p.failed))
     const n = Math.max(1, pts.length)
-    const step = (w - padX * 2) / (n - 1 || 1)
+    const step = (w - padLeft - padRight) / (n - 1 || 1)
     const toY = (v) => padTop + (h - padTop - padBottom) * (1 - v / max)
-    const toX = (i) => padX + step * i
+    const toX = (i) => padLeft + step * i
     const sucPts = pts.map((p, i) => ({ x: toX(i), y: toY(p.success), date: p.date, v: p.success, total: p.total }))
     const failPts = pts.map((p, i) => ({ x: toX(i), y: toY(p.failed), date: p.date, v: p.failed, total: p.total }))
     const baseY = h - padBottom
@@ -108,7 +131,21 @@ function TrendChart({ data }) {
       const last = a[a.length - 1]
       return `M ${first.x.toFixed(2)} ${baseY.toFixed(2)} L ${first.x.toFixed(2)} ${first.y.toFixed(2)} ${d.slice(1)} L ${last.x.toFixed(2)} ${baseY.toFixed(2)} Z`
     }
-    return { pts, max, toX, toY, sucPts, failPts, baseY, sucD, failD, sucArea: area(sucD, sucPts), failArea: area(failD, failPts) }
+    return {
+      pts,
+      max,
+      ticks,
+      failMax,
+      toX,
+      toY,
+      sucPts,
+      failPts,
+      baseY,
+      sucD,
+      failD,
+      sucArea: area(sucD, sucPts),
+      failArea: area(failD, failPts)
+    }
   }, [data])
 
   const setHoverFromEvent = (ev, i) => {
@@ -119,12 +156,20 @@ function TrendChart({ data }) {
     const fail = series.failPts[i]
     const x = Math.max(0, Math.min(rect.width, (Number(suc?.x || 0) / w) * rect.width))
     const y = Math.max(0, Math.min(rect.height, (Math.min(Number(suc?.y || 0), Number(fail?.y || 0)) / h) * rect.height))
+    const ySvg = Math.max(0, Math.min(h, ((ev.clientY - rect.top) / rect.height) * h))
+    const kind =
+      series.failMax <= 0
+        ? 'success'
+        : Math.abs(ySvg - Number(suc?.y || 0)) <= Math.abs(ySvg - Number(fail?.y || 0))
+          ? 'success'
+          : 'failed'
     setHover({
       i,
       x,
       y,
       rectW: rect.width,
       rectH: rect.height,
+      kind,
       date: suc?.date,
       success: suc?.v ?? 0,
       failed: fail?.v ?? 0,
@@ -137,6 +182,15 @@ function TrendChart({ data }) {
   }
 
   const clearHover = () => setHover(null)
+
+  useEffect(() => {
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
+    if (!hover) return
+    hideTimerRef.current = setTimeout(() => setHover(null), 10000)
+    return () => {
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
+    }
+  }, [hover?.i])
 
   useEffect(() => {
     if (!hover) return
@@ -178,18 +232,18 @@ function TrendChart({ data }) {
               transform
             }}
           >
-            <div className="chart-tooltip-title">{dayLabel(hover.date)}</div>
+            <div className="chart-tooltip-title">{fullDateLabel(hover.date)}</div>
             <div className="chart-tooltip-row">
               <span className="legend-dot" style={{ background: 'var(--success)' }} /> 成功
-              <span className="chart-tooltip-val">{hover.success}</span>
+              <span className="chart-tooltip-val">{hover.success} 次</span>
             </div>
             <div className="chart-tooltip-row">
               <span className="legend-dot" style={{ background: 'var(--danger)' }} /> 失败
-              <span className="chart-tooltip-val">{hover.failed}</span>
+              <span className="chart-tooltip-val">{hover.failed} 次</span>
             </div>
             <div className="chart-tooltip-row" style={{ opacity: 0.78 }}>
               <span className="legend-dot" style={{ background: 'rgba(148,163,184,0.9)' }} /> 总计
-              <span className="chart-tooltip-val">{hover.total}</span>
+              <span className="chart-tooltip-val">{hover.total} 次</span>
             </div>
           </div>
           )
@@ -207,7 +261,25 @@ function TrendChart({ data }) {
             </linearGradient>
           </defs>
 
-          <line x1={padX} y1={series.baseY} x2={w - padX} y2={series.baseY} stroke="rgba(148,163,184,0.32)" strokeWidth="1" />
+          <text x={padLeft} y={12} fontSize="16" fill="rgba(100,116,139,0.82)" fontWeight="650">
+            部署次数（次）
+          </text>
+          {series.ticks.map((t) => (
+            <g key={t}>
+              <line
+                x1={padLeft}
+                y1={series.toY(t)}
+                x2={w - padRight}
+                y2={series.toY(t)}
+                stroke="rgba(148,163,184,0.18)"
+                strokeWidth="1"
+              />
+              <text x={padLeft - 10} y={series.toY(t) + 4} textAnchor="end" fontSize="18" fill="rgba(148,163,184,0.92)">
+                {t}
+              </text>
+            </g>
+          ))}
+          <line x1={padLeft} y1={series.baseY} x2={w - padRight} y2={series.baseY} stroke="rgba(148,163,184,0.30)" strokeWidth="1" />
           {hover ? (
             <line
               x1={series.sucPts[hover.i]?.x}
@@ -220,9 +292,11 @@ function TrendChart({ data }) {
             />
           ) : null}
           <path d={series.sucArea} fill="url(#gradSuccess)" />
-          <path d={series.failArea} fill="url(#gradFailed)" />
-          <path d={series.sucD} fill="none" stroke="var(--success)" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
-          <path d={series.failD} fill="none" stroke="var(--danger)" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" opacity="0.9" />
+          {series.failMax > 0 ? <path d={series.failArea} fill="url(#gradFailed)" /> : null}
+          <path d={series.sucD} fill="none" stroke="var(--success)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+          {series.failMax > 0 ? (
+            <path d={series.failD} fill="none" stroke="var(--danger)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" opacity="0.85" />
+          ) : null}
 
           {series.sucPts.map((p, i) => {
             const isFirst = i === 0
@@ -240,12 +314,37 @@ function TrendChart({ data }) {
                   fill="transparent"
                   onMouseEnter={(ev) => setHoverFromEvent(ev, i)}
                   onMouseMove={(ev) => setHoverFromEvent(ev, i)}
+                  onClick={(ev) => {
+                    if (!onNavigate) return
+                    const el = wrapRef.current
+                    if (!el) return
+                    const rect = el.getBoundingClientRect()
+                    const suc = series.sucPts[i]
+                    const fail = series.failPts[i]
+                    const ySvg = Math.max(0, Math.min(h, ((ev.clientY - rect.top) / rect.height) * h))
+                    const kind =
+                      series.failMax <= 0
+                        ? 'success'
+                        : Math.abs(ySvg - Number(suc?.y || 0)) <= Math.abs(ySvg - Number(fail?.y || 0))
+                          ? 'success'
+                          : 'failed'
+                    const st = kind === 'failed' ? 'failed' : 'success'
+                    if (p.date) onNavigate('history', null, { date: p.date, status: st })
+                  }}
                 />
-                <circle cx={p.x} cy={p.y} r={active ? 5 : 4} fill="var(--success)" />
-                <circle cx={series.failPts[i]?.x} cy={series.failPts[i]?.y} r={active ? 5 : 4} fill="var(--danger)" opacity="0.9" />
-                {active ? <circle cx={p.x} cy={p.y} r="10" fill="rgba(16,185,129,0.10)" /> : null}
-                {active ? <circle cx={series.failPts[i]?.x} cy={series.failPts[i]?.y} r="10" fill="rgba(239,68,68,0.10)" /> : null}
-                <text x={p.x + dx} y={h - 12} textAnchor={anchor} fontSize="22" fill="rgba(148,163,184,0.95)">
+                <circle cx={p.x} cy={p.y} r={active ? 4.5 : 3.5} fill="var(--success)" opacity={active || p.v > 0 ? 1 : 0} />
+                {series.failMax > 0 ? (
+                  <circle
+                    cx={series.failPts[i]?.x}
+                    cy={series.failPts[i]?.y}
+                    r={active ? 4.5 : 3.5}
+                    fill="var(--danger)"
+                    opacity={active || (series.failPts[i]?.v || 0) > 0 ? 0.9 : 0}
+                  />
+                ) : null}
+                {active ? <circle cx={p.x} cy={p.y} r="9" fill="rgba(16,185,129,0.10)" /> : null}
+                {active && series.failMax > 0 ? <circle cx={series.failPts[i]?.x} cy={series.failPts[i]?.y} r="10" fill="rgba(239,68,68,0.10)" /> : null}
+                <text x={p.x + dx} y={h - 12} textAnchor={anchor} fontSize="18" fill="rgba(148,163,184,0.92)">
                   {dayLabel(p.date)}
                 </text>
               </g>
@@ -449,7 +548,7 @@ export default function Overview({ onNavigate }) {
         </div>
 
         <div className="overview-charts">
-          <TrendChart data={trend} />
+          <TrendChart data={trend} onNavigate={onNavigate} />
           <Donut data={env} />
         </div>
 
