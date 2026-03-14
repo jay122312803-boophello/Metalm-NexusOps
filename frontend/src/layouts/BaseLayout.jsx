@@ -1,8 +1,10 @@
 import Icon from '../components/Icon.jsx'
+import ToastHost from '../components/ToastHost.jsx'
 
 export default function BaseLayout({ page, setPage, breadcrumb, children }) {
   return (
     <div className="app-layout">
+      <ToastHost />
       <div className="sidebar">
         <div className="brand">
           <Icon name="cube" />
@@ -55,4 +57,3 @@ export default function BaseLayout({ page, setPage, breadcrumb, children }) {
     </div>
   )
 }
-

@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 
 from .api.router import api_router
+from .db.session import init_db
 
 
 def create_app() -> FastAPI:
@@ -20,6 +21,10 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.on_event("startup")
+    async def _startup():
+        await init_db()
 
     app.include_router(api_router)
 

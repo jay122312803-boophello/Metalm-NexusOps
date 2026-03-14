@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 
-from ...schemas import CreateServerRequest
+from ...schemas import CreateServerRequest, UpdateServerRequest
 from ...db.models import Server
 from ...db.session import run_db
 import uuid
@@ -52,6 +52,47 @@ async def create_server(req: CreateServerRequest):
             "description": s.description,
             "created_at": s.created_at.isoformat() if s.created_at else None,
         }
+
+    return await run_db(_work)
+
+
+@router.get("/{server_id}")
+async def get_server(server_id: str):
+    def _work(session):
+        s = session.get(Server, uuid.UUID(server_id))
+        if not s:
+            raise HTTPException(status_code=404, detail="Server not found")
+        return {
+            "id": str(s.id),
+            "name": s.name,
+            "address": s.address,
+            "ssh_user": s.ssh_user,
+            "deploy_path": s.deploy_path,
+            "description": s.description,
+            "created_at": s.created_at.isoformat() if s.created_at else None,
+        }
+
+    return await run_db(_work)
+
+
+@router.put("/{server_id}")
+async def update_server(server_id: str, req: UpdateServerRequest):
+    data = req.model_dump(exclude_unset=True)
+
+    def _work(session):
+        s = session.get(Server, uuid.UUID(server_id))
+        if not s:
+            raise HTTPException(status_code=404, detail="Server not found")
+        for k, v in data.items():
+            if k == "ssh_user" and v is not None and str(v).strip() == "":
+                v = "metalm"
+            if k == "description" and v is not None and str(v).strip() == "":
+                v = None
+            setattr(s, k, v)
+        session.add(s)
+        session.commit()
+        session.refresh(s)
+        return {"ok": True}
 
     return await run_db(_work)
 

@@ -8,6 +8,7 @@ from sqlmodel import select
 
 from ...db.models import Deployment, DeploymentHistory, Repo, Server
 from ...db.session import run_db
+from .configs import ensure_snapshot_if_success
 
 router = APIRouter()
 
@@ -145,4 +146,10 @@ async def check_pipeline_status(history_id: str):
 
         return {"status": h.status, "pipeline": None}
 
-    return await run_db(_work)
+    res = await run_db(_work)
+    try:
+        if res and res.get("status") == "success":
+            await ensure_snapshot_if_success(uuid.UUID(history_id))
+    except Exception:
+        pass
+    return res

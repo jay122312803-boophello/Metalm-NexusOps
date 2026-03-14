@@ -13,6 +13,9 @@ export default function Settings() {
   const [showPrivateToken, setShowPrivateToken] = useState(false)
   const [formServer, setFormServer] = useState({ ssh_user: 'metalm' })
   const [formRepo, setFormRepo] = useState({ branch: 'master' })
+  const [editingId, setEditingId] = useState(null)
+  const [repoAuth, setRepoAuth] = useState({ trigger: false, private: false })
+  const [repoTokens, setRepoTokens] = useState({ trigger_token: '', private_token: '' })
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleteError, setDeleteError] = useState(null)
   const [deleting, setDeleting] = useState(false)
@@ -51,14 +54,62 @@ export default function Settings() {
   const gitOk = gitUrl ? isValidGitUrl(gitUrl) : null
 
   const handleSubmit = async () => {
-    if (drawerType === 'server') await api.post('/api/servers', formServer)
-    else await api.post('/api/repos', formRepo)
+    if (drawerType === 'server' && !editingId) await api.post('/api/servers', formServer)
+    else if (drawerType === 'server' && editingId) await api.put(`/api/servers/${editingId}`, formServer)
+    else if (drawerType === 'repo' && !editingId) {
+      const payload = { ...formRepo }
+      if ((repoTokens.trigger_token || '').trim() !== '') payload.trigger_token = repoTokens.trigger_token
+      if ((repoTokens.private_token || '').trim() !== '') payload.private_token = repoTokens.private_token
+      await api.post('/api/repos', payload)
+    } else {
+      const payload = { ...formRepo }
+      if ((repoTokens.trigger_token || '').trim() !== '') payload.trigger_token = repoTokens.trigger_token
+      if ((repoTokens.private_token || '').trim() !== '') payload.private_token = repoTokens.private_token
+      await api.put(`/api/repos/${editingId}`, payload)
+    }
     setDrawerType(null)
+    setEditingId(null)
     setShowTriggerToken(false)
     setShowPrivateToken(false)
+    setRepoTokens({ trigger_token: '', private_token: '' })
+    setRepoAuth({ trigger: false, private: false })
     setFormServer({ ssh_user: 'metalm' })
     setFormRepo({ branch: 'master' })
     refresh()
+  }
+
+  const openCreate = (type) => {
+    setEditingId(null)
+    setShowTriggerToken(false)
+    setShowPrivateToken(false)
+    setRepoTokens({ trigger_token: '', private_token: '' })
+    setRepoAuth({ trigger: false, private: false })
+    setFormServer({ ssh_user: 'metalm' })
+    setFormRepo({ branch: 'master' })
+    setDrawerType(type)
+  }
+
+  const openEditServer = (s) => {
+    setEditingId(s.id)
+    setFormServer({ name: s.name, address: s.address, ssh_user: s.ssh_user || 'metalm', deploy_path: s.deploy_path, description: s.description || '' })
+    setDrawerType('server')
+  }
+
+  const openEditRepo = async (r) => {
+    setEditingId(r.id)
+    const detail = await api.get(`/api/repos/${r.id}`)
+    setRepoAuth(detail?.auth || { trigger: false, private: false })
+    setRepoTokens({ trigger_token: '', private_token: '' })
+    setShowTriggerToken(false)
+    setShowPrivateToken(false)
+    setFormRepo({
+      name: detail?.name || r.name,
+      url: detail?.url || r.url,
+      branch: detail?.branch || r.branch || 'master',
+      project_id: detail?.project_id || r.project_id || '',
+      description: detail?.description || ''
+    })
+    setDrawerType('repo')
   }
 
   const openDelete = (type, item) => {
@@ -97,11 +148,11 @@ export default function Settings() {
         </div>
         <div className="page-actions">
           {activeTab === 'servers' ? (
-            <button className="btn btn-primary" onClick={() => setDrawerType('server')}>
+            <button className="btn btn-primary" onClick={() => openCreate('server')}>
               <Icon name="plus" /> 接入新服务器
             </button>
           ) : (
-            <button className="btn btn-outline" onClick={() => setDrawerType('repo')}>
+            <button className="btn btn-outline" onClick={() => openCreate('repo')}>
               <Icon name="plus" /> 关联仓库
             </button>
           )}
@@ -121,6 +172,14 @@ export default function Settings() {
               <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>{s.name}</div>
               <div style={{ color: 'var(--text-sub)', fontSize: 13 }}>{s.address}</div>
               <div style={{ color: 'var(--text-sub)', fontSize: 12, marginTop: 8, fontFamily: 'monospace' }}>{s.deploy_path}</div>
+              <button
+                className="btn btn-ghost btn-sm"
+                style={{ position: 'absolute', bottom: 16, right: 52 }}
+                onClick={() => openEditServer(s)}
+                title="编辑"
+              >
+                <Icon name="pen-to-square" />
+              </button>
               <button
                 className="btn btn-ghost btn-sm"
                 style={{ position: 'absolute', bottom: 16, right: 16, color: '#ef4444' }}
@@ -166,7 +225,10 @@ export default function Settings() {
                     )}
                   </td>
                   <td>
-                    <button className="btn btn-ghost btn-sm" onClick={() => openDelete('repo', r)}>
+                    <button className="btn btn-ghost btn-sm" onClick={() => openEditRepo(r)} title="编辑">
+                      <Icon name="pen-to-square" />
+                    </button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => openDelete('repo', r)} title="删除">
                       <Icon name="trash" />
                     </button>
                   </td>
@@ -179,14 +241,25 @@ export default function Settings() {
 
       {drawerType ? (
         <Drawer
-          title={drawerType === 'server' ? '接入服务器' : '关联 GitLab 仓库'}
-          onClose={() => setDrawerType(null)}
+          title={
+            drawerType === 'server'
+              ? editingId
+                ? '编辑服务器'
+                : '接入服务器'
+              : editingId
+                ? '编辑仓库'
+                : '关联 GitLab 仓库'
+          }
+          onClose={() => {
+            setDrawerType(null)
+            setEditingId(null)
+          }}
           footer={[
-            <button key="c" className="btn btn-outline" onClick={() => setDrawerType(null)}>
+            <button key="c" className="btn btn-outline" onClick={() => { setDrawerType(null); setEditingId(null) }}>
               取消
             </button>,
             <button key="ok" className="btn btn-primary" onClick={handleSubmit}>
-              确认添加
+              {editingId ? '保存修改' : '确认添加'}
             </button>
           ]}
         >
@@ -277,9 +350,9 @@ export default function Settings() {
                   <input
                     className="form-input"
                     type={showTriggerToken ? 'text' : 'password'}
-                    placeholder="可选"
-                    value={formRepo.trigger_token || ''}
-                    onChange={(e) => setFormRepo({ ...formRepo, trigger_token: e.target.value })}
+                    placeholder={editingId && repoAuth?.trigger ? '已配置（留空不变，输入新值覆盖）' : '可选'}
+                    value={repoTokens.trigger_token}
+                    onChange={(e) => setRepoTokens({ ...repoTokens, trigger_token: e.target.value })}
                   />
                   <div className="input-toggle" onClick={() => setShowTriggerToken((v) => !v)} title={showTriggerToken ? '隐藏' : '显示'}>
                     <Icon name={showTriggerToken ? 'eye-slash' : 'eye'} />
@@ -292,9 +365,9 @@ export default function Settings() {
                   <input
                     className="form-input"
                     type={showPrivateToken ? 'text' : 'password'}
-                    placeholder="可选"
-                    value={formRepo.private_token || ''}
-                    onChange={(e) => setFormRepo({ ...formRepo, private_token: e.target.value })}
+                    placeholder={editingId && repoAuth?.private ? '已配置（留空不变，输入新值覆盖）' : '可选'}
+                    value={repoTokens.private_token}
+                    onChange={(e) => setRepoTokens({ ...repoTokens, private_token: e.target.value })}
                   />
                   <div className="input-toggle" onClick={() => setShowPrivateToken((v) => !v)} title={showPrivateToken ? '隐藏' : '显示'}>
                     <Icon name={showPrivateToken ? 'eye-slash' : 'eye'} />

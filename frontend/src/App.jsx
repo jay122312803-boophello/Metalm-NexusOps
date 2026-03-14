@@ -8,6 +8,8 @@ import Settings from './pages/Settings.jsx'
 export default function App() {
   const [page, setPage] = useState('dashboard')
   const [detailId, setDetailId] = useState(null)
+  const [detailHistoryId, setDetailHistoryId] = useState(null)
+  const [returnPage, setReturnPage] = useState('dashboard')
 
   const breadcrumb = useMemo(() => {
     if (page === 'settings') return '系统设置'
@@ -15,7 +17,13 @@ export default function App() {
     return '部署管理'
   }, [page])
 
-  const navigate = (p, id) => {
+  const navigate = (p, id, opts = {}) => {
+    if (p === 'detail') {
+      setReturnPage(page)
+      setDetailHistoryId(opts.historyId || null)
+    } else {
+      setDetailHistoryId(null)
+    }
     setPage(p)
     if (id) setDetailId(id)
   }
@@ -24,9 +32,9 @@ export default function App() {
     page === 'settings' ? (
       <Settings />
     ) : page === 'history' ? (
-      <History />
+      <History onNavigate={navigate} />
     ) : page === 'detail' ? (
-      <Detail taskId={detailId} onBack={() => setPage('dashboard')} />
+      <Detail taskId={detailId} historyId={detailHistoryId} onBack={() => setPage(returnPage)} />
     ) : (
       <Dashboard onNavigate={navigate} />
     )
@@ -37,4 +45,3 @@ export default function App() {
     </BaseLayout>
   )
 }
-

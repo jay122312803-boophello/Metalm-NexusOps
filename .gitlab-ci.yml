@@ -1,9 +1,8 @@
 stages:
   - deploy
 
-deploy_backend_frontend:
+deploy:
   stage: deploy
-  # 直接使用你们私有仓库的镜像作为 CI 跑腿环境
   image: registry.xuelangyun.com/shuzhi-amd64/alpine:3.20
   tags:
     - nexus-tag
@@ -13,43 +12,62 @@ deploy_backend_frontend:
       - master
 
   before_script:
-    # 1. 安装必要的工具 (注意：如果这里报错说连不上源，说明内网也屏蔽了 apk 的公网源)
     - sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
-    - apk add --no-cache openssh-client rsync
-    # 2. 启动 ssh-agent 并加载私钥
+    - apk add --no-cache openssh-client rsync curl bash
     - eval $(ssh-agent -s)
     - echo "$SERVER_SSH_KEY" | tr -d '\r' | ssh-add -
-    # 3. 配置 SSH 忽略主机指纹检查
     - mkdir -p ~/.ssh
     - chmod 700 ~/.ssh
     - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
 
   script:
-    # 4. 同步文件到服务器
-    - echo "开始同步文件到服务器..."
-    - rsync -avz ./develop/backend_frontend/ $SERVER_USER@$SERVER_HOST:/home/metalm/deploy/NexusOps/
-    
-    # 5. SSH 登录服务器执行部署
-    - echo "登录服务器执行部署..."
     - |
-      ssh $SERVER_USER@$SERVER_HOST "
-        # 进入目标目录
-        cd /home/metalm/deploy/NexusOps/
-        
-        # 赋予脚本执行权限
-        chmod +x down.sh up.sh
-        
-        # 服务器登录私有镜像仓库
-        echo "$REGISTRY_PASSWORD" | docker login registry.xuelangyun.com -u "$REGISTRY_USER" --password-stdin
-        
-        # 确保网络存在
-        docker network create metalm-dev-net || true
-        
-        # 停止并拉取启动
-        sh down.sh
-        docker-compose pull
-        sh up.sh
-      "
+      : "${INPUT_DIR:=./}"
+      : "${DEST_DIR:?DEST_DIR is required}"
+      : "${SERVER_HOST:?SERVER_HOST is required}"
+      : "${SERVER_USER:=metalm}"
+
+      echo "INPUT_DIR=$INPUT_DIR"
+      echo "DEST_DIR=$DEST_DIR"
+      echo "SERVER=$SERVER_USER@$SERVER_HOST"
+      echo "====== [NexusOps] Start Sync ======"
+
+      printf "%s\n" "${CUSTOM_DEPLOY_SCRIPT:-}" > remote_executor.sh
+      chmod 700 remote_executor.sh
+
+      ssh "$SERVER_USER@$SERVER_HOST" "mkdir -p '${DEST_DIR%/}'"
+
+      rsync -az --delete "${INPUT_DIR%/}/" "$SERVER_USER@$SERVER_HOST:${DEST_DIR%/}/"
+      echo "====== [NexusOps] Sync Done ======"
+
+      ssh "$SERVER_USER@$SERVER_HOST" "mkdir -p '${DEST_DIR%/}/.nexusops'"
+      rsync -az remote_executor.sh "$SERVER_USER@$SERVER_HOST:${DEST_DIR%/}/.nexusops/remote_executor.sh"
+
+      ssh "$SERVER_USER@$SERVER_HOST" "set -e; \
+        if [ -n \"${NEXUSOPS_CONFIG_ZIP_URL:-}\" ]; then \
+          echo '====== [NexusOps] Inject Configs ======'; \
+          tmp=\"${DEST_DIR%/}/.nexusops/configs.zip\"; \
+          mkdir -p \"${DEST_DIR%/}/.nexusops\"; \
+          if command -v curl >/dev/null 2>&1; then \
+            curl -fsSL \"$NEXUSOPS_CONFIG_ZIP_URL\" -o \"$tmp\"; \
+          elif command -v wget >/dev/null 2>&1; then \
+            wget -qO \"$tmp\" \"$NEXUSOPS_CONFIG_ZIP_URL\"; \
+          else \
+            true; \
+          fi; \
+          if [ -s \"$tmp\" ]; then \
+            if command -v unzip >/dev/null 2>&1; then unzip -o \"$tmp\" -d \"${DEST_DIR%/}\" >/dev/null; \
+            elif command -v python3 >/dev/null 2>&1; then python3 -m zipfile -e \"$tmp\" \"${DEST_DIR%/}\" >/dev/null; \
+            else echo unzip/python3 not found; exit 1; fi; \
+            rm -f \"$tmp\"; \
+          fi; \
+          echo '====== [NexusOps] Configs Ready ======'; \
+        fi; \
+        echo '====== [NexusOps] Execute Script ======'; \
+        cd \"${DEST_DIR%/}\"; \
+        if command -v bash >/dev/null 2>&1; then bash .nexusops/remote_executor.sh; else sh .nexusops/remote_executor.sh; fi; \
+        echo '====== [NexusOps] Script Done ======'; \
+        rm -f .nexusops/remote_executor.sh"
   
   environment:
     name: development

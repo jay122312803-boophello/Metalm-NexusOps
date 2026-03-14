@@ -33,6 +33,9 @@ class Deployment(BaseModel):
     name: str
     server_id: str
     repo_id: str
+    input_dir: Optional[str] = None
+    dest_dir: Optional[str] = None
+    deploy_script: Optional[str] = None
     created_at: Optional[str] = None
 
 
@@ -58,6 +61,14 @@ class CreateServerRequest(BaseModel):
     description: Optional[str] = None
 
 
+class UpdateServerRequest(BaseModel):
+    name: Optional[str] = None
+    address: Optional[str] = None
+    ssh_user: Optional[str] = None
+    deploy_path: Optional[str] = None
+    description: Optional[str] = None
+
+
 class CreateRepoRequest(BaseModel):
     name: str
     url: str
@@ -68,10 +79,23 @@ class CreateRepoRequest(BaseModel):
     description: Optional[str] = None
 
 
+class UpdateRepoRequest(BaseModel):
+    name: Optional[str] = None
+    url: Optional[str] = None
+    branch: Optional[str] = None
+    trigger_token: Optional[str] = None
+    private_token: Optional[str] = None
+    project_id: Optional[str] = None
+    description: Optional[str] = None
+
+
 class CreateDeploymentRequest(BaseModel):
     name: str
     server_id: str
     repo_id: str
+    input_dir: Optional[str] = None
+    dest_dir: Optional[str] = None
+    deploy_script: Optional[str] = None
 
 
 class TriggerDeploymentRequest(BaseModel):

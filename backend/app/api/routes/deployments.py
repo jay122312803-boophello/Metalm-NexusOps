@@ -5,7 +5,9 @@ from datetime import datetime
 import requests
 from fastapi import APIRouter, HTTPException
 
-from ...db.models import Deployment, DeploymentHistory, Repo, Server
+from sqlmodel import select
+
+from ...db.models import Deployment, DeploymentHistory, Repo, Server, TaskConfig
 from ...db.session import run_db
 from ...schemas import CreateDeploymentRequest, TriggerDeploymentRequest
 
@@ -22,6 +24,9 @@ async def list_deployments():
                 "name": d.name,
                 "server_id": str(d.server_id),
                 "repo_id": str(d.repo_id),
+                "input_dir": d.input_dir,
+                "dest_dir": d.dest_dir,
+                "deploy_script": d.deploy_script,
                 "created_at": d.created_at.isoformat() if d.created_at else None,
             }
             for d in rows
@@ -39,6 +44,9 @@ async def create_deployment(req: CreateDeploymentRequest):
             name=data["name"],
             server_id=uuid.UUID(data["server_id"]),
             repo_id=uuid.UUID(data["repo_id"]),
+            input_dir=(data.get("input_dir") or None),
+            dest_dir=(data.get("dest_dir") or None),
+            deploy_script=(data.get("deploy_script") or None),
         )
         session.add(d)
         session.commit()
@@ -48,6 +56,9 @@ async def create_deployment(req: CreateDeploymentRequest):
             "name": d.name,
             "server_id": str(d.server_id),
             "repo_id": str(d.repo_id),
+            "input_dir": d.input_dir,
+            "dest_dir": d.dest_dir,
+            "deploy_script": d.deploy_script,
             "created_at": d.created_at.isoformat() if d.created_at else None,
         }
 
@@ -103,46 +114,21 @@ async def trigger_deployment(dep_id: str, req: TriggerDeploymentRequest = Trigge
                 variables[k] = v
         variables["SERVER_HOST"] = s.address
         variables["SERVER_USER"] = s.ssh_user or "metalm"
+        variables["INPUT_DIR"] = (d.input_dir or "").strip() or "./"
+        variables["DEST_DIR"] = (d.dest_dir or "").strip() or s.deploy_path
+        if d.deploy_script:
+            variables["CUSTOM_DEPLOY_SCRIPT"] = d.deploy_script
+
+        api_base = (os.getenv("NEXUSOPS_PUBLIC_API_BASE_URL") or os.getenv("NEXUSOPS_API_BASE_URL") or "").rstrip("/")
 
         verify_tls = (os.getenv("GITLAB_TLS_INSECURE") or "").strip() != "1"
 
-        resp = None
-        try:
-            if trigger_token:
-                url = f"{gitlab_url}/api/v4/projects/{requests.utils.quote(project_id, safe='')}/trigger/pipeline"
-                form = {"token": trigger_token, "ref": ref}
-                for k, v in variables.items():
-                    form[f"variables[{k}]"] = v
-                resp = requests.post(url, data=form, verify=verify_tls, timeout=15)
-            elif private_token:
-                url = f"{gitlab_url}/api/v4/projects/{requests.utils.quote(project_id, safe='')}/pipeline"
-                headers = {"PRIVATE-TOKEN": private_token}
-                form = {"ref": ref}
-                for k, v in variables.items():
-                    form[f"variables[{k}]"] = v
-                resp = requests.post(url, headers=headers, data=form, verify=verify_tls, timeout=15)
-            else:
-                raise HTTPException(status_code=400, detail="No token configured for repository")
-
-            resp.raise_for_status()
-            data = resp.json()
-        except requests.HTTPError:
-            status_code = resp.status_code if resp is not None else 500
-            body = None
-            try:
-                body = resp.json() if resp is not None else None
-            except Exception:
-                body = (resp.text[:2000] if resp is not None else None)
-            raise HTTPException(status_code=status_code, detail={"gitlab_error": body})
-        except requests.RequestException as e:
-            raise HTTPException(status_code=502, detail=str(e))
-
         h = DeploymentHistory(
             deployment_id=d.id,
-            pipeline_id=data.get("id"),
-            status=data.get("status"),
-            ref=data.get("ref") or ref,
-            web_url=data.get("web_url"),
+            pipeline_id=None,
+            status="pending",
+            ref=ref,
+            web_url=None,
             created_at=datetime.utcnow(),
             server_snapshot={
                 "id": str(s.id),
@@ -158,12 +144,69 @@ async def trigger_deployment(dep_id: str, req: TriggerDeploymentRequest = Trigge
                 "branch": ref,
                 "project_id": project_id,
             },
-            variables=variables,
+            variables={},
         )
         session.add(h)
         session.commit()
         session.refresh(h)
 
-        return {"ok": True, "pipeline": data, "history_id": str(h.id)}
+        variables["NEXUSOPS_HISTORY_ID"] = str(h.id)
+        if api_base:
+            variables["NEXUSOPS_API_URL"] = api_base
+            variables["NEXUSOPS_CONFIG_ZIP_URL"] = f"{api_base}/api/history/{h.id}/configs.zip"
+
+        h.variables = variables
+        session.add(h)
+        session.commit()
+
+        cfg_rows = session.exec(select(TaskConfig.rel_path).where(TaskConfig.deployment_id == d.id)).all()
+        config_files = [x if isinstance(x, str) else x[0] for x in cfg_rows]
+
+        resp = None
+        try:
+            if trigger_token:
+                url = f"{gitlab_url}/api/v4/projects/{requests.utils.quote(project_id, safe='')}/trigger/pipeline"
+                form = {"token": trigger_token, "ref": ref}
+                for k, v in variables.items():
+                    form[f"variables[{k}]"] = str(v)
+                resp = requests.post(url, data=form, verify=verify_tls, timeout=15)
+            elif private_token:
+                url = f"{gitlab_url}/api/v4/projects/{requests.utils.quote(project_id, safe='')}/pipeline"
+                headers = {"PRIVATE-TOKEN": private_token}
+                form = {"ref": ref}
+                for k, v in variables.items():
+                    form[f"variables[{k}]"] = str(v)
+                resp = requests.post(url, headers=headers, data=form, verify=verify_tls, timeout=15)
+            else:
+                raise HTTPException(status_code=400, detail="No token configured for repository")
+
+            resp.raise_for_status()
+            data = resp.json()
+        except requests.HTTPError:
+            status_code = resp.status_code if resp is not None else 500
+            body = None
+            try:
+                body = resp.json() if resp is not None else None
+            except Exception:
+                body = (resp.text[:2000] if resp is not None else None)
+            h.status = "failed"
+            session.add(h)
+            session.commit()
+            raise HTTPException(status_code=status_code, detail={"gitlab_error": body})
+        except requests.RequestException as e:
+            h.status = "failed"
+            session.add(h)
+            session.commit()
+            raise HTTPException(status_code=502, detail=str(e))
+
+        h.pipeline_id = data.get("id")
+        h.status = data.get("status")
+        h.ref = data.get("ref") or ref
+        h.web_url = data.get("web_url")
+        session.add(h)
+        session.commit()
+        session.refresh(h)
+
+        return {"ok": True, "pipeline": data, "history_id": str(h.id), "config_files": config_files}
 
     return await run_db(_work)

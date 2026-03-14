@@ -3,7 +3,7 @@ import Drawer from '../components/Drawer.jsx'
 import Icon from '../components/Icon.jsx'
 import { api } from '../services/api.js'
 
-export default function History() {
+export default function History({ onNavigate }) {
   const [history, setHistory] = useState([])
   const [servers, setServers] = useState([])
   const [statusOptions, setStatusOptions] = useState(['pending', 'running', 'success', 'failed', 'canceled'])
@@ -98,7 +98,11 @@ export default function History() {
               const sName = h.server_snapshot?.name || 'Unknown Server'
               const rName = h.repo_snapshot?.name || 'Unknown Repo'
               return (
-                <tr key={h.id}>
+                <tr
+                  key={h.id}
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => (onNavigate ? onNavigate('detail', h.deployment_id, { historyId: h.id }) : null)}
+                >
                   <td>{getStatusIcon(h.status)}</td>
                   <td>
                     <div style={{ fontWeight: 500 }}>{`Deploy ${rName}`}</div>
@@ -119,12 +123,13 @@ export default function History() {
                       <span
                         className="vars-pill"
                         title="点击查看详情"
-                        onClick={() =>
+                        onClick={(ev) => {
+                          ev.stopPropagation()
                           setVarsView({
                             title: `Pipeline #${h.pipeline_id} 变量参数`,
                             text: JSON.stringify(h.variables, null, 2)
                           })
-                        }
+                        }}
                       >
                         <Icon name="code" style={{ fontSize: 12 }} />
                         {`${Object.keys(h.variables || {}).length} 个变量`}

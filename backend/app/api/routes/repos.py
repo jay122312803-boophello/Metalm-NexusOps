@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 
-from ...schemas import CreateRepoRequest
+from ...schemas import CreateRepoRequest, UpdateRepoRequest
 from ...db.models import Repo
 from ...db.session import run_db
 import uuid
@@ -56,6 +56,57 @@ async def create_repo(req: CreateRepoRequest):
             "description": r.description,
             "created_at": r.created_at.isoformat() if r.created_at else None,
         }
+
+    return await run_db(_work)
+
+
+@router.get("/{repo_id}")
+async def get_repo(repo_id: str):
+    def _work(session):
+        r = session.get(Repo, uuid.UUID(repo_id))
+        if not r:
+            raise HTTPException(status_code=404, detail="Repo not found")
+        return {
+            "id": str(r.id),
+            "name": r.name,
+            "url": r.url,
+            "branch": r.branch,
+            "project_id": r.project_id,
+            "trigger_token": None,
+            "private_token": None,
+            "auth": {"trigger": bool(r.trigger_token), "private": bool(r.private_token)},
+            "description": r.description,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+
+    return await run_db(_work)
+
+
+@router.put("/{repo_id}")
+async def update_repo(repo_id: str, req: UpdateRepoRequest):
+    data = req.model_dump(exclude_unset=True)
+
+    def _work(session):
+        r = session.get(Repo, uuid.UUID(repo_id))
+        if not r:
+            raise HTTPException(status_code=404, detail="Repo not found")
+
+        for k, v in data.items():
+            if k in {"trigger_token", "private_token"}:
+                if v is None:
+                    continue
+                if str(v).strip() == "":
+                    v = None
+            if k in {"project_id", "description"} and v is not None and str(v).strip() == "":
+                v = None
+            if k == "branch" and v is not None and str(v).strip() == "":
+                v = "master"
+            setattr(r, k, v)
+
+        session.add(r)
+        session.commit()
+        session.refresh(r)
+        return {"ok": True, "auth": {"trigger": bool(r.trigger_token), "private": bool(r.private_token)}}
 
     return await run_db(_work)
 

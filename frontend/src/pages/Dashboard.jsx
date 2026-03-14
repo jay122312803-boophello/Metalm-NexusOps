@@ -55,7 +55,8 @@ export default function Dashboard({ onNavigate }) {
   }
 
   const handleCreate = async () => {
-    if (!newTask.server_id || !newTask.repo_id) return alert('请选择')
+    if (!newTask.name || !newTask.server_id || !newTask.repo_id) return alert('请完善必填项')
+    if (!newTask.input_dir || !newTask.dest_dir) return alert('请填写同步源目录与目标路径')
     await api.post('/api/deployments', newTask)
     setDrawerOpen(false)
     setNewTask({})
@@ -250,6 +251,40 @@ export default function Dashboard({ onNavigate }) {
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="form-item">
+            <label className="form-label">同步源目录</label>
+            <input
+              className="form-input"
+              placeholder="./develop/backend_frontend/"
+              value={newTask.input_dir || ''}
+              onChange={(e) => setNewTask({ ...newTask, input_dir: e.target.value })}
+            />
+          </div>
+          <div className="form-item">
+            <label className="form-label">服务器目标路径</label>
+            <input
+              className="form-input"
+              placeholder="/home/metalm/deploy/App_A/"
+              value={newTask.dest_dir || ''}
+              onChange={(e) => setNewTask({ ...newTask, dest_dir: e.target.value })}
+            />
+          </div>
+          <div className="form-item">
+            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              自定义执行脚本
+              <span title="此脚本将在目标服务器拉取代码及配置后执行" style={{ color: 'var(--text-sub)' }}>
+                <Icon name="circle-question" />
+              </span>
+            </label>
+            <textarea
+              className="form-input"
+              style={{ minHeight: 140, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}
+              placeholder={'chmod +x down.sh up.sh\nsh down.sh\ndocker-compose up -d'}
+              value={newTask.deploy_script || ''}
+              onChange={(e) => setNewTask({ ...newTask, deploy_script: e.target.value })}
+            />
           </div>
         </Drawer>
       ) : null}
