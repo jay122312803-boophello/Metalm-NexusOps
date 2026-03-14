@@ -68,7 +68,7 @@ export default function Dashboard({ onNavigate }) {
     const s = String(status || '').toLowerCase()
     if (s === 'running') return '运行中'
     if (s === 'pending') return '排队中'
-    if (s === 'success') return '成功'
+    if (s === 'success') return '就绪'
     if (s === 'failed') return '失败'
     if (s === 'canceled') return '已取消'
     return '就绪'

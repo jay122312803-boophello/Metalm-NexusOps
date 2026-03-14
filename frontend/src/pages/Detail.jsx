@@ -6,7 +6,7 @@ import XTerm from '../components/XTerm.jsx'
 import { api } from '../services/api.js'
 import { toast } from '../services/toast.js'
 
-export default function Detail({ taskId, historyId, onBack }) {
+export default function Detail({ taskId, historyId, onBack, onNavigate }) {
   const [task, setTask] = useState(null)
   const [server, setServer] = useState(null)
   const [repo, setRepo] = useState(null)
@@ -14,6 +14,9 @@ export default function Detail({ taskId, historyId, onBack }) {
   const [logs, setLogs] = useState([])
   const [activeHistoryId, setActiveHistoryId] = useState(historyId || null)
   const [pipelineStatus, setPipelineStatus] = useState('unknown')
+  const [mode, setMode] = useState('ready')
+  const [showDraftTip, setShowDraftTip] = useState(true)
+  const [draftAction, setDraftAction] = useState(null)
   const [terminalFull, setTerminalFull] = useState(false)
   const [triggerOpen, setTriggerOpen] = useState(false)
   const [discardOpen, setDiscardOpen] = useState(false)
@@ -71,6 +74,22 @@ export default function Detail({ taskId, historyId, onBack }) {
               if (typeof tail === 'string' && tail.trim() !== '') {
                 setLogs(tail.split('\n').slice(-2000))
               }
+              const st = String(latest?.status || '').toLowerCase()
+              if (st === 'running' || st === 'pending') {
+                setMode('monitor')
+                setRightTab('terminal')
+              } else if (st === 'failed') {
+                setMode('diagnose')
+                setRightTab('terminal')
+              } else {
+                setMode('ready')
+                setShowDraftTip(true)
+                setRightTab('config')
+                setActiveHistoryId(null)
+                setMountedFiles([])
+                setLogs([])
+                setPipelineStatus('unknown')
+              }
             }
           }
         } catch (_) {}
@@ -78,6 +97,20 @@ export default function Detail({ taskId, historyId, onBack }) {
     }
     init()
   }, [taskId])
+
+  useEffect(() => {
+    if (historyId) {
+      setMode('history')
+      return
+    }
+    const st = String(pipelineStatus || '').toLowerCase()
+    if (st === 'running' || st === 'pending') setMode('monitor')
+    else if (st === 'failed') setMode('diagnose')
+    else if (st === 'success' || st === 'canceled') {
+      setMode('ready')
+      setShowDraftTip(true)
+    }
+  }, [historyId, pipelineStatus])
 
   useEffect(() => {
     if (!activeHistoryId) return
@@ -95,20 +128,30 @@ export default function Detail({ taskId, historyId, onBack }) {
       try {
         const d = JSON.parse(ev.data || '{}')
         const files = Array.isArray(d.config_files) ? d.config_files : []
-        if (files.length) setMountedFiles(files)
+        setMountedFiles(files)
       } catch (_) {}
     })
     es.addEventListener('status', (ev) => {
       try {
         const d = JSON.parse(ev.data || '{}')
         const st = d.status || 'unknown'
-        setPipelineStatus(st)
+        if (st === 'success' && !viewHistory) {
+          setMode('ready')
+          setShowDraftTip(true)
+          setRightTab('config')
+          setActiveHistoryId(null)
+          setMountedFiles([])
+          setLogs([])
+          setPipelineStatus('unknown')
+        } else {
+          setPipelineStatus(st)
+        }
         if (['success', 'failed', 'canceled'].includes(st) && !viewHistory) {
           setDeploying(false)
         }
         if (['success', 'failed', 'canceled'].includes(st)) {
           finished = true
-          if (!viewHistory) {
+          if (!viewHistory && mode !== 'diagnose') {
             try {
               es.close()
             } catch (_) {}
@@ -141,7 +184,7 @@ export default function Detail({ taskId, historyId, onBack }) {
       } catch (_) {}
       if (sseRef.current === es) sseRef.current = null
     }
-  }, [activeHistoryId])
+  }, [activeHistoryId, mode, viewHistory])
 
   const copyText = async (text) => {
     const t = text || ''
@@ -182,6 +225,7 @@ export default function Detail({ taskId, historyId, onBack }) {
       return
     }
     setRightTab('terminal')
+    setMode('monitor')
     setDeploying(true)
     setLogs(['>> Initializing deployment sequence...', '>> Connecting to GitLab API...'])
     setPipelineStatus('pending')
@@ -204,31 +248,36 @@ export default function Detail({ taskId, historyId, onBack }) {
 
   const busy = deploying || pipelineStatus === 'running' || pipelineStatus === 'pending'
 
-  const loadConfigs = async () => {
+  const loadConfigs = async (opts = {}) => {
+    const forceOpenFirst = !!opts.forceOpenFirst
+    const forceReload = !!opts.forceReload
     if (viewHistory) {
       const res = await api.get(`/api/history/${historyId}/configs`)
       const arr = Array.isArray(res?.files) ? res.files : []
       setConfigList(arr)
-      if (!activeConfigId && arr.length) {
-        await openConfig(arr[0].id)
+      if ((forceOpenFirst || !activeConfigId) && arr.length) {
+        await openConfig(arr[0].id, { forceReload })
       }
       return
     }
     const list = await api.get(`/api/deployments/${taskId}/configs`)
     const arr = Array.isArray(list) ? list : []
     setConfigList(arr)
-    if (!activeConfigId && arr.length) {
-      await openConfig(arr[0].id)
+    if ((forceOpenFirst || !activeConfigId) && arr.length) {
+      await openConfig(arr[0].id, { forceReload })
     }
   }
 
-  const openConfig = async (id) => {
+  const openConfig = async (id, opts = {}) => {
+    const forceReload = !!opts.forceReload
     setActiveConfigId(id)
-    const existing = draftById[id]
-    if (existing !== undefined) {
-      const item = configList.find((x) => x.id === id)
-      setActiveConfigPath(item?.rel_path || activeConfigPath)
-      return
+    if (!forceReload) {
+      const existing = draftById[id]
+      if (existing !== undefined) {
+        const item = configList.find((x) => x.id === id)
+        setActiveConfigPath(item?.rel_path || activeConfigPath)
+        return
+      }
     }
     const res = viewHistory
       ? await api.get(`/api/history/${historyId}/configs/${id}`)
@@ -271,6 +320,51 @@ export default function Detail({ taskId, historyId, onBack }) {
     if (rightTab !== 'config') return
     loadConfigs()
   }, [rightTab, taskId])
+
+  const reloadWorkspace = async () => {
+    setSavedById({})
+    setDraftById({})
+    setDirtyById({})
+    setActiveConfigId(null)
+    setActiveConfigPath(null)
+    await loadConfigs({ forceOpenFirst: true, forceReload: true })
+  }
+
+  const clearWorkspace = async () => {
+    if (viewHistory) return
+    const res = await api.post(`/api/deployments/${taskId}/configs/clear`, {})
+    if (res?.ok) {
+      toast.success('草稿已清空')
+      setShowDraftTip(false)
+      await reloadWorkspace()
+    } else {
+      toast.error(typeof res?.detail === 'string' ? res.detail : '清空失败')
+    }
+  }
+
+  const restoreDefaultTemplate = async () => {
+    if (viewHistory) return
+    const cleared = await api.post(`/api/deployments/${taskId}/configs/clear`, {})
+    if (!cleared?.ok) {
+      toast.error(typeof cleared?.detail === 'string' ? cleared.detail : '恢复失败')
+      return
+    }
+    const created = await api.post(`/api/deployments/${taskId}/configs`, { rel_path: 'config.toml' })
+    if (!created?.id) {
+      toast.error(typeof created?.detail === 'string' ? created.detail : '恢复失败')
+      await reloadWorkspace()
+      return
+    }
+    const put = await api.put(`/api/deployments/${taskId}/configs/${created.id}`, { content: '' })
+    if (!put?.ok) {
+      toast.error('恢复失败')
+      await reloadWorkspace()
+      return
+    }
+    toast.success('已恢复默认模板')
+    setShowDraftTip(false)
+    await reloadWorkspace()
+  }
 
   const saveActiveConfig = async () => {
     if (!activeConfigId) return
@@ -420,6 +514,9 @@ export default function Detail({ taskId, historyId, onBack }) {
 
   if (!task) return <div className="empty-state">Loading...</div>
 
+  const modeLabel =
+    mode === 'monitor' ? '实时监控' : mode === 'diagnose' ? '故障诊断' : mode === 'history' ? '历史查看' : '准备就绪'
+
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 0 20px 0' }}>
@@ -427,7 +524,10 @@ export default function Detail({ taskId, historyId, onBack }) {
           <button className="btn btn-ghost" onClick={onBack}>
             <Icon name="arrow-left" /> 返回
           </button>
-          <h2 style={{ margin: 0 }}>{task.name}</h2>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+            <h2 style={{ margin: 0 }}>{task.name}</h2>
+            <span className="badge badge-gray">{`模式：${modeLabel}`}</span>
+          </div>
         </div>
         <button
           className="btn btn-primary"
@@ -447,6 +547,38 @@ export default function Detail({ taskId, historyId, onBack }) {
         </button>
       </div>
 
+      {mode === 'diagnose' && !viewHistory ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
+          <div style={{ color: 'var(--text-sub)', fontSize: 13 }}>
+            最近一次执行失败，优先查看现场日志再决定是否重新部署。
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button
+              className="btn btn-outline btn-sm"
+              onClick={() => {
+                if (onNavigate) onNavigate('history')
+              }}
+            >
+              <Icon name="clock-rotate-left" /> 查看审计日志
+            </button>
+            <button
+              className="btn btn-outline btn-sm"
+              onClick={() => {
+                setMode('ready')
+                setShowDraftTip(true)
+                setRightTab('config')
+                setActiveHistoryId(null)
+                setMountedFiles([])
+                setLogs([])
+                setPipelineStatus('unknown')
+              }}
+            >
+              <Icon name="arrow-rotate-left" /> 回到配置
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <div style={{ marginBottom: 14 }}>
         <div className="tabs">
           <button className={`tab ${rightTab === 'terminal' ? 'active' : ''}`} onClick={() => setRightTab('terminal')}>
@@ -454,6 +586,11 @@ export default function Detail({ taskId, historyId, onBack }) {
           </button>
           <button className={`tab ${rightTab === 'config' ? 'active' : ''}`} onClick={() => setRightTab('config')}>
             配置文件管理
+            {!viewHistory && mode === 'ready' ? (
+              <span className="badge badge-gray" style={{ marginLeft: 8, fontFamily: 'inherit' }}>
+                草稿
+              </span>
+            ) : null}
           </button>
         </div>
       </div>
@@ -528,7 +665,42 @@ export default function Detail({ taskId, historyId, onBack }) {
           {rightTab === 'terminal' ? (
             renderTerminal()
           ) : (
-            <div className="config-split">
+            <div className="config-pane">
+              {!viewHistory && mode === 'ready' && showDraftTip ? (
+                <div
+                  className="card"
+                  style={{
+                    padding: 12,
+                    border: '1px solid rgba(59,130,246,0.22)',
+                    background: 'rgba(59,130,246,0.06)'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Icon name="pen-to-square" style={{ color: 'var(--info)' }} />
+                        草稿工作区
+                        <button className="icon-btn" title="隐藏提示" onClick={() => setShowDraftTip(false)}>
+                          <Icon name="xmark" />
+                        </button>
+                      </div>
+                      <div style={{ fontSize: 13, color: 'var(--text-sub)' }}>
+                        当前配置将作为下一次部署挂载配置，可直接编辑后触发部署。
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                      <button className="btn btn-outline btn-sm" onClick={() => setDraftAction('restore')}>
+                        <Icon name="arrow-rotate-left" /> 恢复默认模板
+                      </button>
+                      <button className="btn btn-danger btn-sm" onClick={() => setDraftAction('clear')}>
+                        <Icon name="trash" /> 清空全部
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="config-split">
               <div className="config-tree">
                 <div className="config-tree-head">
                   <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-main)' }}>配置文件</div>
@@ -645,10 +817,44 @@ export default function Detail({ taskId, historyId, onBack }) {
                   </div>
                 )}
               </div>
+              </div>
             </div>
           )}
         </div>
       </div>
+
+      {draftAction ? (
+        <Modal
+          danger={draftAction === 'clear'}
+          title={draftAction === 'clear' ? '清空全部' : '恢复默认模板'}
+          onClose={() => setDraftAction(null)}
+          footer={[
+            <button key="c" className="btn btn-outline" onClick={() => setDraftAction(null)}>
+              取消
+            </button>,
+            <button
+              key="ok"
+              className={draftAction === 'clear' ? 'btn btn-danger' : 'btn btn-primary'}
+              onClick={async () => {
+                const a = draftAction
+                setDraftAction(null)
+                if (a === 'clear') await clearWorkspace()
+                else await restoreDefaultTemplate()
+              }}
+            >
+              <Icon name={draftAction === 'clear' ? 'trash' : 'arrow-rotate-left'} /> 确认
+            </button>
+          ]}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 14 }}>
+            <div style={{ color: 'var(--text-sub)' }}>
+              {draftAction === 'clear'
+                ? '将删除当前任务下所有草稿配置文件。'
+                : '将清空当前草稿并创建默认模板文件 config.toml。'}
+            </div>
+          </div>
+        </Modal>
+      ) : null}
 
       {terminalFull ? (
         <div className="terminal-overlay" onClick={() => setTerminalFull(false)} />

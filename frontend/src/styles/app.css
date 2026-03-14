@@ -209,7 +209,7 @@ body {
 .menu-item-btn:hover { background: #f1f5f9; }
 .menu-item-danger { color: var(--danger); }
 
-.cockpit-grid { display: grid; grid-template-columns: 300px 1fr; gap: 24px; align-items: start; }
+.cockpit-grid { display: grid; grid-template-columns: 300px 1fr; gap: 24px; align-items: stretch; }
 .status-panel { display: flex; flex-direction: column; gap: 32px; padding: 24px; }
 .status-node { display: flex; gap: 16px; position: relative; }
 .status-node:not(:last-child)::after { content: ''; position: absolute; left: 20px; top: 48px; bottom: -24px; width: 2px; background: #e2e8f0; }
@@ -256,7 +256,8 @@ body {
 .toast-success { border-color: rgba(16,185,129,0.35); background: rgba(16,185,129,0.10); color: #065f46; }
 .toast-error { border-color: rgba(239,68,68,0.35); background: rgba(239,68,68,0.10); color: #991b1b; }
 
-.config-split { display: grid; grid-template-columns: 320px 1fr; gap: 16px; height: 100%; min-height: 520px; background: #f1f5f9; border-radius: 14px; padding: 14px; }
+.config-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+.config-split { flex: 1; display: grid; grid-template-columns: 320px 1fr; gap: 16px; min-height: 0; background: #f1f5f9; border-radius: 14px; padding: 14px; }
 .config-tree { background: white; border-radius: 14px; border: 1px solid var(--border); overflow: hidden; display: flex; flex-direction: column; }
 .config-tree-head { height: 48px; padding: 0 12px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
 .config-tree-list { padding: 8px; overflow: auto; flex: 1; }

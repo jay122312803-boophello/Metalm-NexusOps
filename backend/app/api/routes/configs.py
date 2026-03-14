@@ -156,6 +156,21 @@ async def delete_task_config(dep_id: str, config_id: str):
     return {"ok": True}
 
 
+@router.post("/deployments/{dep_id}/configs/clear")
+async def clear_task_configs(dep_id: str):
+    def _work(session):
+        did = uuid.UUID(dep_id)
+        if not session.get(Deployment, did):
+            raise HTTPException(404, "Deployment not found")
+        rows = session.exec(select(TaskConfig).where(TaskConfig.deployment_id == did)).all()
+        for c in rows:
+            session.delete(c)
+        session.commit()
+        return {"ok": True, "deleted": len(rows)}
+
+    return await run_db(_work)
+
+
 def _zip_bytes(files: list[tuple[str, str]]) -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:

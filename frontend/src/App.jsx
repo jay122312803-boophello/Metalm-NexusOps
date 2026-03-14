@@ -34,7 +34,7 @@ export default function App() {
     ) : page === 'history' ? (
       <History onNavigate={navigate} />
     ) : page === 'detail' ? (
-      <Detail taskId={detailId} historyId={detailHistoryId} onBack={() => setPage(returnPage)} />
+      <Detail taskId={detailId} historyId={detailHistoryId} onBack={() => setPage(returnPage)} onNavigate={navigate} />
     ) : (
       <Dashboard onNavigate={navigate} />
     )
