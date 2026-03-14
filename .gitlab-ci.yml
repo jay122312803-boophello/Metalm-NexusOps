@@ -10,6 +10,8 @@ deploy:
   only:
     refs:
       - master
+    variables:
+      - $NEXUSOPS_MANUAL_DEPLOY == "1"
 
   before_script:
     - sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories

@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 
 import requests
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from sqlmodel import select
 
@@ -144,8 +144,16 @@ async def delete_deployment(dep_id: str):
 
 
 @router.post("/{dep_id}/trigger")
-async def trigger_deployment(dep_id: str, req: TriggerDeploymentRequest = TriggerDeploymentRequest()):
+async def trigger_deployment(dep_id: str, request: Request, req: TriggerDeploymentRequest = TriggerDeploymentRequest()):
     payload = req.model_dump()
+    api_base = (os.getenv("NEXUSOPS_PUBLIC_API_BASE_URL") or os.getenv("NEXUSOPS_API_BASE_URL") or "").rstrip("/")
+    if not api_base:
+        xf_proto = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip()
+        xf_host = (request.headers.get("x-forwarded-host") or "").split(",")[0].strip()
+        host = xf_host or (request.headers.get("host") or "").strip()
+        scheme = xf_proto or request.url.scheme
+        if host:
+            api_base = f"{scheme}://{host}".rstrip("/")
 
     def _work(session):
         d = session.get(Deployment, uuid.UUID(dep_id))
@@ -174,6 +182,8 @@ async def trigger_deployment(dep_id: str, req: TriggerDeploymentRequest = Trigge
         for k, v in req_vars.items():
             if v is not None and str(v).strip() != "":
                 variables[k] = v
+        if "NEXUSOPS_MANUAL_DEPLOY" not in variables:
+            variables["NEXUSOPS_MANUAL_DEPLOY"] = "1"
         variables["SERVER_HOST"] = s.address
         variables["SERVER_USER"] = s.ssh_user or "metalm"
         if getattr(s, "ssh_key", None):
@@ -182,8 +192,6 @@ async def trigger_deployment(dep_id: str, req: TriggerDeploymentRequest = Trigge
         variables["DEST_DIR"] = (d.dest_dir or "").strip() or s.deploy_path
         if d.deploy_script:
             variables["CUSTOM_DEPLOY_SCRIPT"] = d.deploy_script
-
-        api_base = (os.getenv("NEXUSOPS_PUBLIC_API_BASE_URL") or os.getenv("NEXUSOPS_API_BASE_URL") or "").rstrip("/")
 
         verify_tls = (os.getenv("GITLAB_TLS_INSECURE") or "").strip() != "1"
 
@@ -217,7 +225,8 @@ async def trigger_deployment(dep_id: str, req: TriggerDeploymentRequest = Trigge
         variables["NEXUSOPS_HISTORY_ID"] = str(h.id)
         if api_base:
             variables["NEXUSOPS_API_URL"] = api_base
-            variables["NEXUSOPS_CONFIG_ZIP_URL"] = f"{api_base}/api/history/{h.id}/configs.zip"
+            if "NEXUSOPS_CONFIG_ZIP_URL" not in variables:
+                variables["NEXUSOPS_CONFIG_ZIP_URL"] = f"{api_base}/api/deployments/{d.id}/configs.zip"
 
         variables_for_history = {k: v for k, v in variables.items() if k != "SERVER_SSH_KEY"}
         h.variables = variables_for_history
