@@ -57,6 +57,7 @@ class CreateServerRequest(BaseModel):
     name: str
     address: str
     ssh_user: str = "metalm"
+    ssh_key: Optional[str] = None
     deploy_path: str
     description: Optional[str] = None
 
@@ -65,6 +66,7 @@ class UpdateServerRequest(BaseModel):
     name: Optional[str] = None
     address: Optional[str] = None
     ssh_user: Optional[str] = None
+    ssh_key: Optional[str] = None
     deploy_path: Optional[str] = None
     description: Optional[str] = None
 

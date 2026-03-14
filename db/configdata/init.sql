@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS servers (
   name text NOT NULL,
   address text NOT NULL,
   ssh_user text NOT NULL DEFAULT 'metalm',
+  ssh_key text,
   deploy_path text NOT NULL,
   description text,
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -109,7 +110,7 @@ SELECT
   'Nexus 智能体部署',
   s.id,
   r.id,
-  './',
+  './develop/backend_frontend/',
   '/home/metalm/deploy/NexusOps/',
   E'chmod +x down.sh up.sh\nsh down.sh\ndocker-compose up -d\n'
 FROM servers s, repos r
@@ -145,7 +146,7 @@ SELECT
   jsonb_build_object(
     'SERVER_HOST', '10.88.36.61',
     'SERVER_USER', 'metalm',
-    'INPUT_DIR', './',
+    'INPUT_DIR', './develop/backend_frontend/',
     'DEST_DIR', '/home/metalm/deploy/NexusOps/'
   )
 FROM deployments d

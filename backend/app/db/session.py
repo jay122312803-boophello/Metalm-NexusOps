@@ -4,7 +4,9 @@ from typing import Callable, TypeVar
 from dotenv import load_dotenv
 from sqlmodel import Session, SQLModel, create_engine
 from starlette.concurrency import run_in_threadpool
+from sqlalchemy import text
 load_dotenv()
+
 
 T = TypeVar("T")
 
@@ -41,11 +43,15 @@ async def run_db(fn: Callable[[Session], T]) -> T:
 
 
 async def init_db() -> None:
-    if (os.getenv("NEXUSOPS_DB_INIT") or "").strip() != "1":
-        return
     __import__("app.db.models")
 
     def _work():
-        SQLModel.metadata.create_all(engine)
+        if (os.getenv("NEXUSOPS_DB_INIT") or "").strip() == "1":
+            SQLModel.metadata.create_all(engine)
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE servers ADD COLUMN IF NOT EXISTS ssh_key text"))
+            conn.execute(text("ALTER TABLE deployments ADD COLUMN IF NOT EXISTS input_dir text"))
+            conn.execute(text("ALTER TABLE deployments ADD COLUMN IF NOT EXISTS dest_dir text"))
+            conn.execute(text("ALTER TABLE deployments ADD COLUMN IF NOT EXISTS deploy_script text"))
 
     await run_in_threadpool(_work)

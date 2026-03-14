@@ -16,6 +16,9 @@ export default function Settings() {
   const [editingId, setEditingId] = useState(null)
   const [repoAuth, setRepoAuth] = useState({ trigger: false, private: false })
   const [repoTokens, setRepoTokens] = useState({ trigger_token: '', private_token: '' })
+  const [serverKeyConfigured, setServerKeyConfigured] = useState(false)
+  const [serverKey, setServerKey] = useState('')
+  const [showServerKey, setShowServerKey] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleteError, setDeleteError] = useState(null)
   const [deleting, setDeleting] = useState(false)
@@ -73,6 +76,9 @@ export default function Settings() {
     setShowPrivateToken(false)
     setRepoTokens({ trigger_token: '', private_token: '' })
     setRepoAuth({ trigger: false, private: false })
+    setServerKey('')
+    setServerKeyConfigured(false)
+    setShowServerKey(false)
     setFormServer({ ssh_user: 'metalm' })
     setFormRepo({ branch: 'master' })
     refresh()
@@ -84,6 +90,9 @@ export default function Settings() {
     setShowPrivateToken(false)
     setRepoTokens({ trigger_token: '', private_token: '' })
     setRepoAuth({ trigger: false, private: false })
+    setServerKey('')
+    setServerKeyConfigured(false)
+    setShowServerKey(false)
     setFormServer({ ssh_user: 'metalm' })
     setFormRepo({ branch: 'master' })
     setDrawerType(type)
@@ -92,6 +101,9 @@ export default function Settings() {
   const openEditServer = (s) => {
     setEditingId(s.id)
     setFormServer({ name: s.name, address: s.address, ssh_user: s.ssh_user || 'metalm', deploy_path: s.deploy_path, description: s.description || '' })
+    setServerKey('')
+    setServerKeyConfigured(!!s.ssh_key_configured)
+    setShowServerKey(false)
     setDrawerType('server')
   }
 
@@ -175,6 +187,11 @@ export default function Settings() {
               </div>
               <div style={{ color: 'var(--text-sub)', fontSize: 13 }}>{s.address}</div>
               <div style={{ color: 'var(--text-sub)', fontSize: 12, marginTop: 8, fontFamily: 'monospace' }}>{s.deploy_path}</div>
+              {s.ssh_key_configured ? (
+                <div style={{ position: 'absolute', top: 16, right: 16, color: 'rgba(148,163,184,0.9)', fontSize: 12 }} title="SSH 私钥已配置">
+                  <Icon name="key" /> KEY
+                </div>
+              ) : null}
               <button
                 className="btn btn-ghost btn-sm"
                 style={{ position: 'absolute', bottom: 16, right: 52 }}
@@ -312,6 +329,32 @@ export default function Settings() {
                   placeholder="如: metalm"
                   value={formServer.ssh_user || 'metalm'}
                   onChange={(e) => setFormServer({ ...formServer, ssh_user: e.target.value })}
+                />
+              </div>
+              <div className="form-item">
+                <label className="form-label">服务器 SSH 私钥 (SERVER_SSH_KEY)</label>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <div style={{ color: 'var(--text-sub)', fontSize: 12 }}>
+                    {editingId && serverKeyConfigured ? '已配置（留空不变，输入新值覆盖）' : '可选'}
+                  </div>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowServerKey((v) => !v)}>
+                    <Icon name={showServerKey ? 'eye-slash' : 'eye'} /> {showServerKey ? '隐藏' : '显示'}
+                  </button>
+                </div>
+                <textarea
+                  className="form-input"
+                  style={{
+                    minHeight: 140,
+                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                    filter: showServerKey ? 'none' : 'blur(6px)'
+                  }}
+                  placeholder={'-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----'}
+                  value={serverKey}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setServerKey(v)
+                    setFormServer((p) => ({ ...p, ssh_key: v }))
+                  }}
                 />
               </div>
             </>

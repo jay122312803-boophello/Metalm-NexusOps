@@ -16,6 +16,7 @@ class Server(SQLModel, table=True):
     name: str
     address: str
     ssh_user: str = Field(default="metalm")
+    ssh_key: Optional[str] = Field(default=None)
     deploy_path: str
     description: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)

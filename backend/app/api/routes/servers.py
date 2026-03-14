@@ -19,6 +19,7 @@ async def list_servers():
                 "name": s.name,
                 "address": s.address,
                 "ssh_user": s.ssh_user,
+                "ssh_key_configured": bool(s.ssh_key),
                 "deploy_path": s.deploy_path,
                 "description": s.description,
                 "created_at": s.created_at.isoformat() if s.created_at else None,
@@ -39,10 +40,14 @@ async def create_server(req: CreateServerRequest):
         exists = session.query(Server).filter(Server.name == name).first()
         if exists:
             raise HTTPException(status_code=409, detail="服务器名称已存在，请更换")
+        ssh_key = data.get("ssh_key")
+        if ssh_key is not None and str(ssh_key).strip() == "":
+            ssh_key = None
         s = Server(
             name=name,
             address=data["address"],
             ssh_user=data.get("ssh_user") or "metalm",
+            ssh_key=ssh_key,
             deploy_path=data["deploy_path"],
             description=data.get("description"),
         )
@@ -54,6 +59,7 @@ async def create_server(req: CreateServerRequest):
             "name": s.name,
             "address": s.address,
             "ssh_user": s.ssh_user,
+            "ssh_key_configured": bool(s.ssh_key),
             "deploy_path": s.deploy_path,
             "description": s.description,
             "created_at": s.created_at.isoformat() if s.created_at else None,
@@ -73,6 +79,7 @@ async def get_server(server_id: str):
             "name": s.name,
             "address": s.address,
             "ssh_user": s.ssh_user,
+            "ssh_key_configured": bool(s.ssh_key),
             "deploy_path": s.deploy_path,
             "description": s.description,
             "created_at": s.created_at.isoformat() if s.created_at else None,
@@ -100,6 +107,8 @@ async def update_server(server_id: str, req: UpdateServerRequest):
         for k, v in data.items():
             if k == "ssh_user" and v is not None and str(v).strip() == "":
                 v = "metalm"
+            if k == "ssh_key" and v is not None and str(v).strip() == "":
+                v = None
             if k == "description" and v is not None and str(v).strip() == "":
                 v = None
             setattr(s, k, v)

@@ -176,6 +176,8 @@ async def trigger_deployment(dep_id: str, req: TriggerDeploymentRequest = Trigge
                 variables[k] = v
         variables["SERVER_HOST"] = s.address
         variables["SERVER_USER"] = s.ssh_user or "metalm"
+        if getattr(s, "ssh_key", None):
+            variables["SERVER_SSH_KEY"] = s.ssh_key
         variables["INPUT_DIR"] = (d.input_dir or "").strip() or "./"
         variables["DEST_DIR"] = (d.dest_dir or "").strip() or s.deploy_path
         if d.deploy_script:
@@ -217,7 +219,8 @@ async def trigger_deployment(dep_id: str, req: TriggerDeploymentRequest = Trigge
             variables["NEXUSOPS_API_URL"] = api_base
             variables["NEXUSOPS_CONFIG_ZIP_URL"] = f"{api_base}/api/history/{h.id}/configs.zip"
 
-        h.variables = variables
+        variables_for_history = {k: v for k, v in variables.items() if k != "SERVER_SSH_KEY"}
+        h.variables = variables_for_history
         session.add(h)
         session.commit()
 
