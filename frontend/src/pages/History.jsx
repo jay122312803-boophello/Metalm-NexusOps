@@ -10,6 +10,8 @@ export default function History({ onNavigate }) {
   const [statusOptions, setStatusOptions] = useState(['pending', 'running', 'success', 'failed', 'canceled'])
   const [selectedServerId, setSelectedServerId] = useState('all')
   const [selectedStatus, setSelectedStatus] = useState('all')
+  const [query, setQuery] = useState('')
+  const [page, setPage] = useState(1)
   const [varsView, setVarsView] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
@@ -52,47 +54,59 @@ export default function History({ onNavigate }) {
     return v || '未知'
   }
 
+  const filteredHistory = history.filter((h) => {
+    const q = (query || '').trim().toLowerCase()
+    if (!q) return true
+    const sName = String(h.server_snapshot?.name || '').toLowerCase()
+    const rName = String(h.repo_snapshot?.name || '').toLowerCase()
+    const ref = String(h.ref || h.repo_snapshot?.branch || '').toLowerCase()
+    const pid = h.pipeline_id ? String(h.pipeline_id) : ''
+    const st = String(h.status || '').toLowerCase()
+    return sName.includes(q) || rName.includes(q) || ref.includes(q) || pid.includes(q) || st.includes(q)
+  })
+
+  const pageSize = 20
+  const total = filteredHistory.length
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  useEffect(() => {
+    setPage(1)
+  }, [query, selectedServerId, selectedStatus, history.length])
+  const safePage = Math.min(totalPages, Math.max(1, page))
+  const pagedHistory = filteredHistory.slice((safePage - 1) * pageSize, safePage * pageSize)
+
   return (
-    <div>
-      <div className="page-head">
-        <div className="page-head-left">
-          <div className="page-title-row">
-            <Icon name="clock-rotate-left" style={{ color: 'var(--text-sub)' }} />
-            <h2 className="page-title">审计日志</h2>
+    <div className="panel-canvas">
+      <div className="panel-frame">
+        <div className="action-bar" style={{ margin: 0 }}>
+          <div className="action-left">
+            <div className="search-box">
+              <Icon name="magnifying-glass" />
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索仓库 / 主机 / 分支 / Pipeline / 状态" />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <select className="action-select" style={{ width: 180 }} value={selectedServerId} onChange={(e) => setSelectedServerId(e.target.value)}>
+              <option value="all">全部服务器</option>
+              {servers.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+            <select className="action-select" style={{ width: 180 }} value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)}>
+              <option value="all">全部状态</option>
+              {statusOptions.map((s) => (
+                <option key={s} value={s}>
+                  {statusLabel(s)}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
-        <div className="page-actions">
-          <select
-            className="form-input"
-            style={{ width: 180 }}
-            value={selectedServerId}
-            onChange={(e) => setSelectedServerId(e.target.value)}
-          >
-            <option value="all">全部服务器</option>
-            {servers.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-          <select
-            className="form-input"
-            style={{ width: 180 }}
-            value={selectedStatus}
-            onChange={(e) => setSelectedStatus(e.target.value)}
-          >
-            <option value="all">全部状态</option>
-            {statusOptions.map((s) => (
-              <option key={s} value={s}>
-                {statusLabel(s)}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
 
-      <div className="card">
-        <table className="repo-table" style={{ width: '100%' }}>
+        <div className="panel-body">
+          <div className="card">
+            <table className="repo-table" style={{ width: '100%' }}>
           <thead>
             <tr>
               <th style={{ width: 60 }}>状态</th>
@@ -104,7 +118,7 @@ export default function History({ onNavigate }) {
             </tr>
           </thead>
           <tbody>
-            {history.map((h) => {
+            {pagedHistory.map((h) => {
               const sName = h.server_snapshot?.name || 'Unknown Server'
               const rName = h.repo_snapshot?.name || 'Unknown Repo'
               const pipelineText = h.pipeline_id ? `Pipeline #${h.pipeline_id}` : '手动触发'
@@ -207,8 +221,38 @@ export default function History({ onNavigate }) {
                 </tr>
               )
             })}
+            {pagedHistory.length === 0 ? (
+              <tr>
+                <td colSpan={6} style={{ padding: 24, color: 'var(--text-sub)', textAlign: 'center' }}>
+                  {query ? '暂无匹配记录' : '暂无记录'}
+                </td>
+              </tr>
+            ) : null}
           </tbody>
-        </table>
+            </table>
+          </div>
+        </div>
+
+        <div className="panel-pager">
+          <div className="panel-pager-left">
+            共 {total} 条
+          </div>
+          <div className="panel-pager-right">
+            <button className="btn btn-ghost btn-sm" disabled={safePage <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+              <Icon name="chevron-left" />
+            </button>
+            <span className="panel-page-num">
+              {safePage} / {totalPages}
+            </span>
+            <button
+              className="btn btn-ghost btn-sm"
+              disabled={safePage >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            >
+              <Icon name="chevron-right" />
+            </button>
+          </div>
+        </div>
       </div>
 
       {varsView ? (

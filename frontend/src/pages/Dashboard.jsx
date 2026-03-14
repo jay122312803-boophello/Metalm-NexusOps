@@ -12,6 +12,9 @@ export default function Dashboard({ onNavigate }) {
   const [newTask, setNewTask] = useState({})
   const [editingTaskId, setEditingTaskId] = useState(null)
   const [openMenuId, setOpenMenuId] = useState(null)
+  const [query, setQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [page, setPage] = useState(1)
 
   const load = async () => {
     const ts = await api.get('/api/deployments')
@@ -114,33 +117,69 @@ export default function Dashboard({ onNavigate }) {
     load()
   }
 
+  const filteredTasks = tasks.filter((t) => {
+    const q = (query || '').trim().toLowerCase()
+    const last = lastByDeployment?.[t.id]
+    const st = String(last?.status || 'unknown').toLowerCase()
+    if (statusFilter !== 'all' && st !== statusFilter) return false
+    if (!q) return true
+    const s = servers.find((x) => x.id === t.server_id) || {}
+    const r = repos.find((x) => x.id === t.repo_id) || {}
+    return (
+      String(t?.name || '').toLowerCase().includes(q) ||
+      String(s?.name || '').toLowerCase().includes(q) ||
+      String(s?.address || '').toLowerCase().includes(q) ||
+      String(r?.name || '').toLowerCase().includes(q) ||
+      String(r?.branch || '').toLowerCase().includes(q)
+    )
+  })
+
+  const pageSize = 12
+  const total = filteredTasks.length
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  useEffect(() => {
+    setPage(1)
+  }, [query, statusFilter, tasks.length])
+  const safePage = Math.min(totalPages, Math.max(1, page))
+  const pagedTasks = filteredTasks.slice((safePage - 1) * pageSize, safePage * pageSize)
+
   return (
-    <div>
-      <div className="page-head">
-        <div className="page-head-left">
-          <div className="page-title-row">
-            <Icon name="table-columns" style={{ color: 'var(--text-sub)' }} />
-            <h2 className="page-title">部署大盘</h2>
+    <div className="panel-canvas">
+      <div className="panel-frame">
+        <div className="action-bar" style={{ margin: 0 }}>
+          <div className="action-left">
+            <div className="search-box">
+              <Icon name="magnifying-glass" />
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索任务 / 目标主机 / 仓库 / 分支" />
+            </div>
+            <select className="action-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <option value="all">全部状态</option>
+              <option value="success">就绪</option>
+              <option value="failed">失败</option>
+              <option value="running">运行中</option>
+              <option value="pending">排队中</option>
+              <option value="canceled">已取消</option>
+            </select>
+          </div>
+          <div>
+            <button className="btn btn-primary" onClick={openCreate}>
+              <Icon name="plus" /> 创建新任务
+            </button>
           </div>
         </div>
-        <div className="page-actions">
-          <button className="btn btn-primary" onClick={openCreate}>
-            <Icon name="plus" /> 创建新任务
-          </button>
-        </div>
-      </div>
 
-      <div className="deploy-grid">
-        {tasks.map((t) => {
+        <div className="panel-body">
+          <div className="deploy-grid">
+            {pagedTasks.map((t) => {
           const s = servers.find((x) => x.id === t.server_id) || {}
           const r = repos.find((x) => x.id === t.repo_id) || {}
           const last = lastByDeployment?.[t.id]
           return (
             <div key={t.id} className="card task-card" onClick={() => onNavigate('detail', t.id)}>
               <div className="task-header">
+                <span className={`task-dot ${statusDotClass(last?.status)}`} title={statusLabel(last?.status)} />
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                    <span className={`status-dot ${statusDotClass(last?.status)}`} title={statusLabel(last?.status)} />
                     <div style={{ fontWeight: 600, fontSize: 16 }}>{t.name}</div>
                     <span style={{ color: 'var(--text-sub)', fontSize: 12, fontFamily: 'monospace' }}>{String(t.id || '').slice(0, 6)}</span>
                   </div>
@@ -239,8 +278,9 @@ export default function Dashboard({ onNavigate }) {
               </div>
 
               <div className="task-footer">
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span className={`status-dot ${statusDotClass(last?.status)}`} /> {statusLabel(last?.status)}
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className={`status-dot ${statusDotClass(last?.status)}`} />
+                  <span>{statusLabel(last?.status)}</span>
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <button
@@ -265,15 +305,38 @@ export default function Dashboard({ onNavigate }) {
               </div>
             </div>
           )
-        })}
-        {tasks.length === 0 ? (
-          <div className="empty-state" style={{ gridColumn: '1/-1' }}>
-            <div className="empty-icon">
-              <Icon name="cubes" />
-            </div>
-            <div>暂无部署任务，请点击右上角创建</div>
+            })}
+            {pagedTasks.length === 0 ? (
+              <div className="empty-state" style={{ gridColumn: '1/-1' }}>
+                <div className="empty-icon">
+                  <Icon name="cubes" />
+                </div>
+                <div>{query || statusFilter !== 'all' ? '暂无匹配任务' : '暂无部署任务，请点击右上角创建'}</div>
+              </div>
+            ) : null}
           </div>
-        ) : null}
+        </div>
+
+        <div className="panel-pager">
+          <div className="panel-pager-left">
+            共 {total} 条
+          </div>
+          <div className="panel-pager-right">
+            <button className="btn btn-ghost btn-sm" disabled={safePage <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+              <Icon name="chevron-left" />
+            </button>
+            <span className="panel-page-num">
+              {safePage} / {totalPages}
+            </span>
+            <button
+              className="btn btn-ghost btn-sm"
+              disabled={safePage >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            >
+              <Icon name="chevron-right" />
+            </button>
+          </div>
+        </div>
       </div>
 
       {drawerOpen ? (

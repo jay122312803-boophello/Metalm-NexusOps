@@ -135,6 +135,20 @@ body {
 
 .scroll-view { flex: 1; overflow-y: auto; padding: 24px 0; }
 .scroll-inner { width: 100%; max-width: var(--content-max); margin: 0 auto; padding: 0 32px; }
+.panel-canvas {
+  background:
+    radial-gradient(900px 420px at 50% 0%, rgba(22,163,74,0.06), rgba(241,245,249,0) 60%),
+    #f1f5f9;
+  margin: 0 -32px;
+  padding: clamp(18px, 2.4vw, 32px) 32px;
+  min-height: calc(100vh - 64px - 48px);
+  display: flex;
+}
+.panel-frame { background: white; border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-sm); padding: clamp(18px, 2.2vw, 24px); max-width: var(--content-max); margin: 0 auto; width: 100%; display: flex; flex-direction: column; }
+.panel-body { margin-top: 24px; flex: 1; min-height: 0; }
+.panel-pager { margin-top: auto; padding-top: 14px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; color: var(--text-sub); font-size: 13px; }
+.panel-pager-right { display: flex; align-items: center; gap: 6px; }
+.panel-page-num { min-width: 64px; text-align: center; font-weight: 700; color: var(--text-main); }
 .settings-canvas {
   background:
     radial-gradient(900px 420px at 50% 0%, rgba(22,163,74,0.06), rgba(241,245,249,0) 60%),
