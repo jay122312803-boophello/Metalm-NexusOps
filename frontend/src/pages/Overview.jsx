@@ -483,6 +483,16 @@ export default function Overview({ onNavigate }) {
   const env = Array.isArray(data?.env_dist) ? data.env_dist : []
   const feed = Array.isArray(data?.feed) ? data.feed : []
 
+  const feed7d = useMemo(() => {
+    const now = Date.now()
+    const from = now - 7 * 24 * 60 * 60 * 1000
+    return feed.filter((it) => {
+      const t = it?.created_at ? Date.parse(it.created_at) : NaN
+      if (!Number.isFinite(t)) return true
+      return t >= from && t <= now + 60 * 1000
+    })
+  }, [feed])
+
   const succTone =
     m?.success_rate_today === null || m?.success_rate_today === undefined
       ? 'ok'
@@ -560,29 +570,33 @@ export default function Overview({ onNavigate }) {
                 查看全部 <Icon name="arrow-right" />
               </button>
             </div>
-            <div className="feed-list">
-              {feed.length ? (
-                feed.slice(0, 12).map((it) => (
-                  <div key={it.id} className="feed-item" onClick={() => (onNavigate ? onNavigate('detail', it.deployment_id, { historyId: it.id }) : null)}>
-                    <span className={`status-dot ${statusDotClass(it.status)}`} />
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
-                        <div style={{ color: 'var(--text-main)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {it.deployment_name || '部署任务'}
+            <div
+              className="feed-scroll"
+            >
+              <div className="feed-list" style={{ overflow: 'visible' }}>
+                {feed7d.length ? (
+                  feed7d.map((it) => (
+                    <div key={it.id} className="feed-item" onClick={() => (onNavigate ? onNavigate('detail', it.deployment_id, { historyId: it.id }) : null)}>
+                      <span className={`status-dot ${statusDotClass(it.status)}`} />
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
+                          <div style={{ color: 'var(--text-main)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {it.deployment_name || '部署任务'}
+                          </div>
+                          <div style={{ color: 'var(--text-sub)', fontSize: 12, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>
+                            {it.created_at ? new Date(it.created_at).toLocaleTimeString() : ''}
+                          </div>
                         </div>
-                        <div style={{ color: 'var(--text-sub)', fontSize: 12, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>
-                          {it.created_at ? new Date(it.created_at).toLocaleTimeString() : ''}
+                        <div style={{ color: 'var(--text-sub)', fontSize: 12, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {`${it.repo_name || '-'}${it.branch ? ` · ${it.branch}` : ''} → ${it.server_name || '-'}`}
                         </div>
-                      </div>
-                      <div style={{ color: 'var(--text-sub)', fontSize: 12, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {`${it.repo_name || '-'}${it.branch ? ` · ${it.branch}` : ''} → ${it.server_name || '-'}`}
                       </div>
                     </div>
-                  </div>
-                ))
-              ) : (
-                <div style={{ color: 'var(--text-sub)', padding: 10 }}>暂无动态</div>
-              )}
+                  ))
+                ) : (
+                  <div style={{ color: 'var(--text-sub)', padding: 10 }}>暂无动态</div>
+                )}
+              </div>
             </div>
           </div>
 
