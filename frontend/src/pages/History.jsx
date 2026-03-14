@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Drawer from '../components/Drawer.jsx'
 import Icon from '../components/Icon.jsx'
+import Modal from '../components/Modal.jsx'
 import { api } from '../services/api.js'
 
 export default function History({ onNavigate }) {
@@ -10,6 +11,9 @@ export default function History({ onNavigate }) {
   const [selectedServerId, setSelectedServerId] = useState('all')
   const [selectedStatus, setSelectedStatus] = useState('all')
   const [varsView, setVarsView] = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState(null)
 
   useEffect(() => {
     const loadHistory = async () => {
@@ -183,6 +187,16 @@ export default function History({ onNavigate }) {
                       >
                         <Icon name="rocket" /> 重新部署
                       </button>
+                      <button
+                        className="btn btn-danger btn-sm"
+                        onClick={(ev) => {
+                          ev.stopPropagation()
+                          setDeleteError(null)
+                          setDeleteTarget({ id: h.id, deployment_id: h.deployment_id, status: h.status, created_at: h.created_at })
+                        }}
+                      >
+                        <Icon name="trash" /> 删除
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -204,6 +218,74 @@ export default function History({ onNavigate }) {
         >
           <pre className="code-pre">{varsView.text}</pre>
         </Drawer>
+      ) : null}
+
+      {deleteTarget ? (
+        <Modal
+          danger
+          title="删除审计日志"
+          onClose={() => (deleting ? null : setDeleteTarget(null))}
+          footer={[
+            <button key="c" className="btn btn-outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+              取消
+            </button>,
+            <button
+              key="ok"
+              className="btn btn-danger"
+              disabled={deleting}
+              onClick={async () => {
+                setDeleting(true)
+                setDeleteError(null)
+                try {
+                  const res = await api.del(`/api/history/${deleteTarget.id}`)
+                  if (res?.ok) {
+                    setDeleteTarget(null)
+                    const qs = new URLSearchParams()
+                    if (selectedServerId && selectedServerId !== 'all') qs.set('server_id', selectedServerId)
+                    if (selectedStatus && selectedStatus !== 'all') qs.set('status', selectedStatus)
+                    const url = qs.toString() ? `/api/history?${qs.toString()}` : '/api/history'
+                    const h = await api.get(url)
+                    setHistory(Array.isArray(h?.history) ? h.history : [])
+                  } else {
+                    const d = res?.detail
+                    setDeleteError(typeof d === 'string' ? d : d ? JSON.stringify(d) : '删除失败')
+                  }
+                } finally {
+                  setDeleting(false)
+                }
+              }}
+            >
+              <Icon name={deleting ? 'spinner fa-spin' : 'trash'} /> {deleting ? '删除中...' : '确认删除'}
+            </button>
+          ]}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 14 }}>
+            <div style={{ color: 'var(--text-sub)' }}>删除后该条记录及其快照会被移除，无法恢复。</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 8 }}>
+              <div style={{ color: 'var(--text-sub)' }}>History ID</div>
+              <div style={{ fontFamily: 'monospace', fontSize: 12 }}>{deleteTarget.id}</div>
+              <div style={{ color: 'var(--text-sub)' }}>任务</div>
+              <div style={{ fontFamily: 'monospace', fontSize: 12 }}>{deleteTarget.deployment_id}</div>
+              <div style={{ color: 'var(--text-sub)' }}>状态</div>
+              <div>{String(deleteTarget.status || 'unknown')}</div>
+            </div>
+            {deleteError ? (
+              <div
+                style={{
+                  marginTop: 4,
+                  padding: '10px 12px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(239,68,68,0.25)',
+                  background: 'rgba(239,68,68,0.06)',
+                  color: '#b91c1c',
+                  fontSize: 13
+                }}
+              >
+                {deleteError}
+              </div>
+            ) : null}
+          </div>
+        </Modal>
       ) : null}
     </div>
   )

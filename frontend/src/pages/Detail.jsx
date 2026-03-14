@@ -335,6 +335,17 @@ export default function Detail({ taskId, historyId, onBack }) {
         </button>
       </div>
 
+      <div style={{ marginBottom: 14 }}>
+        <div className="tabs">
+          <button className={`tab ${rightTab === 'terminal' ? 'active' : ''}`} onClick={() => setRightTab('terminal')}>
+            运行状态与日志
+          </button>
+          <button className={`tab ${rightTab === 'config' ? 'active' : ''}`} onClick={() => setRightTab('config')}>
+            配置文件管理
+          </button>
+        </div>
+      </div>
+
       <div className="cockpit-grid">
         <div className="card status-panel">
           <div className={`status-node ${busy ? 'flow' : ''}`}>
@@ -375,41 +386,33 @@ export default function Detail({ taskId, historyId, onBack }) {
           </div>
 
           <div className="deploy-meta">
-            <div>
-              Branch: <code>{repo?.branch || '-'}</code>
+            <div className="meta-item">
+              <div className="meta-label">枝干 (Branch)</div>
+              <div className="meta-value">{repo?.branch || '-'}</div>
             </div>
-            <div>
-              SERVER_HOST: <code>{server?.address || '-'}</code>
+            <div className="meta-item">
+              <div className="meta-label">目标主机 (Server)</div>
+              <div className="meta-value meta-mono">{`${server?.ssh_user || 'metalm'} @ ${server?.address || '-'}`}</div>
             </div>
-            <div>
-              SERVER_USER: <code>{server?.ssh_user || 'metalm'}</code>
+            <div className="meta-item">
+              <div className="meta-label">部署路径 (Deploy Path)</div>
+              <div className="meta-value meta-mono">{server?.deploy_path || '-'}</div>
             </div>
-            <div>
-              Deploy Path: <code>{server?.deploy_path || '-'}</code>
-            </div>
-          </div>
-
-          <div className="mounted-card">
-            <div className="mounted-title">
-              <span>🗂️ 本次部署挂载配置 ({mountedFiles.length})</span>
-              <span style={{ color: 'var(--text-sub)', fontSize: 12 }}>{viewHistory ? '只读快照' : '当前配置'}</span>
-            </div>
-            <div className="mounted-files">
-              {mountedFiles.length ? mountedFiles.map((p) => <div key={p}>{p}</div>) : <div style={{ color: 'rgba(15,23,42,0.55)' }}>暂无</div>}
+            <div className="meta-item">
+              <div className="meta-label">挂载配置</div>
+              <div className="meta-value">{`${mountedFiles.length} 项`}</div>
+              {mountedFiles.length ? (
+                <div className="meta-files">
+                  {mountedFiles.map((p) => (
+                    <div key={p}>{p}</div>
+                  ))}
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%', minHeight: 0 }}>
-          <div className="tabs">
-            <button className={`tab ${rightTab === 'terminal' ? 'active' : ''}`} onClick={() => setRightTab('terminal')}>
-              运行状态与日志
-            </button>
-            <button className={`tab ${rightTab === 'config' ? 'active' : ''}`} onClick={() => setRightTab('config')}>
-              配置文件管理
-            </button>
-          </div>
-
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%', minHeight: 0 }}>
           {rightTab === 'terminal' ? (
             renderTerminal()
           ) : (
@@ -496,7 +499,7 @@ export default function Detail({ taskId, historyId, onBack }) {
                 ) : (
                   <div className="config-placeholder">
                     <div className="config-placeholder-inner">
-                      <Icon name="file-circle-plus" />
+                      <Icon name="file-lines" />
                       <span>请在左侧选择文件进行预览或编辑</span>
                     </div>
                   </div>

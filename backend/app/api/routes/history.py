@@ -153,3 +153,16 @@ async def check_pipeline_status(history_id: str):
     except Exception:
         pass
     return res
+
+
+@router.delete("/{history_id}")
+async def delete_history(history_id: str):
+    def _work(session):
+        h = session.get(DeploymentHistory, uuid.UUID(history_id))
+        if not h:
+            raise HTTPException(status_code=404, detail="History not found")
+        session.delete(h)
+        session.commit()
+        return {"ok": True}
+
+    return await run_db(_work)
