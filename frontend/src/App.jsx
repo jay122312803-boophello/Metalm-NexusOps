@@ -7,16 +7,46 @@ import Overview from './pages/Overview.jsx'
 import Settings from './pages/Settings.jsx'
 
 export default function App() {
-  const [page, setPage] = useState('overview')
-  const [detailId, setDetailId] = useState(null)
-  const [detailHistoryId, setDetailHistoryId] = useState(null)
-  const [returnPage, setReturnPage] = useState('dashboard')
-  const [settingsTab, setSettingsTab] = useState(null)
+  const initialNav = useMemo(() => {
+    try {
+      const raw = localStorage.getItem('nexusops_nav')
+      if (!raw) return null
+      const obj = JSON.parse(raw)
+      if (!obj || typeof obj !== 'object') return null
+      if (!obj.page) return null
+      if (obj.page === 'detail' && !obj.detailId) return { ...obj, page: 'dashboard' }
+      return obj
+    } catch {
+      return null
+    }
+  }, [])
+
+  const [page, setPage] = useState(initialNav?.page || 'overview')
+  const [detailId, setDetailId] = useState(initialNav?.detailId || null)
+  const [detailHistoryId, setDetailHistoryId] = useState(initialNav?.detailHistoryId || null)
+  const [returnPage, setReturnPage] = useState(initialNav?.returnPage || 'dashboard')
+  const [settingsTab, setSettingsTab] = useState(initialNav?.settingsTab || null)
   const [historyPreset, setHistoryPreset] = useState(null)
 
   useEffect(() => {
     if (page !== 'history' && historyPreset) setHistoryPreset(null)
   }, [page, historyPreset])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        'nexusops_nav',
+        JSON.stringify({
+          page,
+          detailId,
+          detailHistoryId,
+          returnPage,
+          settingsTab
+        })
+      )
+    } catch {
+    }
+  }, [page, detailId, detailHistoryId, returnPage, settingsTab])
 
   const breadcrumb = useMemo(() => {
     if (page === 'settings') return '系统设置'
