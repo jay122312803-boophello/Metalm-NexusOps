@@ -406,7 +406,7 @@ export default function Detail({ taskId, historyId, onBack }) {
               运行状态与日志
             </button>
             <button className={`tab ${rightTab === 'config' ? 'active' : ''}`} onClick={() => setRightTab('config')}>
-              环境变量与配置
+              配置文件管理
             </button>
           </div>
 
@@ -416,8 +416,9 @@ export default function Detail({ taskId, historyId, onBack }) {
             <div className="config-split">
               <div className="config-tree">
                 <div className="config-tree-head">
-                  <button className="btn btn-primary btn-sm" onClick={() => setAddConfigOpen(true)} disabled={viewHistory}>
-                    <Icon name="plus" /> 新增配置文件
+                  <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-main)' }}>配置文件</div>
+                  <button className="icon-btn" onClick={() => setAddConfigOpen(true)} disabled={viewHistory} title="新增配置文件">
+                    <Icon name="plus" />
                   </button>
                 </div>
                 <div className="config-tree-list">
@@ -450,7 +451,7 @@ export default function Detail({ taskId, historyId, onBack }) {
                 <div className="config-editor-head">
                   <div className="config-editor-title">
                     <Icon name="code" />
-                    <span>{activeConfigPath || '请选择配置文件'}</span>
+                    <span>{activeConfigPath || '未选择文件'}</span>
                     {activeConfigId && dirtyById[activeConfigId] ? <span className="config-dirty">*</span> : null}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -466,31 +467,40 @@ export default function Detail({ taskId, historyId, onBack }) {
                     </button>
                   </div>
                 </div>
-                <div className="monaco-wrap">
-                  <Editor
-                    beforeMount={monacoBeforeMount}
-                    theme="vs-dark"
-                    language={langByPath(activeConfigPath)}
-                    value={activeConfigId ? draftById[activeConfigId] ?? '' : ''}
-                    onChange={(v) => {
-                      if (!activeConfigId) return
-                      if (viewHistory) return
-                      const next = v ?? ''
-                      setDraftById((p) => ({ ...p, [activeConfigId]: next }))
-                      const saved = savedById[activeConfigId] ?? ''
-                      setDirtyById((p) => ({ ...p, [activeConfigId]: next !== saved }))
-                    }}
-                    options={{
-                      readOnly: viewHistory || !activeConfigId,
-                      fontSize: 13,
-                      minimap: { enabled: false },
-                      scrollBeyondLastLine: false,
-                      lineNumbers: 'on',
-                      wordWrap: 'off',
-                      automaticLayout: true
-                    }}
-                  />
-                </div>
+                {activeConfigId ? (
+                  <div className="monaco-wrap">
+                    <Editor
+                      beforeMount={monacoBeforeMount}
+                      theme="vs-dark"
+                      language={langByPath(activeConfigPath)}
+                      value={draftById[activeConfigId] ?? ''}
+                      onChange={(v) => {
+                        if (!activeConfigId) return
+                        if (viewHistory) return
+                        const next = v ?? ''
+                        setDraftById((p) => ({ ...p, [activeConfigId]: next }))
+                        const saved = savedById[activeConfigId] ?? ''
+                        setDirtyById((p) => ({ ...p, [activeConfigId]: next !== saved }))
+                      }}
+                      options={{
+                        readOnly: viewHistory || !activeConfigId,
+                        fontSize: 13,
+                        minimap: { enabled: false },
+                        scrollBeyondLastLine: false,
+                        lineNumbers: 'on',
+                        wordWrap: 'off',
+                        automaticLayout: true
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="config-placeholder">
+                    <div className="config-placeholder-inner">
+                      <Icon name="file-circle-plus" />
+                      <span>请在左侧选择文件进行预览或编辑</span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

@@ -136,7 +136,7 @@ export default function Dashboard({ onNavigate }) {
                             openEdit(t)
                           }}
                         >
-                          编辑任务 <Icon name="pen-to-square" />
+                          任务配置 <Icon name="gear" />
                         </button>
                         <div style={{ height: 1, background: 'var(--border)', margin: '6px 0' }} />
                         <button
@@ -213,15 +213,26 @@ export default function Dashboard({ onNavigate }) {
                 <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span className="status-dot online" /> 就绪
                 </span>
-                <button
-                  className="btn btn-primary btn-sm"
-                  onClick={(ev) => {
-                    ev.stopPropagation()
-                    onNavigate('detail', t.id)
-                  }}
-                >
-                  <Icon name="rocket" /> 进入控制台
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <button
+                    className="btn btn-outline btn-sm"
+                    onClick={(ev) => {
+                      ev.stopPropagation()
+                      openEdit(t)
+                    }}
+                  >
+                    <Icon name="gear" /> 任务配置
+                  </button>
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={(ev) => {
+                      ev.stopPropagation()
+                      onNavigate('detail', t.id)
+                    }}
+                  >
+                    <Icon name="rocket" /> 进入控制台
+                  </button>
+                </div>
               </div>
             </div>
           )
@@ -238,7 +249,7 @@ export default function Dashboard({ onNavigate }) {
 
       {drawerOpen ? (
         <Drawer
-          title={editingTaskId ? '编辑部署任务' : '创建部署任务'}
+          title={editingTaskId ? '任务配置' : '创建部署任务'}
           onClose={() => { setDrawerOpen(false); setEditingTaskId(null) }}
           footer={[
             <button key="c" className="btn btn-outline" onClick={() => { setDrawerOpen(false); setEditingTaskId(null) }}>

@@ -175,38 +175,39 @@ export default function Settings() {
         <div className="grid-servers">
           {servers.map((s) => (
             <div key={s.id} className="card server-card">
-              <div className="server-status">
-                <span className="status-dot online" />
-              </div>
-              <div className="server-icon">
-                <Icon name="server" />
-              </div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
-                <div style={{ fontSize: 16, fontWeight: 600 }}>{s.name}</div>
-                <span style={{ color: 'var(--text-sub)', fontSize: 12, fontFamily: 'monospace' }}>{String(s.id || '').slice(0, 6)}</span>
-              </div>
-              <div style={{ color: 'var(--text-sub)', fontSize: 13 }}>{s.address}</div>
-              <div style={{ color: 'var(--text-sub)', fontSize: 12, marginTop: 8, fontFamily: 'monospace' }}>{s.deploy_path}</div>
-              {s.ssh_key_configured ? (
-                <div style={{ position: 'absolute', top: 16, right: 16, color: 'rgba(148,163,184,0.9)', fontSize: 12 }} title="SSH 私钥已配置">
-                  <Icon name="key" /> KEY
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 0 }}>
+                  <span className="status-dot online" style={{ marginTop: 6 }} />
+                  <div style={{ fontSize: 16, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {s.name}
+                  </div>
+                  <span style={{ color: 'var(--text-sub)', fontSize: 12, fontFamily: 'monospace' }}>{`ID:${String(s.id || '').slice(0, 6)}`}</span>
                 </div>
-              ) : null}
-              <button
-                className="btn btn-ghost btn-sm"
-                style={{ position: 'absolute', bottom: 16, right: 52 }}
-                onClick={() => openEditServer(s)}
-                title="编辑"
-              >
-                <Icon name="pen-to-square" />
-              </button>
-              <button
-                className="btn btn-ghost btn-sm"
-                style={{ position: 'absolute', bottom: 16, right: 16, color: '#ef4444' }}
-                onClick={() => openDelete('server', s)}
-              >
-                <Icon name="trash" />
-              </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div className="icon-btn" title="编辑" onClick={() => openEditServer(s)}>
+                    <Icon name="pen-to-square" />
+                  </div>
+                  <div className="icon-btn" title="删除" style={{ color: 'var(--danger)' }} onClick={() => openDelete('server', s)}>
+                    <Icon name="trash" />
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Icon name="computer" style={{ color: '#94a3b8' }} />
+                <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', color: 'var(--text-main)' }}>
+                  {s.address}
+                </span>
+                {s.ssh_key_configured ? (
+                  <span className="badge badge-gray" style={{ fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <Icon name="key" /> SSH Key
+                  </span>
+                ) : null}
+              </div>
+              <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-sub)' }}>
+                <Icon name="folder-open" style={{ color: '#94a3b8' }} />
+                <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', fontSize: 12 }}>{s.deploy_path}</span>
+              </div>
             </div>
           ))}
           {servers.length === 0 ? <div className="empty-state" style={{ gridColumn: '1/-1' }}>暂无服务器，请添加</div> : null}

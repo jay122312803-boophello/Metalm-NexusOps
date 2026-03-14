@@ -87,16 +87,25 @@ export default function History({ onNavigate }) {
           <thead>
             <tr>
               <th style={{ width: 60 }}>状态</th>
-              <th>任务说明</th>
-              <th>CI 信息</th>
-              <th style={{ width: '42%' }}>变量参数</th>
-              <th>触发时间</th>
+              <th style={{ width: 320 }}>任务说明</th>
+              <th style={{ width: 220 }}>CI 信息</th>
+              <th>变量参数</th>
+              <th style={{ width: 190 }}>触发时间</th>
+              <th style={{ width: 170 }}>操作</th>
             </tr>
           </thead>
           <tbody>
             {history.map((h) => {
               const sName = h.server_snapshot?.name || 'Unknown Server'
               const rName = h.repo_snapshot?.name || 'Unknown Repo'
+              const pipelineText = h.pipeline_id ? `Pipeline #${h.pipeline_id}` : '手动触发'
+              const varKeys = Object.keys(h.variables || {})
+              const hintVars = []
+              const pick = (k) => {
+                if (h.variables && h.variables[k]) hintVars.push([k, String(h.variables[k])])
+              }
+              pick('SERVER_HOST')
+              pick('DEST_DIR')
               return (
                 <tr
                   key={h.id}
@@ -109,7 +118,7 @@ export default function History({ onNavigate }) {
                     <div style={{ fontSize: 12, color: 'var(--text-sub)' }}>{`To: ${sName}`}</div>
                   </td>
                   <td>
-                    <div>{`Pipeline #${h.pipeline_id}`}</div>
+                    <div>{pipelineText}</div>
                     {h.web_url ? (
                       <a href={h.web_url} target="_blank" style={{ fontSize: 12, color: 'var(--info)' }}>
                         View in GitLab
@@ -120,23 +129,62 @@ export default function History({ onNavigate }) {
                     {!h.variables ? (
                       '-'
                     ) : (
-                      <span
-                        className="vars-pill"
-                        title="点击查看详情"
-                        onClick={(ev) => {
-                          ev.stopPropagation()
-                          setVarsView({
-                            title: `Pipeline #${h.pipeline_id} 变量参数`,
-                            text: JSON.stringify(h.variables, null, 2)
-                          })
-                        }}
-                      >
-                        <Icon name="code" style={{ fontSize: 12 }} />
-                        {`${Object.keys(h.variables || {}).length} 个变量`}
-                      </span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <span
+                          className="vars-pill"
+                          title="点击查看详情"
+                          onClick={(ev) => {
+                            ev.stopPropagation()
+                            setVarsView({
+                              title: `${pipelineText} 变量参数`,
+                              text: JSON.stringify(h.variables, null, 2)
+                            })
+                          }}
+                        >
+                          <Icon name="code" style={{ fontSize: 12 }} />
+                          {`${varKeys.length} 个变量`}
+                        </span>
+                        {hintVars.length ? (
+                          <div style={{ fontSize: 12, color: 'var(--text-sub)', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                            {hintVars.map(([k, v]) => (
+                              <span key={k} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>
+                                {k}={v}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
                     )}
                   </td>
                   <td>{new Date(h.created_at).toLocaleString()}</td>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <button
+                        className="btn btn-outline btn-sm"
+                        onClick={(ev) => {
+                          ev.stopPropagation()
+                          onNavigate ? onNavigate('detail', h.deployment_id, { historyId: h.id }) : null
+                        }}
+                      >
+                        查看详情
+                      </button>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        onClick={async (ev) => {
+                          ev.stopPropagation()
+                          if (!confirm('重新触发该任务部署？')) return
+                          const res = await api.post(`/api/deployments/${h.deployment_id}/trigger`, {})
+                          if (res?.ok && res?.history_id) {
+                            onNavigate ? onNavigate('detail', h.deployment_id, { historyId: res.history_id }) : null
+                          } else {
+                            alert('触发失败')
+                          }
+                        }}
+                      >
+                        <Icon name="rocket" /> 重新部署
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               )
             })}
