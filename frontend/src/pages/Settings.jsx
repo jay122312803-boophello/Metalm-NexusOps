@@ -182,144 +182,163 @@ export default function Settings({ initialTab }) {
   })
 
   return (
-    <div className="settings-shell">
-      <div className="page-head">
-        <div className="page-head-left">
-          <div className="tabs">
-            <button className={`tab ${activeTab === 'servers' ? 'active' : ''}`} onClick={() => setActiveTab('servers')}>
-              服务器管理
-            </button>
-            <button className={`tab ${activeTab === 'repos' ? 'active' : ''}`} onClick={() => setActiveTab('repos')}>
-              仓库配置
-            </button>
+    <div className="settings-canvas">
+      <div className="settings-frame">
+        <div className="page-head" style={{ marginBottom: 0 }}>
+          <div className="page-head-left">
+            <div className="tabs">
+              <button className={`tab ${activeTab === 'servers' ? 'active' : ''}`} onClick={() => setActiveTab('servers')}>
+                服务器管理
+              </button>
+              <button className={`tab ${activeTab === 'repos' ? 'active' : ''}`} onClick={() => setActiveTab('repos')}>
+                仓库配置
+              </button>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="action-bar">
-        <div className="action-left">
-          <div className="search-box">
-            <Icon name="magnifying-glass" />
-            <input
-              value={activeTab === 'servers' ? serverQuery : repoQuery}
-              onChange={(e) => (activeTab === 'servers' ? setServerQuery(e.target.value) : setRepoQuery(e.target.value))}
-              placeholder={activeTab === 'servers' ? '请输入 IP 或名称搜索' : '请输入名称 / URL / 分支搜索'}
-            />
+        <div className="action-bar">
+          <div className="action-left">
+            <div className="search-box">
+              <Icon name="magnifying-glass" />
+              <input
+                value={activeTab === 'servers' ? serverQuery : repoQuery}
+                onChange={(e) => (activeTab === 'servers' ? setServerQuery(e.target.value) : setRepoQuery(e.target.value))}
+                placeholder={activeTab === 'servers' ? '请输入 IP 或名称搜索' : '请输入名称 / URL / 分支搜索'}
+              />
+            </div>
+            {activeTab === 'servers' ? (
+              <select className="action-select" value={serverEnv} onChange={(e) => setServerEnv(e.target.value)}>
+                <option value="ALL">全部环境</option>
+                <option value="PROD">PROD</option>
+                <option value="TEST">TEST</option>
+                <option value="DEV">DEV</option>
+                <option value="OTHER">OTHER</option>
+              </select>
+            ) : null}
           </div>
-          {activeTab === 'servers' ? (
-            <select className="action-select" value={serverEnv} onChange={(e) => setServerEnv(e.target.value)}>
-              <option value="ALL">全部环境</option>
-              <option value="PROD">PROD</option>
-              <option value="TEST">TEST</option>
-              <option value="DEV">DEV</option>
-              <option value="OTHER">OTHER</option>
-            </select>
-          ) : null}
+          <div>
+            {activeTab === 'servers' ? (
+              <button className="btn btn-primary" onClick={() => openCreate('server')}>
+                <Icon name="plus" /> 接入新服务器
+              </button>
+            ) : (
+              <button className="btn btn-outline" onClick={() => openCreate('repo')}>
+                <Icon name="plus" /> 关联仓库
+              </button>
+            )}
+          </div>
         </div>
-        <div>
+
+        <div className="settings-body">
           {activeTab === 'servers' ? (
-            <button className="btn btn-primary" onClick={() => openCreate('server')}>
-              <Icon name="plus" /> 接入新服务器
-            </button>
+            <div className="grid-servers">
+              {filteredServers.map((s) => (
+                <div key={s.id} className="card server-card">
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 0 }}>
+                      <span className="status-dot online" style={{ marginTop: 6 }} />
+                      <div style={{ fontSize: 16, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {s.name}
+                      </div>
+                      <span style={{ color: 'var(--text-sub)', fontSize: 12, fontFamily: 'monospace' }}>{`ID:${String(s.id || '').slice(0, 6)}`}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div className="icon-btn" title="编辑" onClick={() => openEditServer(s)}>
+                        <Icon name="pen-to-square" />
+                      </div>
+                      <div className="icon-btn" title="删除" style={{ color: 'var(--danger)' }} onClick={() => openDelete('server', s)}>
+                        <Icon name="trash" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <Icon name="computer" style={{ color: '#94a3b8' }} />
+                    <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', color: 'var(--text-main)' }}>
+                      {s.address}
+                    </span>
+                    {s.ssh_key_configured ? (
+                      <span className="badge badge-gray" style={{ fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        <Icon name="key" /> SSH Key
+                      </span>
+                    ) : null}
+                  </div>
+                  <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-sub)' }}>
+                    <Icon name="folder-open" style={{ color: '#94a3b8' }} />
+                    <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', fontSize: 12 }}>{s.deploy_path}</span>
+                  </div>
+                </div>
+              ))}
+              {filteredServers.length === 0 ? <div className="empty-state" style={{ gridColumn: '1/-1' }}>暂无服务器</div> : null}
+            </div>
           ) : (
-            <button className="btn btn-outline" onClick={() => openCreate('repo')}>
-              <Icon name="plus" /> 关联仓库
-            </button>
+            <div className="card">
+              <table className="repo-table" style={{ width: '100%' }}>
+                <thead>
+                  <tr>
+                    <th>仓库名称</th>
+                    <th>分支</th>
+                    <th>Git URL</th>
+                    <th>鉴权</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRepos.map((r) => (
+                    <tr key={r.id}>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                          <strong>{r.name}</strong>
+                          <span style={{ color: 'var(--text-sub)', fontSize: 12, fontFamily: 'monospace' }}>{String(r.id || '').slice(0, 6)}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <span className="badge badge-blue">{r.branch}</span>
+                      </td>
+                      <td>
+                        <span style={{ color: '#94a3b8', fontSize: 12 }}>{r.url}</span>
+                      </td>
+                      <td>
+                        {r?.auth?.trigger || r?.auth?.private ? (
+                          <span style={{ color: 'var(--success)' }} title="Token已配置">
+                            <Icon name="shield-halved" /> 已绑定
+                          </span>
+                        ) : (
+                          <span style={{ color: '#cbd5e1' }}>未配置</span>
+                        )}
+                      </td>
+                      <td>
+                        <button className="btn btn-ghost btn-sm" onClick={() => openEditRepo(r)} title="编辑">
+                          <Icon name="pen-to-square" />
+                        </button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => openDelete('repo', r)} title="删除">
+                          <Icon name="trash" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
+
+        <div className="settings-pager">
+          <div className="settings-pager-left">
+            共 {activeTab === 'servers' ? filteredServers.length : filteredRepos.length} 条
+          </div>
+          <div className="settings-pager-right">
+            <button className="btn btn-ghost btn-sm" disabled>
+              <Icon name="chevron-left" />
+            </button>
+            <span className="settings-page-num">1</span>
+            <button className="btn btn-ghost btn-sm" disabled>
+              <Icon name="chevron-right" />
+            </button>
+          </div>
+        </div>
       </div>
-
-      {activeTab === 'servers' ? (
-        <div className="grid-servers">
-          {filteredServers.map((s) => (
-            <div key={s.id} className="card server-card">
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 0 }}>
-                  <span className="status-dot online" style={{ marginTop: 6 }} />
-                  <div style={{ fontSize: 16, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {s.name}
-                  </div>
-                  <span style={{ color: 'var(--text-sub)', fontSize: 12, fontFamily: 'monospace' }}>{`ID:${String(s.id || '').slice(0, 6)}`}</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <div className="icon-btn" title="编辑" onClick={() => openEditServer(s)}>
-                    <Icon name="pen-to-square" />
-                  </div>
-                  <div className="icon-btn" title="删除" style={{ color: 'var(--danger)' }} onClick={() => openDelete('server', s)}>
-                    <Icon name="trash" />
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Icon name="computer" style={{ color: '#94a3b8' }} />
-                <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', color: 'var(--text-main)' }}>
-                  {s.address}
-                </span>
-                {s.ssh_key_configured ? (
-                  <span className="badge badge-gray" style={{ fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <Icon name="key" /> SSH Key
-                  </span>
-                ) : null}
-              </div>
-              <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-sub)' }}>
-                <Icon name="folder-open" style={{ color: '#94a3b8' }} />
-                <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', fontSize: 12 }}>{s.deploy_path}</span>
-              </div>
-            </div>
-          ))}
-          {filteredServers.length === 0 ? <div className="empty-state" style={{ gridColumn: '1/-1' }}>暂无服务器</div> : null}
-        </div>
-      ) : (
-        <div className="card">
-          <table className="repo-table" style={{ width: '100%' }}>
-            <thead>
-              <tr>
-                <th>仓库名称</th>
-                <th>分支</th>
-                <th>Git URL</th>
-                <th>鉴权</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredRepos.map((r) => (
-                <tr key={r.id}>
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                      <strong>{r.name}</strong>
-                      <span style={{ color: 'var(--text-sub)', fontSize: 12, fontFamily: 'monospace' }}>{String(r.id || '').slice(0, 6)}</span>
-                    </div>
-                  </td>
-                  <td>
-                    <span className="badge badge-blue">{r.branch}</span>
-                  </td>
-                  <td>
-                    <span style={{ color: '#94a3b8', fontSize: 12 }}>{r.url}</span>
-                  </td>
-                  <td>
-                    {r?.auth?.trigger || r?.auth?.private ? (
-                      <span style={{ color: 'var(--success)' }} title="Token已配置">
-                        <Icon name="shield-halved" /> 已绑定
-                      </span>
-                    ) : (
-                      <span style={{ color: '#cbd5e1' }}>未配置</span>
-                    )}
-                  </td>
-                  <td>
-                    <button className="btn btn-ghost btn-sm" onClick={() => openEditRepo(r)} title="编辑">
-                      <Icon name="pen-to-square" />
-                    </button>
-                    <button className="btn btn-ghost btn-sm" onClick={() => openDelete('repo', r)} title="删除">
-                      <Icon name="trash" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
 
       {drawerType ? (
         <Drawer
