@@ -28,7 +28,19 @@ deploy:
       : "${DEST_DIR:?DEST_DIR is required}"
       : "${SERVER_HOST:?SERVER_HOST is required}"
       : "${SERVER_USER:=metalm}"
+      NEXUSOPS_API_BASE_URL="$(printf "%s" "${NEXUSOPS_API_BASE_URL:-}" | tr -d '\r\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
       NEXUSOPS_CONFIG_ZIP_URL="$(printf "%s" "${NEXUSOPS_CONFIG_ZIP_URL:-}" | tr -d '\r\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+      api_base="${NEXUSOPS_API_BASE_URL:-}"
+      if [ -n "${api_base:-}" ]; then
+        case "${api_base}" in
+          http://*|https://*) ;;
+          *) echo "!! [NexusOps] NEXUSOPS_API_BASE_URL 非法: 必须是 http/https"; exit 3 ;;
+        esac
+      fi
+      if [ -n "${api_base:-}" ] && [ -n "${NEXUSOPS_CONFIG_ZIP_URL:-}" ]; then
+        path="$(printf "%s" "$NEXUSOPS_CONFIG_ZIP_URL" | sed -E 's#^[a-zA-Z]+://[^/]+##')"
+        NEXUSOPS_CONFIG_ZIP_URL="${api_base%/}${path}"
+      fi
       if [ -n "${NEXUSOPS_CONFIG_ZIP_URL:-}" ]; then
         case "$NEXUSOPS_CONFIG_ZIP_URL" in
           http://*|https://*) ;;
