@@ -1,7 +1,7 @@
 services:
   nexusops-pg:
-    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/postgres:15-trixie-linuxarm64
-    # image: registry.xuelangyun.com/shuzhi-amd64/metalm/postgres:15-alpine
+    # image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/postgres:15-trixie-linuxarm64
+    image: registry.xuelangyun.com/shuzhi-amd64/metalm/postgres:15-alpine
     restart: always
     networks:
       - nexusops-net
@@ -15,7 +15,7 @@ services:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes:/var/lib/postgresql/data
       - ${DOCKER_VOLUME_DIRECTORY:-.}/configdata:/docker-entrypoint-initdb.d:ro
     ports:
-      - "23012:5432"
+      - "230999:5432"
 
 networks:
   nexusops-net:

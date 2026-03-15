@@ -1,0 +1,20 @@
+services:
+  nexusops-redis:
+    # image: registry.xuelangyun.com/shuzhi-amd64/metalm/redis:6.2.20
+    image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/redis:6.2.20
+    container_name: nexusops-redis
+    restart: always
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/data:/data
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/configdata/redis.conf:/etc/redis.conf
+    networks:
+      - nexusops-net
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-metalm2024}
+    command: ["sh", "-c", "exec redis-server /etc/redis.conf --requirepass \"$$REDIS_PASSWORD\""]
+    ports:
+      - "23099:6379"
+networks:
+  nexusops-net:
+    name: nexusops-dev-net
+    external: true
