@@ -1,4 +1,5 @@
 import os
+import time
 from typing import Callable, TypeVar
 
 from dotenv import load_dotenv
@@ -46,9 +47,26 @@ async def init_db() -> None:
     __import__("app.db.models")
 
     def _work():
-        if (os.getenv("NEXUSOPS_DB_INIT") or "").strip() == "1":
-            SQLModel.metadata.create_all(engine)
+        last_err = None
+        for _ in range(30):
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text("SELECT 1"))
+                last_err = None
+                break
+            except Exception as e:
+                last_err = e
+                time.sleep(1)
+        if last_err is not None:
+            raise last_err
+
+        SQLModel.metadata.create_all(engine)
         with engine.begin() as conn:
+            try:
+                conn.execute(text("CREATE EXTENSION IF NOT EXISTS pgcrypto"))
+            except Exception:
+                pass
+
             conn.execute(text("ALTER TABLE servers ADD COLUMN IF NOT EXISTS ssh_key text"))
             conn.execute(text("ALTER TABLE servers ADD COLUMN IF NOT EXISTS environment text"))
             conn.execute(text("ALTER TABLE servers ALTER COLUMN environment SET DEFAULT 'OTHER'"))
@@ -70,5 +88,21 @@ async def init_db() -> None:
             conn.execute(text("ALTER TABLE deployments ADD COLUMN IF NOT EXISTS input_dir text"))
             conn.execute(text("ALTER TABLE deployments ADD COLUMN IF NOT EXISTS dest_dir text"))
             conn.execute(text("ALTER TABLE deployments ADD COLUMN IF NOT EXISTS deploy_script text"))
+            conn.execute(text("ALTER TABLE repos ALTER COLUMN branch SET DEFAULT 'master'"))
+            conn.execute(text("ALTER TABLE servers ALTER COLUMN ssh_user SET DEFAULT 'metalm'"))
+            conn.execute(text("ALTER TABLE servers ALTER COLUMN environment SET NOT NULL"))
+
+            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_servers_name ON servers (name)"))
+            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_repos_name ON repos (name)"))
+            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_deployments_name ON deployments (name)"))
+
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_history_created_at ON deployment_history(created_at DESC)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_history_deployment_id ON deployment_history(deployment_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_history_status ON deployment_history(status)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_deployments_server_id ON deployments(server_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_deployments_repo_id ON deployments(repo_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_task_configs_deployment_id ON task_configs(deployment_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_task_config_snapshots_history_id ON task_config_snapshots(history_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_task_config_snapshot_files_snapshot_id ON task_config_snapshot_files(snapshot_id)"))
 
     await run_in_threadpool(_work)
