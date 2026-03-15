@@ -11,21 +11,21 @@ const parseBody = async (res) => {
   }
 }
 
-const request = async (method, url, data) => {
+const request = async (method, url, data, opts) => {
   const isAbs = /^https?:\/\//i.test(url)
   const full = isAbs ? url : `${base}${url}`
-  const opts = { method, headers: {} }
+  const o = { method, headers: {}, ...(opts || {}) }
   if (data !== undefined) {
-    opts.headers['Content-Type'] = 'application/json'
-    opts.body = JSON.stringify(data)
+    o.headers['Content-Type'] = 'application/json'
+    o.body = JSON.stringify(data)
   }
-  const res = await fetch(full, opts)
+  const res = await fetch(full, o)
   return parseBody(res)
 }
 
 export const api = {
-  get: (url) => request('GET', url),
-  post: (url, data) => request('POST', url, data),
-  put: (url, data) => request('PUT', url, data),
-  del: (url) => request('DELETE', url)
+  get: (url, opts) => request('GET', url, undefined, opts),
+  post: (url, data, opts) => request('POST', url, data, opts),
+  put: (url, data, opts) => request('PUT', url, data, opts),
+  del: (url, opts) => request('DELETE', url, undefined, opts)
 }

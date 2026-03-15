@@ -2,11 +2,41 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Icon from '../components/Icon.jsx'
 import { api } from '../services/api.js'
 
+const overviewCacheKey = 'nexusops_overview_cache_v1'
+const runtimeCacheKey = 'nexusops_overview_runtime_v1'
+const containersCacheKey = 'nexusops_overview_containers_v1'
+const serverMetricsCacheKey = 'nexusops_overview_server_metrics_v1'
+
 const fmtPct = (v) => {
   if (v === null || v === undefined) return '-'
   const n = Number(v)
   if (!Number.isFinite(n)) return '-'
   return `${(n * 100).toFixed(1)}%`
+}
+
+const clampPct100 = (v) => {
+  const n = Number(v)
+  if (!Number.isFinite(n)) return 0
+  return Math.max(0, Math.min(100, n))
+}
+
+const mapLimit = async (items, limit, fn) => {
+  const arr = Array.isArray(items) ? items : []
+  const lim = Math.max(1, Number(limit || 1))
+  const out = new Array(arr.length)
+  let i = 0
+  const workers = new Array(Math.min(lim, arr.length)).fill(0).map(async () => {
+    while (i < arr.length) {
+      const cur = i++
+      try {
+        out[cur] = await fn(arr[cur], cur)
+      } catch (e) {
+        out[cur] = { ok: false, error: e }
+      }
+    }
+  })
+  await Promise.all(workers)
+  return out
 }
 
 const monotonePath = (pts) => {
@@ -440,13 +470,14 @@ function Donut({ data }) {
   )
 }
 
-function MetricCard({ title, value, sub, icon, tone, onClick }) {
+function MetricCard({ title, value, sub, icon, tone, onClick, tooltip }) {
   const clickable = typeof onClick === 'function'
   return (
     <div
       className="card metric-card"
       style={{ cursor: clickable ? 'pointer' : 'default' }}
       onClick={clickable ? onClick : undefined}
+      title={tooltip || undefined}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -462,20 +493,363 @@ function MetricCard({ title, value, sub, icon, tone, onClick }) {
   )
 }
 
+function RingGauge({ label, percent, value, tone }) {
+  const p = clampPct100(percent)
+  const color =
+    tone === 'bad' ? 'var(--danger)' : tone === 'warn' ? 'var(--warning)' : tone === 'info' ? 'var(--info)' : 'var(--primary)'
+  return (
+    <div className="metric-ring">
+      <div className="metric-ring-circle" style={{ background: `conic-gradient(${color} ${p}%, rgba(148,163,184,0.18) 0)` }}>
+        <div className="metric-ring-inner">
+          <div className="metric-ring-value">{value}</div>
+          <div className="metric-ring-sub">{label}</div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ResourceWatermark({ loading, cpu, mem, ts, sampled, total, envText, servers, focusId, onFocus }) {
+  const cpuTone = cpu >= 90 ? 'bad' : cpu >= 70 ? 'warn' : 'ok'
+  const memTone = mem >= 90 ? 'bad' : mem >= 70 ? 'warn' : 'ok'
+  return (
+    <div className="card" style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
+        <div style={{ fontWeight: 800, color: 'var(--text-main)' }}>全局资源水位</div>
+        <div style={{ color: 'var(--text-sub)', fontSize: 12 }}>
+          {loading ? '加载中...' : ts ? `更新于 ${new Date(ts).toLocaleTimeString()}` : '未更新'}
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, color: 'var(--text-sub)', fontSize: 12 }}>
+        <div style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{envText || ''}</div>
+        <div style={{ whiteSpace: 'nowrap' }}>{total ? `采样 ${sampled ?? 0}/${total}` : ''}</div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 14 }}>
+        <RingGauge label="CPU" percent={cpu} value={`${clampPct100(cpu).toFixed(1)}%`} tone={cpuTone} />
+        <RingGauge label="内存" percent={mem} value={`${clampPct100(mem).toFixed(1)}%`} tone={memTone} />
+      </div>
+      {Array.isArray(servers) && servers.length ? (
+        <div className="card" style={{ padding: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
+            <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--text-main)' }}>资源开销（点选巡检）</div>
+            <div style={{ color: 'var(--text-sub)', fontSize: 12 }}>{focusId ? '当前节点' : ''}</div>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {servers.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                className="btn btn-outline btn-sm"
+                style={{
+                  borderRadius: 999,
+                  padding: '4px 10px',
+                  borderColor: s.id === focusId ? 'rgba(22,163,74,0.45)' : 'var(--border)',
+                  background: s.id === focusId ? 'rgba(16,185,129,0.10)' : 'white',
+                  color: s.id === focusId ? 'var(--primary)' : 'var(--text-main)'
+                }}
+                onClick={() => (typeof onFocus === 'function' ? onFocus(s.id) : null)}
+                title={s.address || s.name}
+              >
+                {s.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 export default function Overview({ onNavigate }) {
-  const [data, setData] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [data, setData] = useState(() => {
+    try {
+      const raw = localStorage.getItem(overviewCacheKey)
+      if (!raw) return null
+      const parsed = JSON.parse(raw)
+      return parsed && typeof parsed === 'object' ? parsed : null
+    } catch (_) {
+      return null
+    }
+  })
+  const [loading, setLoading] = useState(() => {
+    try {
+      return !localStorage.getItem(overviewCacheKey)
+    } catch (_) {
+      return true
+    }
+  })
+  const [servers, setServers] = useState([])
+  const [deployments, setDeployments] = useState([])
+  const [focusServerId, setFocusServerId] = useState(null)
+  const [serverMetricsById, setServerMetricsById] = useState(() => {
+    try {
+      const raw = localStorage.getItem(serverMetricsCacheKey)
+      if (!raw) return {}
+      const parsed = JSON.parse(raw)
+      return parsed && typeof parsed === 'object' ? parsed : {}
+    } catch (_) {
+      return {}
+    }
+  })
+  const [runtime, setRuntime] = useState(() => {
+    try {
+      const raw = localStorage.getItem(runtimeCacheKey)
+      if (!raw) throw new Error('no cache')
+      const parsed = JSON.parse(raw)
+      if (!parsed || typeof parsed !== 'object') throw new Error('bad cache')
+      return { loading: false, ...parsed }
+    } catch (_) {
+      return { loading: true, ts: null, cluster: { ok: 0, warn: 0, offline: 0 }, avgCpu: 0, avgMem: 0, top3: [], sampled: 0, total: 0 }
+    }
+  })
+  const [containers, setContainers] = useState(() => {
+    try {
+      const raw = localStorage.getItem(containersCacheKey)
+      if (!raw) throw new Error('no cache')
+      const parsed = JSON.parse(raw)
+      if (!parsed || typeof parsed !== 'object') throw new Error('bad cache')
+      return { loading: false, ...parsed }
+    } catch (_) {
+      return { loading: true, ts: null, total: 0, running: 0, abnormal: 0 }
+    }
+  })
+  const [alerts, setAlerts] = useState([])
+  const [bottomTab, setBottomTab] = useState('deploy')
+  const pollRef = useRef({ metrics: null, containers: null })
+  const pollCtlRef = useRef({
+    metrics: null,
+    containers: null,
+    metricsRunning: false,
+    containersRunning: false
+  })
+  const serversRef = useRef([])
+  const deploymentsRef = useRef([])
+  const alertStateRef = useRef({})
 
   const load = async () => {
     const res = await api.get('/api/overview')
-    if (res?.ok) setData(res)
+    if (res?.ok) {
+      setData(res)
+      try {
+        localStorage.setItem(overviewCacheKey, JSON.stringify(res))
+      } catch (_) {}
+    }
     setLoading(false)
+  }
+
+  const loadLists = async () => {
+    const [sv, dp] = await Promise.all([api.get('/api/servers'), api.get('/api/deployments')])
+    const s = Array.isArray(sv) ? sv : []
+    const d = Array.isArray(dp) ? dp : []
+    setServers(s)
+    setDeployments(d)
+    serversRef.current = s
+    deploymentsRef.current = d
+    setFocusServerId((p) => (p ? p : s[0]?.id || null))
+  }
+
+  const pushAlert = (level, key, msg) => {
+    const prev = alertStateRef.current[key]
+    if (prev === level) return
+    if (level === 'ok' && prev === undefined) {
+      alertStateRef.current[key] = level
+      return
+    }
+    alertStateRef.current[key] = level
+    const id = `${Date.now()}_${key}_${level}`
+    setAlerts((p) => [{ id, level, msg, ts: new Date().toISOString() }, ...p].slice(0, 40))
+  }
+
+  const pollServerMetrics = async () => {
+    if (pollCtlRef.current.metricsRunning) return
+    pollCtlRef.current.metricsRunning = true
+    if (pollCtlRef.current.metrics) {
+      try {
+        pollCtlRef.current.metrics.abort()
+      } catch (_) {}
+    }
+    const ctl = new AbortController()
+    pollCtlRef.current.metrics = ctl
+    const list = serversRef.current || []
+    if (!list.length) {
+      setRuntime((p) => ({ ...p, loading: false, ts: Date.now(), cluster: { ok: 0, warn: 0, offline: 0 }, avgCpu: 0, avgMem: 0, top3: [], sampled: 0, total: 0 }))
+      pollCtlRef.current.metricsRunning = false
+      return
+    }
+    const targetId = focusServerId || list[0]?.id
+    const target = list.find((x) => x.id === targetId) || list[0]
+    if (!target?.id) {
+      pollCtlRef.current.metricsRunning = false
+      return
+    }
+    try {
+      const res = await api.get(`/api/servers/${target.id}/metrics`, { signal: ctl.signal })
+      if (res?.ok) {
+        const cpu = clampPct100(res?.metrics?.cpu_usage)
+        const mem = clampPct100(res?.metrics?.memory?.percent)
+        const item = { ok: true, cpu, mem, ts: Date.now() }
+        setServerMetricsById((p) => {
+          const n = { ...(p || {}), [target.id]: item }
+          try {
+            localStorage.setItem(serverMetricsCacheKey, JSON.stringify(n))
+          } catch (_) {}
+          const sampled = Object.keys(n).length
+          const ts = Date.now()
+          setRuntime((prev) => ({ ...prev, loading: false, ts, sampled, total: list.length, avgCpu: cpu, avgMem: mem }))
+          try {
+            localStorage.setItem(runtimeCacheKey, JSON.stringify({ ts, sampled, total: list.length, avgCpu: cpu, avgMem: mem }))
+          } catch (_) {}
+          return n
+        })
+        const warn85 = cpu >= 85 || mem >= 85
+        const severe90 = cpu >= 90 || mem >= 90
+        if (severe90) {
+          const d =
+            cpu >= 90 && mem >= 90
+              ? `CPU ${cpu.toFixed(0)}% · 内存 ${mem.toFixed(0)}%`
+              : cpu >= 90
+                ? `CPU ${cpu.toFixed(0)}%`
+                : `内存 ${mem.toFixed(0)}%`
+          pushAlert('bad', `server_hot_${target.id}`, `【严重】${target.name} 资源爆表：${d}`)
+        } else {
+          pushAlert('ok', `server_hot_${target.id}`, `【恢复】${target.name} 资源已回落（CPU ${cpu.toFixed(0)}% · 内存 ${mem.toFixed(0)}%）`)
+          pushAlert('ok', `server_offline_${target.id}`, `【恢复】${target.name} 资源采集已恢复`)
+        }
+      } else {
+        const item = { ok: false, cpu: 0, mem: 0, ts: Date.now() }
+        setServerMetricsById((p) => {
+          const n = { ...(p || {}), [target.id]: item }
+          try {
+            localStorage.setItem(serverMetricsCacheKey, JSON.stringify(n))
+          } catch (_) {}
+          const sampled = Object.keys(n).length
+          const ts = Date.now()
+          setRuntime((prev) => ({ ...prev, loading: false, ts, sampled, total: list.length }))
+          try {
+            localStorage.setItem(runtimeCacheKey, JSON.stringify({ ts, sampled, total: list.length }))
+          } catch (_) {}
+          return n
+        })
+        pushAlert('bad', `server_offline_${target.id}`, `【离线】${target.name}：资源采集失败（SSH/网络不可达）`)
+      }
+    } catch (_) {}
+    pollCtlRef.current.metricsRunning = false
+  }
+
+  useEffect(() => {
+    if (!focusServerId) return
+    pollServerMetrics()
+  }, [focusServerId])
+
+  const pollContainers = async () => {
+    if (pollCtlRef.current.containersRunning) return
+    pollCtlRef.current.containersRunning = true
+    if (pollCtlRef.current.containers) {
+      try {
+        pollCtlRef.current.containers.abort()
+      } catch (_) {}
+    }
+    const ctl = new AbortController()
+    pollCtlRef.current.containers = ctl
+    const list = deploymentsRef.current || []
+    if (!list.length) {
+      setContainers({ loading: false, ts: Date.now(), total: 0, running: 0, abnormal: 0 })
+      pollCtlRef.current.containersRunning = false
+      return
+    }
+    const seen = new Set()
+    let total = 0
+    let running = 0
+    let abnormal = 0
+    const results = await mapLimit(list, 2, async (d) => {
+      const res = await api.get(`/api/deployments/${d.id}/monitor`, { signal: ctl.signal })
+      return { d, res }
+    })
+    for (const it of results) {
+      const d = it?.d
+      const res = it?.res
+      if (!d || !res?.ok) continue
+      const groups = Array.isArray(res.groups) ? res.groups : []
+      for (const g of groups) {
+        const cts = Array.isArray(g?.containers) ? g.containers : []
+        for (const c of cts) {
+          const id = c?.ID ? String(c.ID) : `${g?.compose_path || ''}::${c?.Name || c?.Names || ''}::${c?.Image || ''}`
+          if (seen.has(id)) continue
+          seen.add(id)
+          total++
+          const st = String(c?.State || '').toLowerCase()
+          if (st === 'running') running++
+          else abnormal++
+          if (st && st !== 'running') {
+            const name = String(c?.Name || c?.Names || c?.Service || 'container')
+            pushAlert('bad', `container_${id}`, `【严重】${d.name || '实例'} 容器异常：${name}（${st}）`)
+          } else {
+            const name = String(c?.Name || c?.Names || c?.Service || 'container')
+            pushAlert('ok', `container_${id}`, `【恢复】${d.name || '实例'} 容器已恢复运行：${name}`)
+          }
+        }
+      }
+    }
+    const next = { ts: Date.now(), total, running, abnormal }
+    setContainers({ loading: false, ...next })
+    try {
+      localStorage.setItem(containersCacheKey, JSON.stringify(next))
+    } catch (_) {}
+    pollCtlRef.current.containersRunning = false
+  }
+
+  const stopPolling = () => {
+    if (pollRef.current.metrics) clearInterval(pollRef.current.metrics)
+    if (pollRef.current.containers) clearInterval(pollRef.current.containers)
+    pollRef.current.metrics = null
+    pollRef.current.containers = null
+    if (pollCtlRef.current.metrics) {
+      try {
+        pollCtlRef.current.metrics.abort()
+      } catch (_) {}
+    }
+    if (pollCtlRef.current.containers) {
+      try {
+        pollCtlRef.current.containers.abort()
+      } catch (_) {}
+    }
+    pollCtlRef.current.metrics = null
+    pollCtlRef.current.containers = null
+    pollCtlRef.current.metricsRunning = false
+    pollCtlRef.current.containersRunning = false
+  }
+
+  const startPolling = () => {
+    if (!pollRef.current.metrics) {
+      pollServerMetrics()
+      pollRef.current.metrics = setInterval(pollServerMetrics, 15000)
+    }
+    if (!pollRef.current.containers) {
+      pollContainers()
+      pollRef.current.containers = setInterval(pollContainers, 30000)
+    }
   }
 
   useEffect(() => {
     load()
+    ;(async () => {
+      await loadLists()
+      startPolling()
+    })()
     const t = setInterval(load, 15000)
-    return () => clearInterval(t)
+    const onVis = () => {
+      if (document.hidden) stopPolling()
+      else startPolling()
+    }
+    const onUnload = () => stopPolling()
+    document.addEventListener('visibilitychange', onVis)
+    window.addEventListener('beforeunload', onUnload)
+    return () => {
+      clearInterval(t)
+      stopPolling()
+      document.removeEventListener('visibilitychange', onVis)
+      window.removeEventListener('beforeunload', onUnload)
+    }
   }, [])
 
   const m = data?.metrics || {}
@@ -510,6 +884,53 @@ export default function Overview({ onNavigate }) {
     return { icon: 'arrow-trend-down', text: `环比 ${d}`, color: 'var(--danger)' }
   }, [m?.deploy_delta])
 
+  const cluster = useMemo(() => {
+    const sv = Array.isArray(servers) ? servers : []
+    const map = serverMetricsById && typeof serverMetricsById === 'object' ? serverMetricsById : {}
+    let sampled = 0
+    let ok = 0
+    let warn = 0
+    let offline = 0
+    for (const s of sv) {
+      const it = map?.[s.id]
+      if (!it) continue
+      sampled++
+      if (!it.ok) {
+        offline++
+        continue
+      }
+      const hot = Number(it.cpu || 0) >= 85 || Number(it.mem || 0) >= 85
+      if (hot) warn++
+      else ok++
+    }
+    const total = sv.length
+    const unchecked = Math.max(0, total - sampled)
+    return { ok, warn, offline, unchecked, sampled, total }
+  }, [servers, serverMetricsById])
+
+  const clusterTone = cluster.offline > 0 ? 'bad' : cluster.warn > 0 ? 'warn' : 'ok'
+  const containerTone = containers.abnormal > 0 ? 'bad' : 'ok'
+  const clusterTip = `正常：资源采集成功，CPU/内存 < 85%\n告警：CPU 或 内存 ≥ 85%（资源水位偏高）\n离线：资源采集失败（SSH/网络/鉴权问题）\n未巡检：尚未采集到该节点资源数据`
+  const envText = (() => {
+    const arr = Array.isArray(servers) ? servers : []
+    if (!arr.length) return ''
+    const c = { PROD: 0, TEST: 0, DEV: 0, OTHER: 0 }
+    for (const s of arr) {
+      const k = String(s?.environment || 'OTHER').toUpperCase()
+      if (k in c) c[k]++
+      else c.OTHER++
+    }
+    const parts = []
+    for (const k of ['PROD', 'TEST', 'DEV', 'OTHER']) {
+      if (c[k]) parts.push(`${k} ${c[k]}`)
+    }
+    return parts.length ? `环境：${parts.join(' · ')}` : ''
+  })()
+  const focusId = focusServerId || (Array.isArray(servers) && servers[0] ? servers[0].id : null)
+  const focusMetric = focusId && serverMetricsById ? serverMetricsById[focusId] : null
+  const focusCpu = focusMetric?.ok ? Number(focusMetric.cpu || 0) : 0
+  const focusMem = focusMetric?.ok ? Number(focusMetric.mem || 0) : 0
+
   return (
     <div>
       <div className="overview-grid">
@@ -531,70 +952,115 @@ export default function Overview({ onNavigate }) {
           />
           <MetricCard title="部署成功率" value={loading ? '-' : fmtPct(m?.success_rate_today)} sub="今日" icon="bullseye" tone={succTone} />
           <MetricCard
-            title="服务器在线率"
+            title="集群健康度"
             value={
-              loading ? (
+              cluster.total === 0 ? (
                 '-'
               ) : (
                 <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8 }}>
-                  <span>{m?.servers_online ?? 0}</span>
-                  <span style={{ color: 'rgba(148,163,184,0.95)', fontWeight: 700, fontSize: 14 }}>{`/ ${m?.servers_total ?? 0}`}</span>
+                  <span>{cluster.ok} 正常</span>
+                  <span style={{ color: 'rgba(148,163,184,0.95)', fontWeight: 700, fontSize: 14 }}>{`/ ${cluster.warn} 告警 / ${cluster.offline} 离线`}</span>
                 </span>
               )
             }
-            sub="点击进入服务器管理"
+            sub={cluster.total ? `采样 ${cluster.sampled}/${cluster.total}${cluster.unchecked ? ` · 未巡检 ${cluster.unchecked}` : ''} · 点击进入服务器管理` : '点击进入服务器管理'}
             icon="server"
-            tone="ok"
+            tone={clusterTone}
             onClick={() => (onNavigate ? onNavigate('settings') : null)}
+            tooltip={clusterTip}
           />
           <MetricCard
-            title="纳管代码仓库"
-            value={loading ? '-' : String(m?.repos_total ?? 0)}
-            sub="点击进入仓库配置"
-            icon="code-branch"
-            tone="ok"
-            onClick={() => (onNavigate ? onNavigate('settings', null, { tab: 'repos' }) : null)}
+            title="活跃容器"
+            value={containers.loading ? '-' : String(containers.total)}
+            sub={containers.loading ? '' : `🟢 ${containers.running} 运行中  ·  🔴 ${containers.abnormal} 异常`}
+            icon="cubes"
+            tone={containerTone}
+            onClick={() => (onNavigate ? onNavigate('dashboard') : null)}
           />
         </div>
 
         <div className="overview-charts">
           <TrendChart data={trend} onNavigate={onNavigate} />
-          <Donut data={env} />
+          <ResourceWatermark
+            loading={!focusMetric}
+            cpu={focusCpu}
+            mem={focusMem}
+            ts={focusMetric?.ts || runtime.ts}
+            sampled={cluster.sampled}
+            total={cluster.total}
+            envText={envText}
+            servers={servers}
+            focusId={focusId}
+            onFocus={(id) => setFocusServerId(id)}
+          />
         </div>
 
         <div className="overview-bottom">
           <div className="card" style={{ padding: 18, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-              <div style={{ fontWeight: 800, color: 'var(--text-main)' }}>实时部署动态</div>
-              <button className="btn btn-ghost btn-sm" onClick={() => (onNavigate ? onNavigate('history') : null)}>
-                查看全部 <Icon name="arrow-right" />
-              </button>
+              <div className="tabs" style={{ borderBottom: 0 }}>
+                <button className={`tab ${bottomTab === 'deploy' ? 'active' : ''}`} onClick={() => setBottomTab('deploy')}>
+                  部署动态
+                </button>
+                <button className={`tab ${bottomTab === 'alerts' ? 'active' : ''}`} onClick={() => setBottomTab('alerts')}>
+                  异常告警
+                </button>
+              </div>
+              {bottomTab === 'deploy' ? (
+                <button className="btn btn-ghost btn-sm" onClick={() => (onNavigate ? onNavigate('history') : null)}>
+                  查看全部 <Icon name="arrow-right" />
+                </button>
+              ) : (
+                <button className="btn btn-ghost btn-sm" onClick={() => setAlerts([])}>
+                  清空 <Icon name="trash" />
+                </button>
+              )}
             </div>
             <div
               className="feed-scroll"
             >
               <div className="feed-list" style={{ overflow: 'visible' }}>
-                {feed7d.length ? (
-                  feed7d.map((it) => (
-                    <div key={it.id} className="feed-item" onClick={() => (onNavigate ? onNavigate('detail', it.deployment_id, { historyId: it.id }) : null)}>
-                      <span className={`status-dot ${statusDotClass(it.status)}`} />
+                {bottomTab === 'deploy' ? (
+                  feed7d.length ? (
+                    feed7d.map((it) => (
+                      <div key={it.id} className="feed-item" onClick={() => (onNavigate ? onNavigate('detail', it.deployment_id, { historyId: it.id }) : null)}>
+                        <span className={`status-dot ${statusDotClass(it.status)}`} />
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
+                            <div style={{ color: 'var(--text-main)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {it.deployment_name || '部署任务'}
+                            </div>
+                            <div style={{ color: 'var(--text-sub)', fontSize: 12, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>
+                              {it.created_at ? new Date(it.created_at).toLocaleTimeString() : ''}
+                            </div>
+                          </div>
+                          <div style={{ color: 'var(--text-sub)', fontSize: 12, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {`${it.repo_name || '-'}${it.branch ? ` · ${it.branch}` : ''} → ${it.server_name || '-'}`}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ color: 'var(--text-sub)', padding: 10 }}>暂无动态</div>
+                  )
+                ) : alerts.length ? (
+                  alerts.map((a) => (
+                    <div key={a.id} className="feed-item">
+                      <span className={`status-dot ${a.level === 'bad' ? 'offline' : a.level === 'warn' ? 'canceled' : 'online'}`} />
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
                           <div style={{ color: 'var(--text-main)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {it.deployment_name || '部署任务'}
+                            {a.msg}
                           </div>
                           <div style={{ color: 'var(--text-sub)', fontSize: 12, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>
-                            {it.created_at ? new Date(it.created_at).toLocaleTimeString() : ''}
+                            {a.ts ? new Date(a.ts).toLocaleTimeString() : ''}
                           </div>
-                        </div>
-                        <div style={{ color: 'var(--text-sub)', fontSize: 12, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {`${it.repo_name || '-'}${it.branch ? ` · ${it.branch}` : ''} → ${it.server_name || '-'}`}
                         </div>
                       </div>
                     </div>
                   ))
                 ) : (
-                  <div style={{ color: 'var(--text-sub)', padding: 10 }}>暂无动态</div>
+                  <div style={{ color: 'var(--text-sub)', padding: 10 }}>暂无告警</div>
                 )}
               </div>
             </div>
@@ -612,6 +1078,10 @@ export default function Overview({ onNavigate }) {
               <button className="btn btn-outline" onClick={() => (onNavigate ? onNavigate('settings', null, { tab: 'repos' }) : null)}>
                 <Icon name="code-branch" /> 管理 Git 仓库
               </button>
+            </div>
+            <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'var(--text-sub)', fontSize: 12 }}>
+              <span>资源轮询 {runtime.ts ? new Date(runtime.ts).toLocaleTimeString() : '未更新'}</span>
+              <span>容器轮询 {containers.ts ? new Date(containers.ts).toLocaleTimeString() : '未更新'}</span>
             </div>
           </div>
         </div>
