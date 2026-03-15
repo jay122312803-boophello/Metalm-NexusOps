@@ -228,13 +228,25 @@ async def init_db() -> None:
                 session.add(RolePermission(role_id=r_admin.id, permission_id=p.id))
             session.commit()
 
-            if (os.getenv("NEXUSOPS_DB_INIT") or "").strip() == "1" and not session.exec(select(User.id).limit(1)).first():
-                admin_user = (os.getenv("NEXUSOPS_ADMIN_USER") or "admin").strip() or "admin"
-                admin_pass = (os.getenv("NEXUSOPS_ADMIN_PASS") or "admin123").strip() or "admin123"
+            admin_user = (os.getenv("NEXUSOPS_ADMIN_USER") or "admin").strip() or "admin"
+            admin_pass = (os.getenv("NEXUSOPS_ADMIN_PASS") or "admin123").strip() or "admin123"
+            reset_admin = (os.getenv("NEXUSOPS_ADMIN_RESET") or "").strip() == "1"
+
+            u = session.exec(select(User).where(User.username == admin_user)).first()
+            if not u:
                 u = User(username=admin_user, password_hash=hash_password(admin_pass), display_name="Admin", is_active=True)
                 session.add(u)
                 session.commit()
                 session.refresh(u)
+            elif reset_admin:
+                u.password_hash = hash_password(admin_pass)
+                u.is_active = True
+                u.is_deleted = False
+                u.deleted_at = None
+                session.add(u)
+                session.commit()
+
+            if u and not session.exec(select(UserRole).where(UserRole.user_id == u.id, UserRole.role_id == r_admin.id)).first():
                 session.add(UserRole(user_id=u.id, role_id=r_admin.id))
                 session.commit()
 
