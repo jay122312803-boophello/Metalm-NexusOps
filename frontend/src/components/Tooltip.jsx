@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
-export default function Tooltip({ content, children, delay = 1000, disabled, maxWidth = 320, block }) {
+export default function Tooltip({ content, children, delay = 500, disabled, maxWidth = 320, block }) {
   const text = useMemo(() => {
     if (content === null || content === undefined) return ''
     const s = String(content).trim()

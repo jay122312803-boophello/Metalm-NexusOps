@@ -65,6 +65,13 @@ export default function History({ onNavigate, initialPreset }) {
     return v || '未知'
   }
 
+  const fmtTs = (v) => {
+    const t = v ? Date.parse(v) : NaN
+    if (!Number.isFinite(t)) return '-'
+    const d = new Date(t)
+    return `${d.toLocaleDateString()} ${d.toLocaleTimeString()}`
+  }
+
   const filteredHistory = history.filter((h) => {
     const q = (query || '').trim().toLowerCase()
     if (!q) return true
@@ -192,7 +199,9 @@ export default function History({ onNavigate, initialPreset }) {
                       </div>
                     )}
                   </td>
-                  <td>{new Date(h.created_at).toLocaleString()}</td>
+                  <td className="history-time">
+                    <Tooltip content={h.created_at ? new Date(h.created_at).toLocaleString() : ''}>{fmtTs(h.created_at)}</Tooltip>
+                  </td>
                   <td>
                     <div className="history-actions">
                       <button

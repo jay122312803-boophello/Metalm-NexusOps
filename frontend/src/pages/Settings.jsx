@@ -118,16 +118,20 @@ export default function Settings({ initialTab }) {
     return Math.max(0, Math.min(100, n))
   }
 
-  const MetricRing = ({ label, percent, value }) => (
-    <div className="metric-ring">
-      <div className="metric-ring-circle" style={{ background: `conic-gradient(var(--primary) ${percent}%, rgba(148,163,184,0.18) 0)` }}>
-        <div className="metric-ring-inner">
-          <div className="metric-ring-value">{value}</div>
-          <div className="metric-ring-sub">{label}</div>
+  const MetricRing = ({ label, percent, value }) => {
+    const p = clampPct(percent)
+    const color = p >= 90 ? 'var(--danger)' : p >= 70 ? 'var(--warning)' : 'var(--primary)'
+    return (
+      <div className="metric-ring">
+        <div className="metric-ring-circle" style={{ background: `conic-gradient(${color} ${p}%, rgba(148,163,184,0.18) 0)` }}>
+          <div className="metric-ring-inner">
+            <div className="metric-ring-value">{value}</div>
+            <div className="metric-ring-sub">{label}</div>
+          </div>
         </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   const fetchMetrics = async (serverId) => {
     setMetricsLoading(true)
