@@ -1,5 +1,7 @@
+import os
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter
 from sqlmodel import select
@@ -8,6 +10,14 @@ from ...db.models import Deployment, DeploymentHistory, Repo, Server
 from ...db.session import run_db
 
 router = APIRouter()
+
+
+def _get_app_tz():
+    name = (os.getenv("NEXUSOPS_TZ") or os.getenv("TZ") or "Asia/Shanghai").strip()
+    try:
+        return ZoneInfo(name)
+    except Exception:
+        return timezone.utc
 
 
 def _env_key(name: str) -> str:
@@ -24,11 +34,13 @@ def _env_key(name: str) -> str:
 @router.get("/overview")
 async def get_overview():
     def _work(session):
-        now = datetime.utcnow()
-        today = now.date()
-        yesterday = (now - timedelta(days=1)).date()
-        cutoff = (now - timedelta(days=6)).date()
-        cutoff_dt = datetime.combine(cutoff, datetime.min.time())
+        tz = _get_app_tz()
+        now_local = datetime.now(timezone.utc).astimezone(tz)
+        today = now_local.date()
+        yesterday = (now_local - timedelta(days=1)).date()
+        cutoff = (now_local - timedelta(days=6)).date()
+        cutoff_local_start = datetime.combine(cutoff, time.min, tzinfo=tz)
+        cutoff_dt = cutoff_local_start.astimezone(timezone.utc).replace(tzinfo=None)
 
         rows = session.exec(
             select(DeploymentHistory.created_at, DeploymentHistory.status).where(DeploymentHistory.created_at >= cutoff_dt)
@@ -41,7 +53,8 @@ async def get_overview():
         for created_at, status in rows:
             if not created_at:
                 continue
-            d = created_at.date()
+            created_utc = created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
+            d = created_utc.astimezone(tz).date()
             if d < cutoff:
                 continue
             key = d.isoformat()
@@ -103,7 +116,10 @@ async def get_overview():
 
         feed = []
         for hid, deployment_id, created_at, status, ref, dep_name, server_name, repo_name, repo_branch, pipeline_id in feed_rows:
-            ts = created_at.isoformat() if created_at else None
+            ts = None
+            if created_at:
+                created_utc = created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
+                ts = created_utc.isoformat()
             branch = (ref or repo_branch or "").strip() or None
             feed.append(
                 {
