@@ -56,9 +56,21 @@ function SmartAgentIllustration() {
         <rect x="28" y="24" width="464" height="312" rx="22" fill="url(#bg)" stroke="rgba(226,232,240,0.9)" />
       </g>
 
-      <path d="M72 258c58-44 120-58 186-42 38 9 68 5 90-14 24-20 55-30 100-28" stroke="rgba(22,163,74,0.30)" strokeWidth="2.5" />
-      <path d="M76 276c70-62 150-72 238-30 42 20 78 20 108 0" stroke="rgba(59,130,246,0.22)" strokeWidth="2.5" />
-      <path d="M88 210c48-40 98-54 150-42 26 6 48 4 66-6" stroke="rgba(22,163,74,0.20)" strokeWidth="2.5" />
+      <path id="p1" d="M72 258c58-44 120-58 186-42 38 9 68 5 90-14 24-20 55-30 100-28" stroke="rgba(22,163,74,0.30)" strokeWidth="2.5" />
+      <path id="p2" d="M76 276c70-62 150-72 238-30 42 20 78 20 108 0" stroke="rgba(59,130,246,0.22)" strokeWidth="2.5" />
+      <path id="p3" d="M88 210c48-40 98-54 150-42 26 6 48 4 66-6" stroke="rgba(22,163,74,0.20)" strokeWidth="2.5" />
+
+      <g className="login-flow">
+        <circle r="4" fill="#22C55E">
+          <animateMotion dur="10s" repeatCount="indefinite" path="M72 258c58-44 120-58 186-42 38 9 68 5 90-14 24-20 55-30 100-28" />
+        </circle>
+        <circle r="3.2" fill="#16A34A" opacity="0.9">
+          <animateMotion dur="12s" repeatCount="indefinite" begin="-4s" path="M76 276c70-62 150-72 238-30 42 20 78 20 108 0" />
+        </circle>
+        <circle r="2.8" fill="#3B82F6" opacity="0.85">
+          <animateMotion dur="11s" repeatCount="indefinite" begin="-7s" path="M88 210c48-40 98-54 150-42 26 6 48 4 66-6" />
+        </circle>
+      </g>
 
       <g opacity="0.98">
         <rect x="76" y="176" width="112" height="86" rx="14" fill="rgba(255,255,255,0.78)" stroke="rgba(226,232,240,0.9)" />
@@ -112,6 +124,7 @@ export default function Login() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [remember, setRemember] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -129,90 +142,108 @@ export default function Login() {
   return (
     <div className="login-page">
       <div className="login-inner">
-        <div className="login-left">
-          <div className="login-brand">
-            <BrandMark />
-            <div>
-              <div className="login-brand-title">NexusOps</div>
-              <div className="login-brand-sub">智能运维运营平台</div>
+        <div className="login-shell">
+          <div className="login-shell-top">
+            <div className="login-shell-status">
+              <span className="login-status-dot" />
+              <span>系统全服务就绪</span>
+              <span className="login-status-sub">(All Services Operational)</span>
+            </div>
+            <div className="login-shell-badges">
+              <span className="login-badge">
+                <Icon name="shield-halved" /> 安全审核
+              </span>
             </div>
           </div>
-          <div className="login-hero">
-            <div className="login-hero-title">Smart Agent · 部署与运营自动化</div>
-            <div className="login-hero-desc">以统一的工作流、可审计的变更记录与权限体系，连接应用、主机与仓库。</div>
-          </div>
-          <div className="login-hero-illu">
-            <SmartAgentIllustration />
-          </div>
-        </div>
 
-        <div className="login-right">
-          <div className="login-card">
-            <div className="login-card-head">
-              <div className="login-card-title">欢迎登录</div>
-              <div className="login-card-sub">您的账号 {defaultUserHint} 已准备就绪</div>
-            </div>
-
-            <div className="login-field">
-              <div className="login-field-label">账号</div>
-              <div className="login-input">
-                <span className="login-input-icon">
-                  <Icon name="user" />
-                </span>
-                <input
-                  className="login-input-ctrl"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder={defaultUserHint}
-                  autoComplete="username"
-                  onKeyDown={(e) => (e.key === 'Enter' ? submit() : null)}
-                />
+          <div className="login-shell-body">
+            <div className="login-left">
+              <div className="login-brand">
+                <BrandMark />
+                <div>
+                  <div className="login-brand-title">NexusOps</div>
+                  <div className="login-brand-sub">智能运维运营平台</div>
+                </div>
+              </div>
+              <div className="login-hero">
+                <div className="login-hero-title">Smart Agent · 部署与运营自动化</div>
+                <div className="login-hero-desc">以统一的工作流、可审计的变更记录与权限体系，连接应用、主机与仓库。</div>
+              </div>
+              <div className="login-hero-illu">
+                <SmartAgentIllustration />
               </div>
             </div>
 
-            <div className="login-field">
-              <div className="login-field-label">密码</div>
-              <div className="login-input">
-                <span className="login-input-icon">
-                  <Icon name="lock" />
-                </span>
-                <input
-                  className="login-input-ctrl"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="请输入密码"
-                  autoComplete="current-password"
-                  onKeyDown={(e) => (e.key === 'Enter' ? submit() : null)}
-                />
-                <button className="login-input-suffix" type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? '隐藏密码' : '显示密码'}>
-                  <Icon name={showPassword ? 'eye-slash' : 'eye'} />
+            <div className="login-right">
+              <div className="login-card">
+                <div className="login-card-head">
+                  <div className="login-card-title">欢迎登录</div>
+                  <div className="login-card-sub">您的账号 {defaultUserHint} 已准备就绪</div>
+                </div>
+
+                <div className="login-input">
+                  <span className="login-input-icon" aria-hidden="true">
+                    <Icon name="user" />
+                  </span>
+                  <input
+                    className="login-input-ctrl"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="请输入账号"
+                    autoComplete="username"
+                    aria-label="账号"
+                    onKeyDown={(e) => (e.key === 'Enter' ? submit() : null)}
+                  />
+                </div>
+
+                <div className="login-input" style={{ marginTop: 12 }}>
+                  <span className="login-input-icon" aria-hidden="true">
+                    <Icon name="lock" />
+                  </span>
+                  <input
+                    className="login-input-ctrl"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="请输入密码"
+                    autoComplete="current-password"
+                    aria-label="密码"
+                    onKeyDown={(e) => (e.key === 'Enter' ? submit() : null)}
+                  />
+                  <button className="login-input-suffix" type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? '隐藏密码' : '显示密码'}>
+                    <Icon name={showPassword ? 'eye-slash' : 'eye'} />
+                  </button>
+                </div>
+
+                <label className="login-remember">
+                  <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+                  记住我
+                </label>
+
+                {error ? <div className="login-error">{error}</div> : null}
+
+                <button className="btn btn-primary login-submit" disabled={submitting} onClick={submit}>
+                  <Icon name={submitting ? 'spinner fa-spin' : 'right-to-bracket'} /> {submitting ? '登录中...' : '登录'}
                 </button>
+
+                <div className="login-links">
+                  <button className="login-link" type="button">
+                    忘记密码？
+                  </button>
+                  <span className="login-link-sep" />
+                  <button className="login-link" type="button">
+                    注册新账号
+                  </button>
+                  <span className="login-link-sep" />
+                  <button className="login-link" type="button">
+                    使用 SSO 登录
+                  </button>
+                </div>
               </div>
-            </div>
 
-            {error ? <div className="login-error">{error}</div> : null}
-
-            <button className="btn btn-primary login-submit" disabled={submitting} onClick={submit}>
-              <Icon name={submitting ? 'spinner fa-spin' : 'right-to-bracket'} /> {submitting ? '登录中...' : '登录'}
-            </button>
-
-            <div className="login-links">
-              <button className="login-link" type="button">
-                忘记密码？
-              </button>
-              <span className="login-link-sep" />
-              <button className="login-link" type="button">
-                注册新账号
-              </button>
-              <span className="login-link-sep" />
-              <button className="login-link" type="button">
-                使用 SSO 登录
-              </button>
+              <div className="login-foot">© NexusOps</div>
             </div>
           </div>
-
-          <div className="login-foot">© {new Date().getFullYear()} NexusOps</div>
         </div>
       </div>
     </div>

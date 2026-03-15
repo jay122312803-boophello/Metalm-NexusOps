@@ -228,14 +228,64 @@ body {
   align-items: stretch;
   justify-content: center;
   overflow: auto;
+  position: relative;
+}
+.login-page::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(900px 460px at 15% 10%, rgba(22,163,74,0.10), rgba(248,250,252,0) 60%),
+    radial-gradient(760px 420px at 85% 12%, rgba(59,130,246,0.07), rgba(248,250,252,0) 58%),
+    radial-gradient(840px 520px at 70% 92%, rgba(22,163,74,0.06), rgba(248,250,252,0) 62%),
+    radial-gradient(720px 520px at 8% 92%, rgba(59,130,246,0.05), rgba(248,250,252,0) 62%);
+  opacity: 1;
+}
+.login-page::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20width%3D%271280%27%20height%3D%27720%27%20viewBox%3D%270%200%201280%20720%27%3E%3Cg%20fill%3D%27none%27%3E%3Cpath%20d%3D%27M120%20160%20C%20280%20100%2C%20380%20140%2C%20510%20210%20S%20790%20300%2C%20960%20220%20S%201120%20140%2C%201220%20180%27%20stroke%3D%27%2316a34a%27%20stroke-opacity%3D%270.12%27%20stroke-width%3D%272%27/%3E%3Cpath%20d%3D%27M80%20520%20C%20240%20440%2C%20410%20420%2C%20560%20480%20S%20840%20610%2C%201020%20540%20S%201170%20480%2C%201240%20510%27%20stroke%3D%27%233b82f6%27%20stroke-opacity%3D%270.10%27%20stroke-width%3D%272%27/%3E%3Cg%20stroke%3D%27%2394a3b8%27%20stroke-opacity%3D%270.12%27%20stroke-width%3D%271.5%27%3E%3Cpath%20d%3D%27M190%20220%20L%20320%20160%20L%20440%20210%20L%20590%20170%20L%20730%20240%27/%3E%3Cpath%20d%3D%27M220%20480%20L%20370%20420%20L%20510%20470%20L%20660%20440%20L%20820%20490%27/%3E%3C/g%3E%3Cg%3E%3Ccircle%20cx%3D%27190%27%20cy%3D%27220%27%20r%3D%275%27%20fill%3D%27%2316a34a%27%20fill-opacity%3D%270.18%27/%3E%3Ccircle%20cx%3D%27320%27%20cy%3D%27160%27%20r%3D%274%27%20fill%3D%27%2316a34a%27%20fill-opacity%3D%270.16%27/%3E%3Ccircle%20cx%3D%27440%27%20cy%3D%27210%27%20r%3D%274%27%20fill%3D%27%233b82f6%27%20fill-opacity%3D%270.14%27/%3E%3Ccircle%20cx%3D%27590%27%20cy%3D%27170%27%20r%3D%273.5%27%20fill%3D%27%2316a34a%27%20fill-opacity%3D%270.14%27/%3E%3Ccircle%20cx%3D%27730%27%20cy%3D%27240%27%20r%3D%274%27%20fill%3D%27%233b82f6%27%20fill-opacity%3D%270.12%27/%3E%3Ccircle%20cx%3D%27220%27%20cy%3D%27480%27%20r%3D%275%27%20fill%3D%27%233b82f6%27%20fill-opacity%3D%270.14%27/%3E%3Ccircle%20cx%3D%27370%27%20cy%3D%27420%27%20r%3D%274%27%20fill%3D%27%2316a34a%27%20fill-opacity%3D%270.14%27/%3E%3Ccircle%20cx%3D%27510%27%20cy%3D%27470%27%20r%3D%274%27%20fill%3D%27%233b82f6%27%20fill-opacity%3D%270.12%27/%3E%3Ccircle%20cx%3D%27660%27%20cy%3D%27440%27%20r%3D%273.5%27%20fill%3D%27%2316a34a%27%20fill-opacity%3D%270.12%27/%3E%3Ccircle%20cx%3D%27820%27%20cy%3D%27490%27%20r%3D%274%27%20fill%3D%27%233b82f6%27%20fill-opacity%3D%270.11%27/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  background-size: 1280px 720px;
+  background-position: center;
+  background-repeat: repeat;
+  opacity: 0.55;
+  mask-image: radial-gradient(circle at 50% 50%, rgba(0,0,0,0.8), rgba(0,0,0,0.0) 68%);
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, rgba(0,0,0,0.8), rgba(0,0,0,0.0) 68%);
 }
 .login-inner {
   width: 100%;
   max-width: 1440px;
+  padding: clamp(18px, 2.6vw, 40px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 1;
+}
+.login-shell {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  background: rgba(255,255,255,0.72);
+  border: 1px solid rgba(226,232,240,0.95);
+  border-radius: 22px;
+  box-shadow: 0 12px 30px rgba(15,23,42,0.08);
+  padding: clamp(18px, 2.4vw, 28px);
+}
+.login-shell-top { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.login-shell-status { display: flex; align-items: center; gap: 10px; color: var(--text-sub); font-weight: 700; font-size: 13px; }
+.login-status-dot { width: 9px; height: 9px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 0 3px rgba(34,197,94,0.16); }
+.login-status-sub { color: #94a3b8; font-weight: 600; }
+.login-shell-badges { display: flex; align-items: center; gap: 10px; }
+.login-badge { display: inline-flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 999px; border: 1px solid rgba(226,232,240,0.95); background: rgba(255,255,255,0.85); color: var(--text-sub); font-size: 12px; font-weight: 800; }
+.login-shell-body {
   display: grid;
   grid-template-columns: 1.25fr 0.75fr;
   gap: clamp(18px, 3vw, 56px);
-  padding: clamp(18px, 2.6vw, 40px);
   align-items: stretch;
 }
 .login-left {
@@ -249,7 +299,7 @@ body {
   padding: clamp(18px, 2.2vw, 28px);
   display: flex;
   flex-direction: column;
-  min-height: 520px;
+  min-height: 560px;
 }
 .login-brand { display: flex; align-items: center; gap: 14px; }
 .login-brand-title { font-weight: 950; font-size: 22px; letter-spacing: 0.2px; }
@@ -259,6 +309,8 @@ body {
 .login-hero-desc { margin-top: 10px; max-width: 540px; color: var(--text-sub); font-size: 14px; line-height: 1.6; }
 .login-hero-illu { margin-top: auto; display: flex; justify-content: center; align-items: flex-end; padding-top: 10px; }
 .login-illu { width: min(560px, 100%); height: auto; }
+.login-flow { filter: drop-shadow(0 6px 10px rgba(22,163,74,0.14)); }
+.login-flow circle { opacity: 0.92; }
 
 .login-right {
   display: flex;
@@ -311,6 +363,8 @@ body {
   border-radius: 8px;
 }
 .login-input-suffix:hover { background: #f1f5f9; color: var(--text-main); }
+.login-remember { margin-top: 12px; display: inline-flex; align-items: center; gap: 10px; color: var(--text-sub); font-weight: 700; font-size: 13px; user-select: none; }
+.login-remember input { width: 16px; height: 16px; accent-color: var(--primary); }
 .login-error {
   margin-top: 12px;
   padding: 10px 12px;
@@ -328,7 +382,7 @@ body {
 .login-foot { text-align: center; color: #94a3b8; font-size: 12px; }
 
 @media (max-width: 980px) {
-  .login-inner { grid-template-columns: 1fr; }
+  .login-shell-body { grid-template-columns: 1fr; }
   .login-left { min-height: 420px; }
 }
 .search-box input { border: 0; outline: none; background: transparent; flex: 1; font-size: 13px; color: var(--text-main); min-width: 0; }
