@@ -59,6 +59,19 @@ export default function Settings({ initialTab }) {
     return false
   }
 
+  const envBadge = (env, serverName) => {
+    const e = String(env || '').toUpperCase()
+    if (e === 'PROD') return <span className="badge badge-prod">PROD</span>
+    if (e === 'TEST') return <span className="badge badge-test">TEST</span>
+    if (e === 'DEV') return <span className="badge badge-dev">DEV</span>
+    const name = serverName || ''
+    const low = name.toLowerCase()
+    if (name.includes('生产') || low.includes('prod')) return <span className="badge badge-prod">PROD</span>
+    if (name.includes('测试') || low.includes('test')) return <span className="badge badge-test">TEST</span>
+    if (name.includes('开发') || low.includes('dev')) return <span className="badge badge-dev">DEV</span>
+    return null
+  }
+
   const addr = (formServer.address || '').trim()
   const addrOk = addr ? isValidHost(addr) : null
   const gitUrl = (formRepo.url || '').trim()
@@ -232,41 +245,57 @@ export default function Settings({ initialTab }) {
 
         <div className="settings-body">
           {activeTab === 'servers' ? (
-            <div className="grid-servers">
+            <div className="settings-grid">
               {filteredServers.map((s) => (
-                <div key={s.id} className="card server-card">
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                <div key={s.id} className="card">
+                  <div className="settings-card-header">
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 0 }}>
                       <span className="status-dot online" style={{ marginTop: 6 }} />
-                      <div style={{ fontSize: 16, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {s.name}
-                      </div>
-                      <span style={{ color: 'var(--text-sub)', fontSize: 12, fontFamily: 'monospace' }}>{`ID:${String(s.id || '').slice(0, 6)}`}</span>
+                      <div className="settings-card-title">{s.name}</div>
+                      <span className="settings-card-id">{String(s.id || '').slice(0, 6)}</span>
+                      {envBadge(s.environment, s.name)}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <div className="icon-btn" title="编辑" onClick={() => openEditServer(s)}>
+                      <button type="button" className="icon-btn" title="编辑" onClick={() => openEditServer(s)}>
                         <Icon name="pen-to-square" />
-                      </div>
-                      <div className="icon-btn" title="删除" style={{ color: 'var(--danger)' }} onClick={() => openDelete('server', s)}>
+                      </button>
+                      <button type="button" className="icon-btn" title="删除" style={{ color: 'var(--danger)' }} onClick={() => openDelete('server', s)}>
                         <Icon name="trash" />
-                      </div>
+                      </button>
                     </div>
                   </div>
-
-                  <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <Icon name="computer" style={{ color: '#94a3b8' }} />
-                    <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', color: 'var(--text-main)' }}>
-                      {s.address}
-                    </span>
-                    {s.ssh_key_configured ? (
-                      <span className="badge badge-gray" style={{ fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                        <Icon name="key" /> SSH Key
+                  <div className="settings-card-body">
+                    <div className="info-row" style={{ marginBottom: 0 }}>
+                      <Icon name="computer" />
+                      <span className="info-key">地址</span>
+                      <span className="info-value" style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>
+                        {s.address || '-'}
                       </span>
-                    ) : null}
-                  </div>
-                  <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-sub)' }}>
-                    <Icon name="folder-open" style={{ color: '#94a3b8' }} />
-                    <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', fontSize: 12 }}>{s.deploy_path}</span>
+                    </div>
+                    <div className="info-row" style={{ marginBottom: 0 }}>
+                      <Icon name="user" />
+                      <span className="info-key">用户</span>
+                      <span className="info-value">{s.ssh_user || 'metalm'}</span>
+                      {s.ssh_key_configured ? (
+                        <span className="badge badge-gray" style={{ fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          <Icon name="key" /> SSH Key
+                        </span>
+                      ) : (
+                        <span
+                          className="badge badge-gray"
+                          style={{ fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(239,68,68,0.10)', color: 'var(--danger)' }}
+                        >
+                          <Icon name="triangle-exclamation" /> 未配置
+                        </span>
+                      )}
+                    </div>
+                    <div className="info-row" style={{ marginBottom: 0 }}>
+                      <Icon name="folder-open" />
+                      <span className="info-key">目录</span>
+                      <span className="info-value" style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', fontSize: 12, fontWeight: 700 }}>
+                        {s.deploy_path || '-'}
+                      </span>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -318,6 +347,13 @@ export default function Settings({ initialTab }) {
                       </td>
                     </tr>
                   ))}
+                  {filteredRepos.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} style={{ padding: 24, color: 'var(--text-sub)', textAlign: 'center' }}>
+                        暂无仓库
+                      </td>
+                    </tr>
+                  ) : null}
                 </tbody>
               </table>
             </div>
@@ -367,7 +403,9 @@ export default function Settings({ initialTab }) {
           {drawerType === 'server' ? (
             <>
               <div className="form-item">
-                <label className="form-label">服务器名称</label>
+                <label className="form-label">
+                  服务器名称 <span className="req-star">*</span>
+                </label>
                 <input
                   className="form-input"
                   placeholder="如: 生产环境-01"
@@ -376,7 +414,9 @@ export default function Settings({ initialTab }) {
                 />
               </div>
               <div className="form-item">
-                <label className="form-label">主机地址</label>
+                <label className="form-label">
+                  主机地址 <span className="req-star">*</span>
+                </label>
                 <div className="input-wrap">
                   <input
                     className="form-input"
@@ -392,7 +432,9 @@ export default function Settings({ initialTab }) {
                 </div>
               </div>
               <div className="form-item">
-                <label className="form-label">部署路径</label>
+                <label className="form-label">
+                  部署路径 <span className="req-star">*</span>
+                </label>
                 <input
                   className="form-input"
                   placeholder="/home/metalm/deploy/NexusOps/"
@@ -414,7 +456,9 @@ export default function Settings({ initialTab }) {
                 </select>
               </div>
               <div className="form-item">
-                <label className="form-label">SSH 登录用户</label>
+                <label className="form-label">
+                  SSH 登录用户 <span className="req-star">*</span>
+                </label>
                 <input
                   className="form-input"
                   placeholder="如: metalm"
@@ -423,7 +467,9 @@ export default function Settings({ initialTab }) {
                 />
               </div>
               <div className="form-item">
-                <label className="form-label">SSH 私钥</label>
+                <label className="form-label">
+                  SSH 私钥 <span className="req-star">*</span>
+                </label>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                   <div style={{ color: 'var(--text-sub)', fontSize: 12 }}>
                     {editingId && serverKeyConfigured ? '已配置（留空不变，输入新值覆盖）' : '可选'}
@@ -452,7 +498,9 @@ export default function Settings({ initialTab }) {
           ) : (
             <>
               <div className="form-item">
-                <label className="form-label">仓库名称</label>
+                <label className="form-label">
+                  仓库名称 <span className="req-star">*</span>
+                </label>
                 <input
                   className="form-input"
                   placeholder="如: Backend API"
@@ -461,7 +509,9 @@ export default function Settings({ initialTab }) {
                 />
               </div>
               <div className="form-item">
-                <label className="form-label">Git URL</label>
+                <label className="form-label">
+                  Git URL <span className="req-star">*</span>
+                </label>
                 <div className="input-wrap">
                   <input
                     className="form-input"
@@ -477,7 +527,9 @@ export default function Settings({ initialTab }) {
                 </div>
               </div>
               <div className="form-item">
-                <label className="form-label">分支</label>
+                <label className="form-label">
+                  分支 <span className="req-star">*</span>
+                </label>
                 <input
                   className="form-input"
                   value={formRepo.branch || 'master'}

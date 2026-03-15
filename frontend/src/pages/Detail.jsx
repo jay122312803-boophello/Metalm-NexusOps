@@ -15,6 +15,12 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
   const [activeHistoryId, setActiveHistoryId] = useState(historyId || null)
   const [pipelineStatus, setPipelineStatus] = useState('unknown')
   const [mode, setMode] = useState('ready')
+  const [monitorOk, setMonitorOk] = useState(false)
+  const [monitorLoading, setMonitorLoading] = useState(false)
+  const [monitorError, setMonitorError] = useState(null)
+  const [monitorGroups, setMonitorGroups] = useState([])
+  const [monitorReload, setMonitorReload] = useState(0)
+  const [monitorEnabled, setMonitorEnabled] = useState(false)
   const [showDraftTip, setShowDraftTip] = useState(true)
   const [draftAction, setDraftAction] = useState(null)
   const [terminalFull, setTerminalFull] = useState(false)
@@ -66,6 +72,7 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
         try {
           const h = await api.get(`/api/history?deployment_id=${encodeURIComponent(taskId)}`)
           const items = Array.isArray(h?.history) ? h.history : []
+          setMonitorOk(items.some((x) => String(x?.status || '').toLowerCase() === 'success'))
           if (items.length) {
             const latest = items[0]
             if (latest?.id) {
@@ -94,6 +101,46 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
     }
     init()
   }, [taskId])
+
+  useEffect(() => {
+    if (viewHistory) return
+    if (rightTab !== 'monitor') return
+    if (!monitorOk) return
+    if (!monitorEnabled) return
+    let alive = true
+    let timer = null
+    const load = async () => {
+      setMonitorLoading(true)
+      setMonitorError(null)
+      try {
+        const res = await api.get(`/api/deployments/${taskId}/monitor`)
+        if (!alive) return
+        if (res?.ok) {
+          setMonitorGroups(Array.isArray(res.groups) ? res.groups : [])
+        } else {
+          const d = res?.detail
+          setMonitorError(typeof d === 'string' ? d : d ? JSON.stringify(d) : '监控失败')
+        }
+      } catch (e) {
+        if (!alive) return
+        setMonitorError('监控失败')
+      } finally {
+        if (alive) setMonitorLoading(false)
+      }
+    }
+    load()
+    timer = setInterval(load, 12000)
+    return () => {
+      alive = false
+      if (timer) clearInterval(timer)
+    }
+  }, [rightTab, monitorOk, monitorEnabled, taskId, viewHistory, monitorReload])
+
+  useEffect(() => {
+    if (rightTab === 'monitor') return
+    if (!monitorEnabled) return
+    setMonitorEnabled(false)
+  }, [rightTab, monitorEnabled])
 
   useEffect(() => {
     if (historyId) {
@@ -134,6 +181,7 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
         const st = d.status || 'unknown'
         setPipelineStatus(st)
         if (st === 'success' && !viewHistory) {
+          setMonitorOk(true)
           setMode('ready')
           setShowDraftTip(false)
         }
@@ -577,6 +625,14 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
           <button className={`tab ${rightTab === 'config' ? 'active' : ''}`} onClick={() => setRightTab('config')}>
             配置文件管理
           </button>
+          <button
+            className={`tab ${rightTab === 'monitor' ? 'active' : ''}`}
+            onClick={() => setRightTab('monitor')}
+            disabled={!monitorOk || viewHistory}
+            title={!monitorOk ? '请先完成首次部署' : viewHistory ? '历史记录不支持实时监控' : ''}
+          >
+            服务实时监控
+          </button>
         </div>
       </div>
 
@@ -650,6 +706,129 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%', minHeight: 0 }}>
           {rightTab === 'terminal' ? (
             renderTerminal()
+          ) : rightTab === 'monitor' ? (
+            <div className="config-pane" style={{ gap: 12 }}>
+              <div className="card" style={{ padding: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+                    <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--text-main)' }}>实时容器状态</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-sub)' }}>
+                      {monitorOk ? (monitorEnabled ? '监听中（每 12 秒刷新一次）' : '点击开始后才会查询远端状态（离开本页签自动断开）') : '请先完成首次部署后启用监控'}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <button
+                      className="btn btn-outline btn-sm"
+                      disabled={!monitorOk || monitorLoading}
+                      onClick={() => {
+                        if (!monitorEnabled) setMonitorEnabled(true)
+                        else setMonitorReload((v) => v + 1)
+                      }}
+                      title={!monitorEnabled ? '开始监听并发起首次查询' : '立即刷新一次'}
+                    >
+                      <Icon name={monitorLoading ? 'spinner fa-spin' : !monitorEnabled ? 'play' : 'arrows-rotate'} /> {!monitorEnabled ? '开始' : '刷新'}
+                    </button>
+                    {monitorEnabled ? (
+                      <button className="btn btn-outline btn-sm" disabled={monitorLoading} onClick={() => setMonitorEnabled(false)}>
+                        <Icon name="stop" /> 停止
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+                {monitorError ? (
+                  <div
+                    style={{
+                      marginTop: 10,
+                      padding: '10px 12px',
+                      borderRadius: 10,
+                      border: '1px solid rgba(239,68,68,0.25)',
+                      background: 'rgba(239,68,68,0.06)',
+                      color: '#b91c1c',
+                      fontSize: 13
+                    }}
+                  >
+                    {monitorError}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                {monitorLoading && monitorGroups.length === 0 ? (
+                  <div style={{ padding: 16, color: 'var(--text-sub)' }}>加载中...</div>
+                ) : monitorGroups.length ? (
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    {monitorGroups.map((g) => {
+                      const list = Array.isArray(g?.containers) ? g.containers : []
+                      const running = list.filter((c) => String(c?.State || '').toLowerCase() === 'running').length
+                      const total = list.length
+                      return (
+                        <details key={g.compose_path} open>
+                          <summary
+                            style={{
+                              listStyle: 'none',
+                              cursor: 'pointer',
+                              padding: '12px 14px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              borderBottom: '1px solid var(--border)',
+                              background: 'linear-gradient(to right, #ffffff, #f8fafc)'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                              <Icon name="layer-group" style={{ color: 'rgba(100,116,139,0.9)' }} />
+                              <span style={{ fontWeight: 700, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {g.compose_path}
+                              </span>
+                            </div>
+                            <span style={{ color: 'var(--text-sub)', fontSize: 12, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>
+                              {running}/{total} running
+                            </span>
+                          </summary>
+                          <div style={{ padding: 0 }}>
+                            <table className="repo-table" style={{ width: '100%' }}>
+                              <thead>
+                                <tr>
+                                  <th>容器</th>
+                                  <th>状态</th>
+                                  <th>镜像</th>
+                                  <th>端口</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {list.length ? (
+                                  list.map((c, idx) => (
+                                    <tr key={c?.Name || `${g.compose_path}-${idx}`}>
+                                      <td style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>{c?.Name || '-'}</td>
+                                      <td>
+                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                                          <span className={`status-dot ${String(c?.State || '').toLowerCase() === 'running' ? 'online' : 'offline'}`} />
+                                          {String(c?.State || 'unknown')}
+                                        </span>
+                                      </td>
+                                      <td style={{ color: 'var(--text-sub)', fontSize: 13 }}>{c?.Image || '-'}</td>
+                                      <td style={{ color: 'var(--text-sub)', fontSize: 13 }}>{c?.Ports || '-'}</td>
+                                    </tr>
+                                  ))
+                                ) : (
+                                  <tr>
+                                    <td colSpan={4} style={{ padding: 14, color: 'var(--text-sub)' }}>
+                                      未发现容器或 compose 命令不可用
+                                    </td>
+                                  </tr>
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </details>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ padding: 16, color: 'var(--text-sub)' }}>暂无监控数据</div>
+                )}
+              </div>
+            </div>
           ) : (
             <div className="config-pane">
               {!viewHistory && mode === 'ready' && showDraftTip ? (

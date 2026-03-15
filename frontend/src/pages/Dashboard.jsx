@@ -1,8 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Icon from '../components/Icon.jsx'
 import Drawer from '../components/Drawer.jsx'
 import Modal from '../components/Modal.jsx'
 import { api } from '../services/api.js'
+import { toast } from '../services/toast.js'
+
+const monitorStorageKey = 'nexusops_monitor_summary_v1'
 
 export default function Dashboard({ onNavigate }) {
   const [tasks, setTasks] = useState([])
@@ -17,6 +20,19 @@ export default function Dashboard({ onNavigate }) {
   const [statusFilter, setStatusFilter] = useState('all')
   const [page, setPage] = useState(1)
   const [scriptHelpOpen, setScriptHelpOpen] = useState(false)
+  const [monitoringById, setMonitoringById] = useState({})
+  const [monitorSummaryById, setMonitorSummaryById] = useState(() => {
+    try {
+      const raw = localStorage.getItem(monitorStorageKey)
+      if (!raw) return {}
+      const parsed = JSON.parse(raw)
+      return parsed && typeof parsed === 'object' ? parsed : {}
+    } catch (_) {
+      return {}
+    }
+  })
+  const monitorIntervalsRef = useRef({})
+  const monitorTimeoutsRef = useRef({})
 
   const load = async () => {
     const ts = await api.get('/api/deployments')
@@ -41,9 +57,66 @@ export default function Dashboard({ onNavigate }) {
     setLastByDeployment(next)
   }
 
+  const stopMonitor = (id) => {
+    const t = monitorIntervalsRef.current[id]
+    if (t) clearInterval(t)
+    delete monitorIntervalsRef.current[id]
+    const k = monitorTimeoutsRef.current[id]
+    if (k) clearTimeout(k)
+    delete monitorTimeoutsRef.current[id]
+    setMonitoringById((p) => {
+      const n = { ...p }
+      delete n[id]
+      return n
+    })
+  }
+
+  const startMonitor = async (id) => {
+    stopMonitor(id)
+    setMonitoringById((p) => ({ ...p, [id]: true }))
+
+    const fetchOnce = async () => {
+      try {
+        const res = await api.get(`/api/deployments/${id}/monitor`)
+        if (res?.ok) {
+          const groups = Array.isArray(res.groups) ? res.groups : []
+          const containers = groups.flatMap((g) => (Array.isArray(g?.containers) ? g.containers : []))
+          const total = containers.length
+          const running = containers.filter((c) => String(c?.State || '').toLowerCase() === 'running').length
+          setMonitorSummaryById((p) => ({ ...p, [id]: { total, running, failed: Math.max(0, total - running), ts: Date.now() } }))
+        } else {
+          const d = res?.detail
+          toast.error(typeof d === 'string' ? d : '监控失败')
+          stopMonitor(id)
+        }
+      } catch (_) {
+        toast.error('监控失败')
+        stopMonitor(id)
+      }
+    }
+
+    await fetchOnce()
+    monitorIntervalsRef.current[id] = setInterval(fetchOnce, 12000)
+    monitorTimeoutsRef.current[id] = setTimeout(() => {
+      stopMonitor(id)
+      toast.success('为节省资源，已自动暂停监控')
+    }, 5 * 60 * 1000)
+  }
+
   useEffect(() => {
     load()
+    const t = setInterval(load, 9000)
+    return () => {
+      clearInterval(t)
+      for (const id of Object.keys(monitorIntervalsRef.current)) stopMonitor(id)
+    }
   }, [])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(monitorStorageKey, JSON.stringify(monitorSummaryById || {}))
+    } catch (_) {}
+  }, [monitorSummaryById])
 
   useEffect(() => {
     const onDoc = () => setOpenMenuId(null)
@@ -228,27 +301,26 @@ export default function Dashboard({ onNavigate }) {
               <div className="task-body">
                 <div className="info-row">
                   <Icon name="server" />
-                  <span>目标: </span>
-                  <span className="info-val">{s.name || 'Unknown'}</span>
+                  <span className="info-key">目标</span>
+                  <span className="info-value">{s.name || 'Unknown'}</span>
                   {envBadge(s.environment, s.name)}
                 </div>
                 <div className="info-row">
                   <Icon name="code-branch" />
-                  <span>来源: </span>
-                  <span className="info-val">{r.name || 'Unknown'}</span>
+                  <span className="info-key">来源</span>
+                  <span className="info-value">{r.name || 'Unknown'}</span>
                   <span className="badge badge-gray">{r.branch || 'master'}</span>
                 </div>
-                <div className="info-row" style={{ marginTop: 16 }}>
+                <div className="info-row">
                   <Icon name="clock" />
-                  上次部署:{' '}
+                  <span className="info-key">上次部署</span>
                   {last?.created_at ? (
                     <>
-                      <span className="info-val">{new Date(last.created_at).toLocaleString()}</span>
+                      <span className="info-value">{new Date(last.created_at).toLocaleString()}</span>
                       {last?.status ? (
                         <span
                           className="badge badge-gray"
                           style={{
-                            marginLeft: 8,
                             background:
                               last.status === 'success'
                                 ? 'rgba(16,185,129,0.12)'
@@ -274,8 +346,58 @@ export default function Dashboard({ onNavigate }) {
                       ) : null}
                     </>
                   ) : (
-                    <span>暂无数据</span>
+                    <span className="info-empty">暂无数据</span>
                   )}
+                </div>
+                <div className="info-row info-row-split">
+                  <div className="info-left">
+                    <Icon name="tower-broadcast" />
+                    <span className="info-key">容器状态</span>
+                    {!last?.created_at ? (
+                      <span className="info-empty">请先完成首次部署</span>
+                    ) : monitorSummaryById[t.id] ? (
+                      <>
+                        <span
+                          className="badge badge-gray"
+                          style={{ background: 'rgba(16,185,129,0.12)', color: 'var(--success)', fontFamily: 'inherit' }}
+                        >
+                          正常 {monitorSummaryById[t.id].running}
+                        </span>
+                        <span
+                          className="badge badge-gray"
+                          style={{ background: 'rgba(239,68,68,0.12)', color: 'var(--danger)', fontFamily: 'inherit' }}
+                        >
+                          异常 {monitorSummaryById[t.id].failed}
+                        </span>
+                        {monitorSummaryById[t.id].ts ? (
+                          <span
+                            className="info-hint"
+                            title={new Date(monitorSummaryById[t.id].ts).toLocaleString()}
+                          >
+                            上次 {new Date(monitorSummaryById[t.id].ts).toLocaleTimeString()}
+                          </span>
+                        ) : null}
+                        <span className="info-hint" title={monitorSummaryById[t.id].ts ? new Date(monitorSummaryById[t.id].ts).toLocaleString() : ''}>
+                          {monitoringById[t.id] ? '监听中' : '已暂停'}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="info-empty">尚未查询</span>
+                    )}
+                  </div>
+                  <button
+                    className="icon-btn"
+                    title={!last?.created_at ? '请先完成首次部署' : monitoringById[t.id] ? '暂停监控' : '开始监控'}
+                    onClick={(ev) => {
+                      ev.stopPropagation()
+                      if (!last?.created_at) return
+                      if (monitoringById[t.id]) stopMonitor(t.id)
+                      else startMonitor(t.id)
+                    }}
+                    disabled={!last?.created_at}
+                  >
+                    <Icon name={monitoringById[t.id] ? 'circle-pause' : 'circle-play'} />
+                  </button>
                 </div>
               </div>
 
@@ -355,7 +477,9 @@ export default function Dashboard({ onNavigate }) {
           ]}
         >
           <div className="form-item">
-            <label className="form-label">实例名称</label>
+            <label className="form-label">
+              实例名称 <span className="req-star">*</span>
+            </label>
             <input
               className="form-input"
               placeholder="Nexus 智能体部署"
@@ -364,7 +488,9 @@ export default function Dashboard({ onNavigate }) {
             />
           </div>
           <div className="form-item">
-            <label className="form-label">选择目标服务器</label>
+            <label className="form-label">
+              选择目标服务器 <span className="req-star">*</span>
+            </label>
             <select
               className="form-input"
               value={newTask.server_id || ''}
@@ -379,7 +505,9 @@ export default function Dashboard({ onNavigate }) {
             </select>
           </div>
           <div className="form-item">
-            <label className="form-label">选择来源仓库</label>
+            <label className="form-label">
+              选择来源仓库 <span className="req-star">*</span>
+            </label>
             <select
               className="form-input"
               value={newTask.repo_id || ''}
@@ -395,7 +523,9 @@ export default function Dashboard({ onNavigate }) {
           </div>
 
           <div className="form-item">
-            <label className="form-label">同步源目录</label>
+            <label className="form-label">
+              同步源目录 <span className="req-star">*</span>
+            </label>
             <input
               className="form-input"
               placeholder="./develop/backend_frontend/"
@@ -404,7 +534,9 @@ export default function Dashboard({ onNavigate }) {
             />
           </div>
           <div className="form-item">
-            <label className="form-label">服务器目标路径</label>
+            <label className="form-label">
+              服务器目标路径 <span className="req-star">*</span>
+            </label>
             <input
               className="form-input"
               placeholder="/home/metalm/deploy/App_A/"
