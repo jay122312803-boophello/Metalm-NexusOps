@@ -367,7 +367,7 @@ export default function Dashboard({ onNavigate }) {
                   )}
                 </div>
                 <div className="info-row info-row-split">
-                  <div className="info-left">
+                  <div className="info-left info-left-tight">
                     <Icon name="tower-broadcast" />
                     <span className="info-key">容器状态</span>
                     {!last?.created_at ? (
@@ -388,31 +388,30 @@ export default function Dashboard({ onNavigate }) {
                         </span>
                         {monitorSummaryById[t.id].ts ? (
                           <Tooltip content={new Date(monitorSummaryById[t.id].ts).toLocaleString()}>
-                            <span className="info-hint">上次 {new Date(monitorSummaryById[t.id].ts).toLocaleTimeString()}</span>
+                            <span className="info-hint">{new Date(monitorSummaryById[t.id].ts).toLocaleTimeString()}</span>
                           </Tooltip>
                         ) : null}
-                        <Tooltip content={monitorSummaryById[t.id].ts ? new Date(monitorSummaryById[t.id].ts).toLocaleString() : ''}>
-                          <span className="info-hint">{monitoringById[t.id] ? '监听中' : '已暂停'}</span>
-                        </Tooltip>
                       </>
                     ) : (
                       <span className="info-empty">尚未查询</span>
                     )}
                   </div>
-                  <Tooltip content={!last?.created_at ? '请先完成首次部署' : monitoringById[t.id] ? '暂停监控' : '开始监控'}>
-                    <button
-                      className="icon-btn"
-                      onClick={(ev) => {
-                        ev.stopPropagation()
-                        if (!last?.created_at) return
-                        if (monitoringById[t.id]) stopMonitor(t.id)
-                        else startMonitor(t.id)
-                      }}
-                      disabled={!last?.created_at}
-                    >
-                      <Icon name={monitoringById[t.id] ? 'circle-pause' : 'circle-play'} />
-                    </button>
-                  </Tooltip>
+                  <div className="info-right">
+                    <Tooltip content={!last?.created_at ? '请先完成首次部署' : monitoringById[t.id] ? '暂停监控' : '开始监控'}>
+                      <button
+                        className="icon-btn"
+                        onClick={(ev) => {
+                          ev.stopPropagation()
+                          if (!last?.created_at) return
+                          if (monitoringById[t.id]) stopMonitor(t.id)
+                          else startMonitor(t.id)
+                        }}
+                        disabled={!last?.created_at}
+                      >
+                        <Icon name={monitoringById[t.id] ? 'circle-pause' : 'circle-play'} />
+                      </button>
+                    </Tooltip>
+                  </div>
                 </div>
               </div>
 
