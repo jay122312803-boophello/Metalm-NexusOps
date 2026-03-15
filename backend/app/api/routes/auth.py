@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 from sqlmodel import select
 
@@ -19,9 +19,9 @@ class LoginRequest(BaseModel):
 
 
 @router.post("/auth/login")
-async def login(req: LoginRequest):
-    username = (req.username or "").strip()
-    password = req.password or ""
+async def login(body: LoginRequest, response: Response, request: Request):
+    username = (body.username or "").strip()
+    password = body.password or ""
     if not username or not password:
         raise HTTPException(status_code=400, detail="Invalid credentials")
 
@@ -43,6 +43,18 @@ async def login(req: LoginRequest):
 
     user, perms = await run_db(_work)
     token, jti, ttl = create_access_token(str(user.id))
+    try:
+        response.set_cookie(
+            "nexusops_token",
+            token,
+            httponly=True,
+            samesite="lax",
+            secure=(request.url.scheme == "https"),
+            max_age=ttl,
+            path="/",
+        )
+    except Exception:
+        pass
     r = get_redis()
     if r is not None:
         try:
@@ -61,7 +73,7 @@ async def login(req: LoginRequest):
 
 
 @router.post("/auth/logout")
-async def logout(req: Request, user: User = Depends(get_current_user)):
+async def logout(req: Request, response: Response, user: User = Depends(get_current_user)):
     r = get_redis()
     if r is not None:
         try:
@@ -75,6 +87,10 @@ async def logout(req: Request, user: User = Depends(get_current_user)):
                 r.srem(f"user_sess:{user.id}", jti)
         except Exception:
             pass
+    try:
+        response.delete_cookie("nexusops_token", path="/")
+    except Exception:
+        pass
     return {"ok": True}
 
 

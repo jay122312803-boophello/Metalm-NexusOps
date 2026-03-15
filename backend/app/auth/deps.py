@@ -13,7 +13,8 @@ from .security import decode_token, jwt_ttl_seconds
 def _bearer_token(req: Request) -> str | None:
     h = (req.headers.get("authorization") or "").strip()
     if not h:
-        return None
+        c = (req.cookies.get("nexusops_token") or "").strip()
+        return c or None
     if not h.lower().startswith("bearer "):
         return None
     return h[7:].strip() or None
