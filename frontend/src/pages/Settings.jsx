@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Drawer from '../components/Drawer.jsx'
 import Icon from '../components/Icon.jsx'
 import Modal from '../components/Modal.jsx'
@@ -25,6 +25,12 @@ export default function Settings({ initialTab }) {
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleteError, setDeleteError] = useState(null)
   const [deleting, setDeleting] = useState(false)
+  const [metricsTarget, setMetricsTarget] = useState(null)
+  const [metricsLoading, setMetricsLoading] = useState(false)
+  const [metricsError, setMetricsError] = useState(null)
+  const [metricsData, setMetricsData] = useState(null)
+  const [metricsAuto, setMetricsAuto] = useState(true)
+  const metricsTimerRef = useRef(null)
 
   const refresh = async () => {
     const sv = await api.get('/api/servers')
@@ -71,6 +77,73 @@ export default function Settings({ initialTab }) {
     if (name.includes('开发') || low.includes('dev')) return <span className="badge badge-dev">DEV</span>
     return null
   }
+
+  const fmtBytes = (n) => {
+    const v = Number(n || 0)
+    if (!Number.isFinite(v) || v <= 0) return '0B'
+    const units = ['B', 'KB', 'MB', 'GB', 'TB']
+    let x = v
+    let i = 0
+    while (x >= 1024 && i < units.length - 1) {
+      x /= 1024
+      i++
+    }
+    return `${x.toFixed(i === 0 ? 0 : 1)}${units[i]}`
+  }
+
+  const clampPct = (v) => {
+    const n = Number(v)
+    if (!Number.isFinite(n)) return 0
+    return Math.max(0, Math.min(100, n))
+  }
+
+  const MetricRing = ({ label, percent, value }) => (
+    <div className="metric-ring">
+      <div className="metric-ring-circle" style={{ background: `conic-gradient(var(--primary) ${percent}%, rgba(148,163,184,0.18) 0)` }}>
+        <div className="metric-ring-inner">
+          <div className="metric-ring-value">{value}</div>
+          <div className="metric-ring-sub">{label}</div>
+        </div>
+      </div>
+    </div>
+  )
+
+  const fetchMetrics = async (serverId) => {
+    setMetricsLoading(true)
+    setMetricsError(null)
+    try {
+      const res = await api.get(`/api/servers/${serverId}/metrics`)
+      if (res?.ok) {
+        setMetricsData(res)
+      } else {
+        const d = res?.detail
+        setMetricsError(typeof d === 'string' ? d : d ? JSON.stringify(d) : '获取失败')
+      }
+    } catch (_) {
+      setMetricsError('获取失败')
+    } finally {
+      setMetricsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!metricsTarget) return
+    fetchMetrics(metricsTarget.id)
+  }, [metricsTarget])
+
+  useEffect(() => {
+    if (metricsTimerRef.current) {
+      clearInterval(metricsTimerRef.current)
+      metricsTimerRef.current = null
+    }
+    if (!metricsTarget) return
+    if (!metricsAuto) return
+    metricsTimerRef.current = setInterval(() => fetchMetrics(metricsTarget.id), 10000)
+    return () => {
+      if (metricsTimerRef.current) clearInterval(metricsTimerRef.current)
+      metricsTimerRef.current = null
+    }
+  }, [metricsTarget, metricsAuto])
 
   const addr = (formServer.address || '').trim()
   const addrOk = addr ? isValidHost(addr) : null
@@ -256,6 +329,19 @@ export default function Settings({ initialTab }) {
                       {envBadge(s.environment, s.name)}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        title="资源监控"
+                        onClick={() => {
+                          setMetricsAuto(true)
+                          setMetricsData(null)
+                          setMetricsError(null)
+                          setMetricsTarget(s)
+                        }}
+                      >
+                        <Icon name="gauge-high" />
+                      </button>
                       <button type="button" className="icon-btn" title="编辑" onClick={() => openEditServer(s)}>
                         <Icon name="pen-to-square" />
                       </button>
@@ -568,6 +654,94 @@ export default function Settings({ initialTab }) {
               </div>
             </>
           )}
+        </Drawer>
+      ) : null}
+
+      {metricsTarget ? (
+        <Drawer
+          title={`${metricsTarget.name} 资源监控`}
+          onClose={() => {
+            if (metricsTimerRef.current) clearInterval(metricsTimerRef.current)
+            metricsTimerRef.current = null
+            setMetricsTarget(null)
+            setMetricsData(null)
+            setMetricsError(null)
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-sub)', fontSize: 13 }}>
+              <span className="badge badge-gray" style={{ fontFamily: 'inherit' }}>
+                {metricsAuto ? '自动刷新 10s' : '已暂停'}
+              </span>
+              {metricsData?.ts ? <span>更新于 {new Date(metricsData.ts).toLocaleTimeString()}</span> : <span>未更新</span>}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button className="btn btn-outline btn-sm" onClick={() => setMetricsAuto((v) => !v)}>
+                <Icon name={metricsAuto ? 'circle-pause' : 'circle-play'} /> {metricsAuto ? '暂停' : '开启'}
+              </button>
+              <button className="btn btn-outline btn-sm" disabled={metricsLoading} onClick={() => fetchMetrics(metricsTarget.id)}>
+                <Icon name={metricsLoading ? 'spinner fa-spin' : 'arrows-rotate'} /> 刷新
+              </button>
+            </div>
+          </div>
+
+          {metricsError ? (
+            <div
+              style={{
+                marginBottom: 14,
+                padding: '10px 12px',
+                borderRadius: 10,
+                border: '1px solid rgba(239,68,68,0.25)',
+                background: 'rgba(239,68,68,0.06)',
+                color: '#b91c1c',
+                fontSize: 13
+              }}
+            >
+              {metricsError}
+            </div>
+          ) : null}
+
+          <div className="metric-grid">
+            <MetricRing
+              label="CPU"
+              percent={clampPct(metricsData?.metrics?.cpu_usage)}
+              value={`${clampPct(metricsData?.metrics?.cpu_usage).toFixed(1)}%`}
+            />
+            <MetricRing
+              label="内存"
+              percent={clampPct(metricsData?.metrics?.memory?.percent)}
+              value={`${clampPct(metricsData?.metrics?.memory?.percent).toFixed(1)}%`}
+            />
+            <MetricRing
+              label="磁盘 /"
+              percent={clampPct(String(metricsData?.metrics?.disk?.percent || '').replace('%', ''))}
+              value={`${clampPct(String(metricsData?.metrics?.disk?.percent || '').replace('%', '')).toFixed(0)}%`}
+            />
+          </div>
+
+          <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div className="card" style={{ padding: 14 }}>
+              <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 10 }}>详细信息</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 8, fontSize: 13 }}>
+                <div style={{ color: 'var(--text-sub)' }}>Uptime</div>
+                <div>{metricsData?.metrics?.uptime || '-'}</div>
+                <div style={{ color: 'var(--text-sub)' }}>Load</div>
+                <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>{metricsData?.metrics?.load || '-'}</div>
+                <div style={{ color: 'var(--text-sub)' }}>内存</div>
+                <div>
+                  {Number.isFinite(Number(metricsData?.metrics?.memory?.used)) ? `${fmtBytes(Number(metricsData.metrics.memory.used) * 1024)} / ${fmtBytes(Number(metricsData.metrics.memory.total) * 1024)}` : '-'}
+                </div>
+                <div style={{ color: 'var(--text-sub)' }}>磁盘</div>
+                <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>
+                  {metricsData?.metrics?.disk?.used && metricsData?.metrics?.disk?.total ? `${metricsData.metrics.disk.used} / ${metricsData.metrics.disk.total}` : '-'}
+                </div>
+                <div style={{ color: 'var(--text-sub)' }}>网络</div>
+                <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>
+                  {metricsData?.metrics?.network ? `RX ${fmtBytes(metricsData.metrics.network.rx)} · TX ${fmtBytes(metricsData.metrics.network.tx)}` : '-'}
+                </div>
+              </div>
+            </div>
+          </div>
         </Drawer>
       ) : null}
 
