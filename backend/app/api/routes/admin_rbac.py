@@ -14,6 +14,19 @@ from ...db.session import run_db
 
 router = APIRouter()
 
+def _kick_user_sessions(uid: uuid.UUID) -> None:
+    r = get_redis()
+    if r is None:
+        return
+    try:
+        key = f"user_sess:{uid}"
+        jtis = list(r.smembers(key) or [])
+        if jtis:
+            r.delete(*[f"sess:{x}" for x in jtis])
+        r.delete(key)
+    except Exception:
+        pass
+
 
 class CreateUserRequest(BaseModel):
     username: str
@@ -59,7 +72,7 @@ async def list_permissions():
 @router.get("/admin/roles", dependencies=[Depends(require_permission("rbac:manage"))])
 async def list_roles():
     def _work(session):
-        roles = session.exec(select(Role).order_by(Role.code.asc())).all()
+        roles = session.exec(select(Role).where(Role.is_deleted == False).order_by(Role.code.asc())).all()
         role_ids = [r.id for r in roles]
         rp = {}
         if role_ids:
@@ -105,7 +118,7 @@ async def set_role_permissions(role_id: str, req: SetRolePermissionsRequest):
 
     def _work(session):
         r = session.get(Role, rid)
-        if not r:
+        if not r or r.is_deleted:
             raise HTTPException(status_code=404, detail="Role not found")
         session.exec(delete(RolePermission).where(RolePermission.role_id == rid))
         for pid in pids:
@@ -119,10 +132,34 @@ async def set_role_permissions(role_id: str, req: SetRolePermissionsRequest):
     return {"ok": True}
 
 
+@router.delete("/admin/roles/{role_id}")
+async def delete_role(role_id: str, user=Depends(require_permission("rbac:manage"))):
+    rid = uuid.UUID(role_id)
+
+    def _work(session):
+        r = session.get(Role, rid)
+        if not r or r.is_deleted:
+            raise HTTPException(status_code=404, detail="Role not found")
+        if (r.code or "").strip().lower() == "admin":
+            raise HTTPException(status_code=400, detail="admin 角色不可删除")
+        used = session.exec(select(UserRole.user_id).where(UserRole.role_id == rid).limit(1)).first()
+        if used:
+            raise HTTPException(status_code=409, detail="角色仍被使用，无法删除")
+        r.is_deleted = True
+        r.deleted_at = datetime.utcnow()
+        r.updated_at = datetime.utcnow()
+        session.add(r)
+        session.commit()
+        return True
+
+    await run_db(_work)
+    return {"ok": True}
+
+
 @router.get("/admin/users", dependencies=[Depends(require_permission("rbac:manage"))])
 async def list_users():
     def _work(session):
-        users = session.exec(select(User).order_by(User.username.asc())).all()
+        users = session.exec(select(User).where(User.is_deleted == False).order_by(User.username.asc())).all()
         uids = [u.id for u in users]
         ur = {}
         if uids:
@@ -177,7 +214,7 @@ async def update_user(user_id: str, req: UpdateUserRequest):
 
     def _work(session):
         u = session.get(User, uid)
-        if not u:
+        if not u or u.is_deleted:
             raise HTTPException(status_code=404, detail="User not found")
         if req.display_name is not None:
             u.display_name = req.display_name
@@ -190,16 +227,33 @@ async def update_user(user_id: str, req: UpdateUserRequest):
 
     await run_db(_work)
     if req.is_active is not None and not bool(req.is_active):
-        r = get_redis()
-        if r is not None:
-            try:
-                key = f"user_sess:{uid}"
-                jtis = list(r.smembers(key) or [])
-                if jtis:
-                    r.delete(*[f"sess:{x}" for x in jtis])
-                r.delete(key)
-            except Exception:
-                pass
+        _kick_user_sessions(uid)
+    return {"ok": True}
+
+
+@router.delete("/admin/users/{user_id}")
+async def delete_user(user_id: str, user=Depends(require_permission("rbac:manage"))):
+    uid = uuid.UUID(user_id)
+
+    if str(uid) == str(user.id):
+        raise HTTPException(status_code=400, detail="不能删除当前登录账号")
+
+    def _work(session):
+        u = session.get(User, uid)
+        if not u or u.is_deleted:
+            raise HTTPException(status_code=404, detail="User not found")
+        if (u.username or "").strip().lower() == "admin":
+            raise HTTPException(status_code=400, detail="admin 账号不可删除")
+        u.is_deleted = True
+        u.deleted_at = datetime.utcnow()
+        u.is_active = False
+        u.updated_at = datetime.utcnow()
+        session.add(u)
+        session.commit()
+        return True
+
+    await run_db(_work)
+    _kick_user_sessions(uid)
     return {"ok": True}
 
 
@@ -211,7 +265,7 @@ async def reset_password(user_id: str, req: ResetPasswordRequest):
 
     def _work(session):
         u = session.get(User, uid)
-        if not u:
+        if not u or u.is_deleted:
             raise HTTPException(status_code=404, detail="User not found")
         u.password_hash = hash_password(req.password)
         u.updated_at = datetime.utcnow()
@@ -230,7 +284,7 @@ async def set_user_roles(user_id: str, req: SetUserRolesRequest):
 
     def _work(session):
         u = session.get(User, uid)
-        if not u:
+        if not u or u.is_deleted:
             raise HTTPException(status_code=404, detail="User not found")
         session.exec(delete(UserRole).where(UserRole.user_id == uid))
         for rid in rids:
@@ -247,14 +301,5 @@ async def set_user_roles(user_id: str, req: SetUserRolesRequest):
 @router.post("/admin/users/{user_id}/kick", dependencies=[Depends(require_permission("rbac:manage"))])
 async def kick_user(user_id: str):
     uid = uuid.UUID(user_id)
-    r = get_redis()
-    if r is not None:
-        try:
-            key = f"user_sess:{uid}"
-            jtis = list(r.smembers(key) or [])
-            if jtis:
-                r.delete(*[f"sess:{x}" for x in jtis])
-            r.delete(key)
-        except Exception:
-            pass
+    _kick_user_sessions(uid)
     return {"ok": True}

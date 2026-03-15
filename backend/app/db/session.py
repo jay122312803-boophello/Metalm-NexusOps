@@ -106,6 +106,11 @@ async def init_db() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_task_config_snapshot_files_snapshot_id ON task_config_snapshot_files(snapshot_id)"))
             conn.execute(text("ALTER TABLE permissions ADD COLUMN IF NOT EXISTS is_visible boolean NOT NULL DEFAULT true"))
 
+            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_deleted boolean NOT NULL DEFAULT false"))
+            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at timestamp"))
+            conn.execute(text("ALTER TABLE roles ADD COLUMN IF NOT EXISTS is_deleted boolean NOT NULL DEFAULT false"))
+            conn.execute(text("ALTER TABLE roles ADD COLUMN IF NOT EXISTS deleted_at timestamp"))
+
             conn.execute(text("ALTER TABLE servers ADD COLUMN IF NOT EXISTS created_by_user_id uuid"))
             conn.execute(text("ALTER TABLE repos ADD COLUMN IF NOT EXISTS created_by_user_id uuid"))
             conn.execute(text("ALTER TABLE deployments ADD COLUMN IF NOT EXISTS created_by_user_id uuid"))

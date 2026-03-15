@@ -563,6 +563,20 @@ body {
 .task-card .info-row i { width: 14px; font-size: 12px; color: rgba(100,116,139,0.78); }
 .task-card .badge { padding: 1px 6px; border-radius: 999px; font-size: 11px; line-height: 1.45; font-family: inherit; font-weight: 800; }
 .task-card .badge-blue, .task-card .badge-gray, .task-card .badge-prod, .task-card .badge-dev, .task-card .badge-test { padding: 1px 6px; border-radius: 999px; font-size: 11px; line-height: 1.45; font-family: inherit; font-weight: 800; }
+.task-card .info-value { font-weight: 600; }
+.task-card .info-time {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(148,163,184,0.14);
+  border: 1px solid rgba(100,116,139,0.16);
+  color: rgba(15,23,42,0.86);
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 600;
+  line-height: 1.45;
+}
 .info-val { color: var(--text-main); font-weight: 500; }
 .info-key { min-width: 50px; color: #64748b; font-weight: 700; letter-spacing: 0.2px; }
 .info-value { color: var(--text-main); font-weight: 700; }

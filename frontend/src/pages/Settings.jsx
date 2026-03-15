@@ -6,12 +6,30 @@ import Select from '../components/Select.jsx'
 import Tooltip from '../components/Tooltip.jsx'
 import Can from '../components/Can.jsx'
 import { api } from '../services/api.js'
+import { useAuth } from '../contexts/AuthContext.jsx'
 
 export default function Settings({ initialTab }) {
+  const SETTINGS_TAB_KEY = 'nexusops_settings_tab'
+  const normalizeTab = (v) => {
+    const t = String(v || '')
+    if (t === 'servers' || t === 'repos' || t === 'rbac') return t
+    return null
+  }
   const [servers, setServers] = useState([])
   const [repos, setRepos] = useState([])
   const [drawerType, setDrawerType] = useState(null)
-  const [activeTab, setActiveTab] = useState('servers')
+  const auth = useAuth()
+  const currentUserId = auth?.user?.id ? String(auth.user.id) : ''
+  const [activeTab, setActiveTab] = useState(() => {
+    const direct = normalizeTab(initialTab)
+    if (direct) return direct
+    try {
+      const saved = normalizeTab(localStorage.getItem(SETTINGS_TAB_KEY))
+      if (saved) return saved
+    } catch {
+    }
+    return 'servers'
+  })
   const [serverQuery, setServerQuery] = useState('')
   const [serverEnv, setServerEnv] = useState('ALL')
   const [repoQuery, setRepoQuery] = useState('')
@@ -53,6 +71,24 @@ export default function Settings({ initialTab }) {
   const [rbacPermsOpen, setRbacPermsOpen] = useState(null)
   const [rbacPermPick, setRbacPermPick] = useState([])
   const [rbacSaving, setRbacSaving] = useState(false)
+  const rbacEverLoadedRef = useRef(false)
+  const rbacInFlightRef = useRef(false)
+  const [rbacDeleteTarget, setRbacDeleteTarget] = useState(null)
+  const [rbacDeleteError, setRbacDeleteError] = useState(null)
+  const [rbacDeleting, setRbacDeleting] = useState(false)
+
+  const goTab = (tab) => {
+    const t = normalizeTab(tab)
+    if (!t) return
+    if (t === activeTab) return
+    setActiveTab(t)
+    try {
+      const path =
+        t === 'repos' ? '/systemManage/repoManage' : t === 'rbac' ? '/systemManage/accountManage' : '/systemManage/serverManage'
+      if (window.location.pathname !== path) window.history.pushState({}, '', path)
+    } catch {
+    }
+  }
 
   const refresh = async () => {
     const sv = await api.get('/api/servers')
@@ -62,6 +98,8 @@ export default function Settings({ initialTab }) {
   }
 
   const loadRbac = async () => {
+    if (rbacInFlightRef.current) return
+    rbacInFlightRef.current = true
     setRbacLoading(true)
     setRbacError(null)
     try {
@@ -73,10 +111,12 @@ export default function Settings({ initialTab }) {
       setRbacUsers(Array.isArray(u?.users) ? u.users : [])
       setRbacRoles(Array.isArray(r?.roles) ? r.roles : [])
       setRbacPerms(Array.isArray(p?.permissions) ? p.permissions : [])
+      rbacEverLoadedRef.current = true
     } catch (e) {
       setRbacError(e?.message || '加载失败')
     } finally {
       setRbacLoading(false)
+      rbacInFlightRef.current = false
     }
   }
 
@@ -86,6 +126,7 @@ export default function Settings({ initialTab }) {
 
   useEffect(() => {
     if (activeTab !== 'rbac') return
+    if (rbacEverLoadedRef.current) return
     loadRbac()
   }, [activeTab])
 
@@ -101,8 +142,16 @@ export default function Settings({ initialTab }) {
 
   useEffect(() => {
     if (!initialTab) return
-    if (initialTab === 'repos' || initialTab === 'servers' || initialTab === 'rbac') setActiveTab(initialTab)
+    const t = normalizeTab(initialTab)
+    if (t && t !== activeTab) setActiveTab(t)
   }, [initialTab])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SETTINGS_TAB_KEY, activeTab)
+    } catch {
+    }
+  }, [activeTab])
 
   const isValidHost = (v) => {
     const s = (v || '').trim()
@@ -419,14 +468,14 @@ export default function Settings({ initialTab }) {
         <div className="page-head" style={{ marginBottom: 0 }}>
           <div className="page-head-left">
             <div className="tabs">
-              <button className={`tab ${activeTab === 'servers' ? 'active' : ''}`} onClick={() => setActiveTab('servers')}>
+              <button className={`tab ${activeTab === 'servers' ? 'active' : ''}`} onClick={() => goTab('servers')}>
                 服务器管理
               </button>
-              <button className={`tab ${activeTab === 'repos' ? 'active' : ''}`} onClick={() => setActiveTab('repos')}>
+              <button className={`tab ${activeTab === 'repos' ? 'active' : ''}`} onClick={() => goTab('repos')}>
                 仓库配置
               </button>
               <Can perm="rbac:manage">
-                <button className={`tab ${activeTab === 'rbac' ? 'active' : ''}`} onClick={() => setActiveTab('rbac')}>
+                <button className={`tab ${activeTab === 'rbac' ? 'active' : ''}`} onClick={() => goTab('rbac')}>
                   账号权限
                 </button>
               </Can>
@@ -736,6 +785,18 @@ export default function Settings({ initialTab }) {
                                   <Icon name="right-from-bracket" />
                                 </button>
                               </Tooltip>
+                              <Tooltip content="删除账号">
+                                <button
+                                  className="btn btn-ghost btn-sm"
+                                  disabled={String(u.username || '').toLowerCase() === 'admin' || (currentUserId && String(u.id) === currentUserId)}
+                                  onClick={() => {
+                                    setRbacDeleteError(null)
+                                    setRbacDeleteTarget({ type: 'user', id: u.id, name: u.display_name || u.username || '账号', username: u.username })
+                                  }}
+                                >
+                                  <Icon name="trash" />
+                                </button>
+                              </Tooltip>
                             </td>
                           </tr>
                         ))}
@@ -792,6 +853,18 @@ export default function Settings({ initialTab }) {
                               <Tooltip content="配置权限">
                                 <button className="btn btn-ghost btn-sm" onClick={() => setRbacPermsOpen(r)}>
                                   <Icon name="sliders" />
+                                </button>
+                              </Tooltip>
+                              <Tooltip content="删除角色">
+                                <button
+                                  className="btn btn-ghost btn-sm"
+                                  disabled={String(r.code || '').toLowerCase() === 'admin'}
+                                  onClick={() => {
+                                    setRbacDeleteError(null)
+                                    setRbacDeleteTarget({ type: 'role', id: r.id, name: r.name || '角色', code: r.code })
+                                  }}
+                                >
+                                  <Icon name="trash" />
                                 </button>
                               </Tooltip>
                             </td>
@@ -1433,6 +1506,60 @@ export default function Settings({ initialTab }) {
                 )
               })}
             </div>
+          </div>
+        </Modal>
+      ) : null}
+
+      {rbacDeleteTarget ? (
+        <Modal
+          danger
+          title={rbacDeleteTarget.type === 'user' ? '删除账号' : '删除角色'}
+          onClose={() => (rbacDeleting ? null : setRbacDeleteTarget(null))}
+          footer={[
+            <button key="c" className="btn btn-outline" onClick={() => setRbacDeleteTarget(null)} disabled={rbacDeleting}>
+              取消
+            </button>,
+            <button
+              key="ok"
+              className="btn btn-danger"
+              onClick={async () => {
+                setRbacDeleting(true)
+                setRbacDeleteError(null)
+                try {
+                  const url =
+                    rbacDeleteTarget.type === 'user'
+                      ? `/api/admin/users/${rbacDeleteTarget.id}`
+                      : `/api/admin/roles/${rbacDeleteTarget.id}`
+                  const res = await api.del(url)
+                  if (res?.ok) {
+                    setRbacDeleteTarget(null)
+                    loadRbac()
+                  } else {
+                    const d = res?.detail
+                    setRbacDeleteError(typeof d === 'string' ? d : d ? JSON.stringify(d) : '删除失败')
+                  }
+                } catch (e) {
+                  setRbacDeleteError(e?.message || '删除失败')
+                } finally {
+                  setRbacDeleting(false)
+                }
+              }}
+              disabled={rbacDeleting}
+            >
+              <Icon name={rbacDeleting ? 'spinner fa-spin' : 'trash'} /> {rbacDeleting ? '删除中...' : '确认删除'}
+            </button>
+          ]}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ color: 'var(--text-sub)', lineHeight: 1.6 }}>
+              将执行逻辑删除，不会从数据库物理移除。
+            </div>
+            <div style={{ fontWeight: 800 }}>
+              {rbacDeleteTarget.type === 'user'
+                ? `${rbacDeleteTarget.name}（${rbacDeleteTarget.username || '-'}）`
+                : `${rbacDeleteTarget.name}（${rbacDeleteTarget.code || '-'}）`}
+            </div>
+            {rbacDeleteError ? <div style={{ color: 'var(--danger)', fontWeight: 700 }}>{rbacDeleteError}</div> : null}
           </div>
         </Modal>
       ) : null}

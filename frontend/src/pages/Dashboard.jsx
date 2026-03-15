@@ -332,7 +332,7 @@ export default function Dashboard({ onNavigate }) {
                   <span className="info-key">上次部署</span>
                   {last?.created_at ? (
                     <>
-                      <span className="info-value">{new Date(last.created_at).toLocaleString()}</span>
+                      <span className="info-time">{new Date(last.created_at).toLocaleString()}</span>
                       {last?.status ? (
                         <Tooltip content={last.pipeline_id ? `Pipeline #${last.pipeline_id}` : ''}>
                           <span
