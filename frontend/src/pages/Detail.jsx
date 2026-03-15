@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import Editor from '@monaco-editor/react'
 import Icon from '../components/Icon.jsx'
 import Modal from '../components/Modal.jsx'
+import Tooltip from '../components/Tooltip.jsx'
 import XTerm from '../components/XTerm.jsx'
 import { api } from '../services/api.js'
 import { toast } from '../services/toast.js'
@@ -536,15 +537,21 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
       <div className="term-header">
         <span>TERMINAL - {activeHistoryId ? `history #${activeHistoryId}` : 'ssh output stream'}</span>
         <div className="term-actions">
-          <div className="term-action-btn" title={terminalFull ? '退出全屏' : '全屏查看'} onClick={() => setTerminalFull((v) => !v)}>
-            <Icon name={terminalFull ? 'compress' : 'expand'} />
-          </div>
-          <div className="term-action-btn" title="复制日志" onClick={handleCopyLogs}>
-            <Icon name="copy" />
-          </div>
-          <div className="term-action-btn" title="清空面板" onClick={handleClearLogs}>
-            <Icon name="trash" />
-          </div>
+          <Tooltip content={terminalFull ? '退出全屏' : '全屏查看'}>
+            <div className="term-action-btn" onClick={() => setTerminalFull((v) => !v)}>
+              <Icon name={terminalFull ? 'compress' : 'expand'} />
+            </div>
+          </Tooltip>
+          <Tooltip content="复制日志">
+            <div className="term-action-btn" onClick={handleCopyLogs}>
+              <Icon name="copy" />
+            </div>
+          </Tooltip>
+          <Tooltip content="清空面板">
+            <div className="term-action-btn" onClick={handleClearLogs}>
+              <Icon name="trash" />
+            </div>
+          </Tooltip>
         </div>
       </div>
       <div className="term-body">
@@ -569,9 +576,11 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
       <div className="panel-frame">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button className="icon-btn back-btn" onClick={onBack} title="返回">
-              <Icon name="arrow-left" />
-            </button>
+            <Tooltip content="返回">
+              <button className="icon-btn back-btn" onClick={onBack}>
+                <Icon name="arrow-left" />
+              </button>
+            </Tooltip>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 0 }}>
               <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, letterSpacing: 0.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {task.name}
@@ -583,14 +592,11 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button
-              className="icon-btn"
-              title="进入审计日志"
-              onClick={() => setHistoryNavOpen(true)}
-              disabled={deploying}
-            >
-              <Icon name="clock-rotate-left" />
-            </button>
+            <Tooltip content="进入审计日志">
+              <button className="icon-btn" onClick={() => setHistoryNavOpen(true)} disabled={deploying}>
+                <Icon name="clock-rotate-left" />
+              </button>
+            </Tooltip>
             <button
               className="btn btn-primary"
               onClick={() => {
@@ -625,14 +631,15 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
           <button className={`tab ${rightTab === 'config' ? 'active' : ''}`} onClick={() => setRightTab('config')}>
             配置文件管理
           </button>
-          <button
-            className={`tab ${rightTab === 'monitor' ? 'active' : ''}`}
-            onClick={() => setRightTab('monitor')}
-            disabled={!monitorOk || viewHistory}
-            title={!monitorOk ? '请先完成首次部署' : viewHistory ? '历史记录不支持实时监控' : ''}
-          >
-            服务实时监控
-          </button>
+          <Tooltip content={!monitorOk ? '请先完成首次部署' : viewHistory ? '历史记录不支持实时监控' : ''}>
+            <button
+              className={`tab ${rightTab === 'monitor' ? 'active' : ''}`}
+              onClick={() => setRightTab('monitor')}
+              disabled={!monitorOk || viewHistory}
+            >
+              服务实时监控
+            </button>
+          </Tooltip>
         </div>
       </div>
 
@@ -717,17 +724,18 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <button
-                      className="btn btn-outline btn-sm"
-                      disabled={!monitorOk || monitorLoading}
-                      onClick={() => {
-                        if (!monitorEnabled) setMonitorEnabled(true)
-                        else setMonitorReload((v) => v + 1)
-                      }}
-                      title={!monitorEnabled ? '开始监听并发起首次查询' : '立即刷新一次'}
-                    >
-                      <Icon name={monitorLoading ? 'spinner fa-spin' : !monitorEnabled ? 'play' : 'arrows-rotate'} /> {!monitorEnabled ? '开始' : '刷新'}
-                    </button>
+                    <Tooltip content={!monitorEnabled ? '开始监听并发起首次查询' : '立即刷新一次'}>
+                      <button
+                        className="btn btn-outline btn-sm"
+                        disabled={!monitorOk || monitorLoading}
+                        onClick={() => {
+                          if (!monitorEnabled) setMonitorEnabled(true)
+                          else setMonitorReload((v) => v + 1)
+                        }}
+                      >
+                        <Icon name={monitorLoading ? 'spinner fa-spin' : !monitorEnabled ? 'play' : 'arrows-rotate'} /> {!monitorEnabled ? '开始' : '刷新'}
+                      </button>
+                    </Tooltip>
                     {monitorEnabled ? (
                       <button className="btn btn-outline btn-sm" disabled={monitorLoading} onClick={() => setMonitorEnabled(false)}>
                         <Icon name="stop" /> 停止
@@ -845,9 +853,11 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
                       <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 8 }}>
                         <Icon name="pen-to-square" style={{ color: 'var(--info)' }} />
                         实例配置
-                        <button className="icon-btn" title="隐藏提示" onClick={() => setShowDraftTip(false)}>
-                          <Icon name="xmark" />
-                        </button>
+                        <Tooltip content="隐藏提示">
+                          <button className="icon-btn" onClick={() => setShowDraftTip(false)}>
+                            <Icon name="xmark" />
+                          </button>
+                        </Tooltip>
                       </div>
                       <div style={{ fontSize: 13, color: 'var(--text-sub)' }}>
                         此处为该实例的固定配置文件，将在每次部署时自动挂载到目标路径。
@@ -869,9 +879,11 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
               <div className="config-tree">
                 <div className="config-tree-head">
                   <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-main)' }}>配置文件</div>
-                  <button className="icon-btn" onClick={() => setAddConfigOpen(true)} disabled={viewHistory} title="新增配置文件">
-                    <Icon name="plus" />
-                  </button>
+                  <Tooltip content="新增配置文件">
+                    <button className="icon-btn" onClick={() => setAddConfigOpen(true)} disabled={viewHistory}>
+                      <Icon name="plus" />
+                    </button>
+                  </Tooltip>
                 </div>
                 <div className="config-tree-list">
                   {configList.length === 0 ? (
@@ -889,34 +901,38 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
                         >
                           <div className="config-item-name">
                             <Icon name="file-lines" />
-                            <span title={f.rel_path}>{f.rel_path}</span>
+                            <Tooltip content={f.rel_path}>
+                              <span>{f.rel_path}</span>
+                            </Tooltip>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             {dirty ? <span className="config-dirty">*</span> : null}
                             {!viewHistory ? (
                               <>
-                                <button
-                                  className="icon-btn"
-                                  style={{ width: 26, height: 26 }}
-                                  title="修改路径"
-                                  onClick={(ev) => {
-                                    ev.stopPropagation()
-                                    openRename(f)
-                                  }}
-                                >
-                                  <Icon name="pen-to-square" />
-                                </button>
-                                <button
-                                  className="icon-btn"
-                                  style={{ width: 26, height: 26, color: 'var(--danger)' }}
-                                  title="删除"
-                                  onClick={(ev) => {
-                                    ev.stopPropagation()
-                                    openDeleteConfig(f)
-                                  }}
-                                >
-                                  <Icon name="trash" />
-                                </button>
+                                <Tooltip content="修改路径">
+                                  <button
+                                    className="icon-btn"
+                                    style={{ width: 26, height: 26 }}
+                                    onClick={(ev) => {
+                                      ev.stopPropagation()
+                                      openRename(f)
+                                    }}
+                                  >
+                                    <Icon name="pen-to-square" />
+                                  </button>
+                                </Tooltip>
+                                <Tooltip content="删除">
+                                  <button
+                                    className="icon-btn"
+                                    style={{ width: 26, height: 26, color: 'var(--danger)' }}
+                                    onClick={(ev) => {
+                                      ev.stopPropagation()
+                                      openDeleteConfig(f)
+                                    }}
+                                  >
+                                    <Icon name="trash" />
+                                  </button>
+                                </Tooltip>
                               </>
                             ) : null}
                           </div>

@@ -3,6 +3,7 @@ import Icon from '../components/Icon.jsx'
 import Drawer from '../components/Drawer.jsx'
 import Modal from '../components/Modal.jsx'
 import Select from '../components/Select.jsx'
+import Tooltip from '../components/Tooltip.jsx'
 import { api } from '../services/api.js'
 import { toast } from '../services/toast.js'
 
@@ -258,23 +259,26 @@ export default function Dashboard({ onNavigate }) {
           return (
             <div key={t.id} className="card task-card" onClick={() => onNavigate('detail', t.id)}>
               <div className="task-header">
-                <span className={`task-dot ${statusDotClass(last?.status)}`} title={statusLabel(last?.status)} />
+                <Tooltip content={statusLabel(last?.status)}>
+                  <span className={`task-dot ${statusDotClass(last?.status)}`} />
+                </Tooltip>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
                     <div style={{ fontWeight: 600, fontSize: 16 }}>{t.name}</div>
                     <span style={{ color: 'var(--text-sub)', fontSize: 12, fontFamily: 'monospace' }}>{String(t.id || '').slice(0, 6)}</span>
                   </div>
                   <div className="task-actions">
-                    <div
-                      className="icon-btn"
-                      title="更多操作"
-                      onClick={(ev) => {
-                        ev.stopPropagation()
-                        setOpenMenuId(openMenuId === t.id ? null : t.id)
-                      }}
-                    >
-                      <Icon name="ellipsis" />
-                    </div>
+                    <Tooltip content="更多操作">
+                      <div
+                        className="icon-btn"
+                        onClick={(ev) => {
+                          ev.stopPropagation()
+                          setOpenMenuId(openMenuId === t.id ? null : t.id)
+                        }}
+                      >
+                        <Icon name="ellipsis" />
+                      </div>
+                    </Tooltip>
                     {openMenuId === t.id ? (
                       <div className="menu-pop" onClick={(ev) => ev.stopPropagation()}>
                         <button
@@ -324,31 +328,32 @@ export default function Dashboard({ onNavigate }) {
                     <>
                       <span className="info-value">{new Date(last.created_at).toLocaleString()}</span>
                       {last?.status ? (
-                        <span
-                          className="badge badge-gray"
-                          style={{
-                            background:
-                              last.status === 'success'
-                                ? 'rgba(16,185,129,0.12)'
-                                : last.status === 'failed'
-                                  ? 'rgba(239,68,68,0.12)'
-                                  : last.status === 'canceled'
-                                    ? 'rgba(245,158,11,0.12)'
-                                    : 'rgba(59,130,246,0.12)',
-                            color:
-                              last.status === 'success'
-                                ? 'var(--success)'
-                                : last.status === 'failed'
-                                  ? 'var(--danger)'
-                                  : last.status === 'canceled'
-                                    ? 'var(--warning)'
-                                    : 'var(--info)',
-                            fontFamily: 'inherit'
-                          }}
-                          title={last.pipeline_id ? `Pipeline #${last.pipeline_id}` : undefined}
-                        >
-                          {String(last.status).toUpperCase()}
-                        </span>
+                        <Tooltip content={last.pipeline_id ? `Pipeline #${last.pipeline_id}` : ''}>
+                          <span
+                            className="badge badge-gray"
+                            style={{
+                              background:
+                                last.status === 'success'
+                                  ? 'rgba(16,185,129,0.12)'
+                                  : last.status === 'failed'
+                                    ? 'rgba(239,68,68,0.12)'
+                                    : last.status === 'canceled'
+                                      ? 'rgba(245,158,11,0.12)'
+                                      : 'rgba(59,130,246,0.12)',
+                              color:
+                                last.status === 'success'
+                                  ? 'var(--success)'
+                                  : last.status === 'failed'
+                                    ? 'var(--danger)'
+                                    : last.status === 'canceled'
+                                      ? 'var(--warning)'
+                                      : 'var(--info)',
+                              fontFamily: 'inherit'
+                            }}
+                          >
+                            {String(last.status).toUpperCase()}
+                          </span>
+                        </Tooltip>
                       ) : null}
                     </>
                   ) : (
@@ -376,34 +381,32 @@ export default function Dashboard({ onNavigate }) {
                           异常 {monitorSummaryById[t.id].failed}
                         </span>
                         {monitorSummaryById[t.id].ts ? (
-                          <span
-                            className="info-hint"
-                            title={new Date(monitorSummaryById[t.id].ts).toLocaleString()}
-                          >
-                            上次 {new Date(monitorSummaryById[t.id].ts).toLocaleTimeString()}
-                          </span>
+                          <Tooltip content={new Date(monitorSummaryById[t.id].ts).toLocaleString()}>
+                            <span className="info-hint">上次 {new Date(monitorSummaryById[t.id].ts).toLocaleTimeString()}</span>
+                          </Tooltip>
                         ) : null}
-                        <span className="info-hint" title={monitorSummaryById[t.id].ts ? new Date(monitorSummaryById[t.id].ts).toLocaleString() : ''}>
-                          {monitoringById[t.id] ? '监听中' : '已暂停'}
-                        </span>
+                        <Tooltip content={monitorSummaryById[t.id].ts ? new Date(monitorSummaryById[t.id].ts).toLocaleString() : ''}>
+                          <span className="info-hint">{monitoringById[t.id] ? '监听中' : '已暂停'}</span>
+                        </Tooltip>
                       </>
                     ) : (
                       <span className="info-empty">尚未查询</span>
                     )}
                   </div>
-                  <button
-                    className="icon-btn"
-                    title={!last?.created_at ? '请先完成首次部署' : monitoringById[t.id] ? '暂停监控' : '开始监控'}
-                    onClick={(ev) => {
-                      ev.stopPropagation()
-                      if (!last?.created_at) return
-                      if (monitoringById[t.id]) stopMonitor(t.id)
-                      else startMonitor(t.id)
-                    }}
-                    disabled={!last?.created_at}
-                  >
-                    <Icon name={monitoringById[t.id] ? 'circle-pause' : 'circle-play'} />
-                  </button>
+                  <Tooltip content={!last?.created_at ? '请先完成首次部署' : monitoringById[t.id] ? '暂停监控' : '开始监控'}>
+                    <button
+                      className="icon-btn"
+                      onClick={(ev) => {
+                        ev.stopPropagation()
+                        if (!last?.created_at) return
+                        if (monitoringById[t.id]) stopMonitor(t.id)
+                        else startMonitor(t.id)
+                      }}
+                      disabled={!last?.created_at}
+                    >
+                      <Icon name={monitoringById[t.id] ? 'circle-pause' : 'circle-play'} />
+                    </button>
+                  </Tooltip>
                 </div>
               </div>
 
@@ -551,14 +554,11 @@ export default function Dashboard({ onNavigate }) {
           <div className="form-item">
             <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               自定义执行脚本
-              <button
-                type="button"
-                className="icon-btn"
-                title="部署时在目标服务器执行，用于启动/重启服务"
-                onClick={() => setScriptHelpOpen(true)}
-              >
-                <Icon name="circle-question" />
-              </button>
+              <Tooltip content="部署时在目标服务器执行，用于启动/重启服务">
+                <button type="button" className="icon-btn" onClick={() => setScriptHelpOpen(true)}>
+                  <Icon name="circle-question" />
+                </button>
+              </Tooltip>
             </label>
             <textarea
               className="form-input"

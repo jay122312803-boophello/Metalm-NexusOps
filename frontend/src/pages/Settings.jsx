@@ -3,6 +3,7 @@ import Drawer from '../components/Drawer.jsx'
 import Icon from '../components/Icon.jsx'
 import Modal from '../components/Modal.jsx'
 import Select from '../components/Select.jsx'
+import Tooltip from '../components/Tooltip.jsx'
 import { api } from '../services/api.js'
 
 export default function Settings({ initialTab }) {
@@ -354,25 +355,30 @@ export default function Settings({ initialTab }) {
                       {envBadge(s.environment, s.name)}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <button
-                        type="button"
-                        className="icon-btn"
-                        title="资源监控"
-                        onClick={() => {
-                          setMetricsAuto(true)
-                          setMetricsData(null)
-                          setMetricsError(null)
-                          setMetricsTarget(s)
-                        }}
-                      >
-                        <Icon name="gauge-high" />
-                      </button>
-                      <button type="button" className="icon-btn" title="编辑" onClick={() => openEditServer(s)}>
-                        <Icon name="pen-to-square" />
-                      </button>
-                      <button type="button" className="icon-btn" title="删除" style={{ color: 'var(--danger)' }} onClick={() => openDelete('server', s)}>
-                        <Icon name="trash" />
-                      </button>
+                      <Tooltip content="资源监控">
+                        <button
+                          type="button"
+                          className="icon-btn"
+                          onClick={() => {
+                            setMetricsAuto(true)
+                            setMetricsData(null)
+                            setMetricsError(null)
+                            setMetricsTarget(s)
+                          }}
+                        >
+                          <Icon name="gauge-high" />
+                        </button>
+                      </Tooltip>
+                      <Tooltip content="编辑">
+                        <button type="button" className="icon-btn" onClick={() => openEditServer(s)}>
+                          <Icon name="pen-to-square" />
+                        </button>
+                      </Tooltip>
+                      <Tooltip content="删除">
+                        <button type="button" className="icon-btn" style={{ color: 'var(--danger)' }} onClick={() => openDelete('server', s)}>
+                          <Icon name="trash" />
+                        </button>
+                      </Tooltip>
                     </div>
                   </div>
                   <div className="settings-card-body">
@@ -441,20 +447,26 @@ export default function Settings({ initialTab }) {
                       </td>
                       <td>
                         {r?.auth?.trigger || r?.auth?.private ? (
-                          <span style={{ color: 'var(--success)' }} title="Token已配置">
-                            <Icon name="shield-halved" /> 已绑定
-                          </span>
+                          <Tooltip content="Token已配置">
+                            <span style={{ color: 'var(--success)', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                              <Icon name="shield-halved" /> 已绑定
+                            </span>
+                          </Tooltip>
                         ) : (
                           <span style={{ color: '#cbd5e1' }}>未配置</span>
                         )}
                       </td>
                       <td>
-                        <button className="btn btn-ghost btn-sm" onClick={() => openEditRepo(r)} title="编辑">
-                          <Icon name="pen-to-square" />
-                        </button>
-                        <button className="btn btn-ghost btn-sm" onClick={() => openDelete('repo', r)} title="删除">
-                          <Icon name="trash" />
-                        </button>
+                        <Tooltip content="编辑">
+                          <button className="btn btn-ghost btn-sm" onClick={() => openEditRepo(r)}>
+                            <Icon name="pen-to-square" />
+                          </button>
+                        </Tooltip>
+                        <Tooltip content="删除">
+                          <button className="btn btn-ghost btn-sm" onClick={() => openDelete('repo', r)}>
+                            <Icon name="trash" />
+                          </button>
+                        </Tooltip>
                       </td>
                     </tr>
                   ))}
@@ -658,9 +670,11 @@ export default function Settings({ initialTab }) {
                     value={repoTokens.trigger_token}
                     onChange={(e) => setRepoTokens({ ...repoTokens, trigger_token: e.target.value })}
                   />
-                  <div className="input-toggle" onClick={() => setShowTriggerToken((v) => !v)} title={showTriggerToken ? '隐藏' : '显示'}>
-                    <Icon name={showTriggerToken ? 'eye-slash' : 'eye'} />
-                  </div>
+                  <Tooltip content={showTriggerToken ? '隐藏' : '显示'}>
+                    <div className="input-toggle" onClick={() => setShowTriggerToken((v) => !v)}>
+                      <Icon name={showTriggerToken ? 'eye-slash' : 'eye'} />
+                    </div>
+                  </Tooltip>
                 </div>
               </div>
               <div className="form-item">
@@ -673,9 +687,11 @@ export default function Settings({ initialTab }) {
                     value={repoTokens.private_token}
                     onChange={(e) => setRepoTokens({ ...repoTokens, private_token: e.target.value })}
                   />
-                  <div className="input-toggle" onClick={() => setShowPrivateToken((v) => !v)} title={showPrivateToken ? '隐藏' : '显示'}>
-                    <Icon name={showPrivateToken ? 'eye-slash' : 'eye'} />
-                  </div>
+                  <Tooltip content={showPrivateToken ? '隐藏' : '显示'}>
+                    <div className="input-toggle" onClick={() => setShowPrivateToken((v) => !v)}>
+                      <Icon name={showPrivateToken ? 'eye-slash' : 'eye'} />
+                    </div>
+                  </Tooltip>
                 </div>
               </div>
             </>

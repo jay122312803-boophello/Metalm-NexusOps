@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Icon from './Icon.jsx'
+import Tooltip from './Tooltip.jsx'
 
 export default function Select({
   value,
@@ -44,22 +45,24 @@ export default function Select({
     setOpen(false)
   }
 
+  const tip = label || placeholder || ''
   return (
     <div ref={rootRef} className={`select ${disabled ? 'is-disabled' : ''} ${open ? 'is-open' : ''} ${className || ''}`} style={style}>
-      <button
-        type="button"
-        className="select-btn"
-        disabled={!!disabled}
-        onClick={(ev) => {
-          ev.stopPropagation()
-          if (disabled) return
-          setOpen((v) => !v)
-        }}
-        title={label || placeholder || ''}
-      >
-        <span className={`select-btn-text ${label ? '' : 'is-placeholder'}`}>{label || placeholder || '请选择'}</span>
-        <Icon name="chevron-down" />
-      </button>
+      <Tooltip content={tip}>
+        <button
+          type="button"
+          className="select-btn"
+          disabled={!!disabled}
+          onClick={(ev) => {
+            ev.stopPropagation()
+            if (disabled) return
+            setOpen((v) => !v)
+          }}
+        >
+          <span className={`select-btn-text ${label ? '' : 'is-placeholder'}`}>{label || placeholder || '请选择'}</span>
+          <Icon name="chevron-down" />
+        </button>
+      </Tooltip>
       {open ? (
         <div
           className={`select-pop ${align === 'right' ? 'align-right' : 'align-left'}`}

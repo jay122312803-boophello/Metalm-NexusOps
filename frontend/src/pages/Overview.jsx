@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Icon from '../components/Icon.jsx'
 import { api } from '../services/api.js'
+import Tooltip from '../components/Tooltip.jsx'
 
 const overviewCacheKey = 'nexusops_overview_cache_v1'
 const runtimeCacheKey = 'nexusops_overview_runtime_v1'
@@ -18,6 +19,39 @@ const clampPct100 = (v) => {
   const n = Number(v)
   if (!Number.isFinite(n)) return 0
   return Math.max(0, Math.min(100, n))
+}
+
+const parsePct = (v) => {
+  if (v === null || v === undefined) return null
+  const s = String(v).trim()
+  if (!s) return null
+  const n = Number(s.endsWith('%') ? s.slice(0, -1) : s)
+  if (!Number.isFinite(n)) return null
+  return clampPct100(n)
+}
+
+const fmtBytesShort = (bytes) => {
+  const n = Number(bytes)
+  if (!Number.isFinite(n) || n < 0) return '-'
+  const tb = 1024 ** 4
+  const gb = 1024 ** 3
+  const mb = 1024 ** 2
+  if (n >= tb) return `${(n / tb).toFixed(1)}TB`
+  if (n >= gb) return `${(n / gb).toFixed(1)}GB`
+  return `${Math.max(0, Math.round(n / mb))}MB`
+}
+
+const memToBytes = (v) => {
+  const n = Number(v)
+  if (!Number.isFinite(n) || n <= 0) return null
+  if (n > 200000) return n * 1024
+  return n * 1024 * 1024
+}
+
+const dfKiBToBytes = (v) => {
+  const n = Number(v)
+  if (!Number.isFinite(n) || n <= 0) return null
+  return n * 1024
 }
 
 const mapLimit = async (items, limit, fn) => {
@@ -472,12 +506,11 @@ function Donut({ data }) {
 
 function MetricCard({ title, value, sub, icon, tone, onClick, tooltip }) {
   const clickable = typeof onClick === 'function'
-  return (
+  const card = (
     <div
       className="card metric-card"
       style={{ cursor: clickable ? 'pointer' : 'default' }}
       onClick={clickable ? onClick : undefined}
-      title={tooltip || undefined}
     >
       <div className="metric-head">
         <div className="metric-title">{title}</div>
@@ -489,14 +522,16 @@ function MetricCard({ title, value, sub, icon, tone, onClick, tooltip }) {
       {typeof sub === 'string' ? <div className="metric-subtext">{sub}</div> : sub ? <div className="metric-subtext">{sub}</div> : null}
     </div>
   )
+  if (tooltip) return <Tooltip content={tooltip} block>{card}</Tooltip>
+  return card
 }
 
-function RingGauge({ label, percent, value, tone }) {
+function RingGauge({ label, percent, value, tone, tip }) {
   const p = clampPct100(percent)
   const color =
     tone === 'bad' ? 'var(--danger)' : tone === 'warn' ? 'var(--warning)' : tone === 'info' ? 'var(--info)' : 'var(--primary)'
-  return (
-    <div className="metric-ring">
+  const g = (
+    <div className="metric-ring sm">
       <div className="metric-ring-circle" style={{ background: `conic-gradient(${color} ${p}%, rgba(148,163,184,0.18) 0)` }}>
         <div className="metric-ring-inner">
           <div className="metric-ring-value">{value}</div>
@@ -505,11 +540,14 @@ function RingGauge({ label, percent, value, tone }) {
       </div>
     </div>
   )
+  if (tip) return <Tooltip content={tip}>{g}</Tooltip>
+  return g
 }
 
-function ResourceWatermark({ loading, cpu, mem, ts, sampled, total, envText, servers, focusId, onFocus }) {
+function ResourceWatermark({ loading, cpu, mem, disk, ts, sampled, total, envText, servers, focusId, onFocus, cpuTip, memTip, diskTip }) {
   const cpuTone = cpu >= 90 ? 'bad' : cpu >= 70 ? 'warn' : 'ok'
   const memTone = mem >= 90 ? 'bad' : mem >= 70 ? 'warn' : 'ok'
+  const diskTone = (d) => (d >= 90 ? 'bad' : d >= 70 ? 'warn' : 'ok')
   return (
     <div className="card" style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
@@ -522,9 +560,22 @@ function ResourceWatermark({ loading, cpu, mem, ts, sampled, total, envText, ser
         <div style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{envText || ''}</div>
         <div style={{ whiteSpace: 'nowrap' }}>{total ? `采样 ${sampled ?? 0}/${total}` : ''}</div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 14 }}>
-        <RingGauge label="CPU" percent={cpu} value={`${clampPct100(cpu).toFixed(1)}%`} tone={cpuTone} />
-        <RingGauge label="内存" percent={mem} value={`${clampPct100(mem).toFixed(1)}%`} tone={memTone} />
+      <div style={{ display: 'flex', gap: 14, justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+          <RingGauge label="CPU" percent={cpu} value={`${clampPct100(cpu).toFixed(1)}%`} tone={cpuTone} tip={cpuTip} />
+        </div>
+        <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+          <RingGauge label="内存" percent={mem} value={`${clampPct100(mem).toFixed(1)}%`} tone={memTone} tip={memTip} />
+        </div>
+        <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+          <RingGauge
+            label="磁盘"
+            percent={disk ?? 0}
+            value={disk === null || disk === undefined ? '-' : `${clampPct100(disk).toFixed(1)}%`}
+            tone={disk === null || disk === undefined ? 'ok' : diskTone(disk)}
+            tip={diskTip}
+          />
+        </div>
       </div>
       {Array.isArray(servers) && servers.length ? (
         <div className="card" style={{ padding: 14 }}>
@@ -534,22 +585,22 @@ function ResourceWatermark({ loading, cpu, mem, ts, sampled, total, envText, ser
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {servers.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                className="btn btn-outline btn-sm"
-                style={{
-                  borderRadius: 999,
-                  padding: '4px 10px',
-                  borderColor: s.id === focusId ? 'rgba(22,163,74,0.45)' : 'var(--border)',
-                  background: s.id === focusId ? 'rgba(16,185,129,0.10)' : 'white',
-                  color: s.id === focusId ? 'var(--primary)' : 'var(--text-main)'
-                }}
-                onClick={() => (typeof onFocus === 'function' ? onFocus(s.id) : null)}
-                title={s.address || s.name}
-              >
-                {s.name}
-              </button>
+              <Tooltip key={s.id} content={s.address || s.name}>
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  style={{
+                    borderRadius: 999,
+                    padding: '4px 10px',
+                    borderColor: s.id === focusId ? 'rgba(22,163,74,0.45)' : 'var(--border)',
+                    background: s.id === focusId ? 'rgba(16,185,129,0.10)' : 'white',
+                    color: s.id === focusId ? 'var(--primary)' : 'var(--text-main)'
+                  }}
+                  onClick={() => (typeof onFocus === 'function' ? onFocus(s.id) : null)}
+                >
+                  {s.name}
+                </button>
+              </Tooltip>
             ))}
           </div>
         </div>
@@ -686,8 +737,14 @@ export default function Overview({ onNavigate }) {
       const res = await api.get(`/api/servers/${target.id}/metrics`, { signal: ctl.signal })
       if (res?.ok) {
         const cpu = clampPct100(res?.metrics?.cpu_usage)
-        const mem = clampPct100(res?.metrics?.memory?.percent)
-        const item = { ok: true, cpu, mem, ts: Date.now() }
+        const memPct = clampPct100(res?.metrics?.memory?.percent)
+        const memTotal = memToBytes(res?.metrics?.memory?.total)
+        const memUsed = memToBytes(res?.metrics?.memory?.used)
+        const diskPct = parsePct(res?.metrics?.disk?.percent)
+        const diskTotal = dfKiBToBytes(res?.metrics?.disk?.total)
+        const diskUsed = dfKiBToBytes(res?.metrics?.disk?.used)
+        const diskAvail = dfKiBToBytes(res?.metrics?.disk?.avail)
+        const item = { ok: true, cpu, mem: memPct, mem_total_bytes: memTotal, mem_used_bytes: memUsed, disk: diskPct, disk_total_bytes: diskTotal, disk_used_bytes: diskUsed, disk_avail_bytes: diskAvail, ts: Date.now() }
         setServerMetricsById((p) => {
           const n = { ...(p || {}), [target.id]: item }
           try {
@@ -695,28 +752,28 @@ export default function Overview({ onNavigate }) {
           } catch (_) {}
           const sampled = Object.keys(n).length
           const ts = Date.now()
-          setRuntime((prev) => ({ ...prev, loading: false, ts, sampled, total: list.length, avgCpu: cpu, avgMem: mem }))
+          setRuntime((prev) => ({ ...prev, loading: false, ts, sampled, total: list.length, avgCpu: cpu, avgMem: memPct }))
           try {
-            localStorage.setItem(runtimeCacheKey, JSON.stringify({ ts, sampled, total: list.length, avgCpu: cpu, avgMem: mem }))
+            localStorage.setItem(runtimeCacheKey, JSON.stringify({ ts, sampled, total: list.length, avgCpu: cpu, avgMem: memPct }))
           } catch (_) {}
           return n
         })
-        const warn85 = cpu >= 85 || mem >= 85
-        const severe90 = cpu >= 90 || mem >= 90
+        const warn85 = cpu >= 85 || memPct >= 85
+        const severe90 = cpu >= 90 || memPct >= 90
         if (severe90) {
           const d =
-            cpu >= 90 && mem >= 90
-              ? `CPU ${cpu.toFixed(0)}% · 内存 ${mem.toFixed(0)}%`
+            cpu >= 90 && memPct >= 90
+              ? `CPU ${cpu.toFixed(0)}% · 内存 ${memPct.toFixed(0)}%`
               : cpu >= 90
                 ? `CPU ${cpu.toFixed(0)}%`
-                : `内存 ${mem.toFixed(0)}%`
+              : `内存 ${memPct.toFixed(0)}%`
           pushAlert('bad', `server_hot_${target.id}`, `【严重】${target.name} 资源爆表：${d}`)
         } else {
-          pushAlert('ok', `server_hot_${target.id}`, `【恢复】${target.name} 资源已回落（CPU ${cpu.toFixed(0)}% · 内存 ${mem.toFixed(0)}%）`)
+          pushAlert('ok', `server_hot_${target.id}`, `【恢复】${target.name} 资源已回落（CPU ${cpu.toFixed(0)}% · 内存 ${memPct.toFixed(0)}%）`)
           pushAlert('ok', `server_offline_${target.id}`, `【恢复】${target.name} 资源采集已恢复`)
         }
       } else {
-        const item = { ok: false, cpu: 0, mem: 0, ts: Date.now() }
+        const item = { ok: false, cpu: 0, mem: 0, mem_total_bytes: null, mem_used_bytes: null, disk: null, disk_total_bytes: null, disk_used_bytes: null, disk_avail_bytes: null, ts: Date.now() }
         setServerMetricsById((p) => {
           const n = { ...(p || {}), [target.id]: item }
           try {
@@ -958,6 +1015,27 @@ export default function Overview({ onNavigate }) {
   const focusMetric = focusId && serverMetricsById ? serverMetricsById[focusId] : null
   const focusCpu = focusMetric?.ok ? Number(focusMetric.cpu || 0) : 0
   const focusMem = focusMetric?.ok ? Number(focusMetric.mem || 0) : 0
+  const focusDisk = focusMetric?.ok ? (focusMetric.disk === null || focusMetric.disk === undefined ? null : Number(focusMetric.disk)) : null
+  const cpuTip = focusMetric?.ok ? `CPU 使用率 ${clampPct100(focusCpu).toFixed(1)}%\n空闲 ${(100 - clampPct100(focusCpu)).toFixed(1)}%` : 'CPU 未采集'
+  const memTip = (() => {
+    if (!focusMetric?.ok) return '内存 未采集'
+    const t = Number(focusMetric.mem_total_bytes)
+    const u = Number(focusMetric.mem_used_bytes)
+    if (!Number.isFinite(t) || !Number.isFinite(u) || t <= 0) return '内存 未采集'
+    const avail = Math.max(0, t - u)
+    return `内存 已用 ${fmtBytesShort(u)} / 总计 ${fmtBytesShort(t)}\n剩余 ${fmtBytesShort(avail)}`
+  })()
+  const diskTip = (() => {
+    if (!focusMetric?.ok) return '磁盘 未采集'
+    const t = Number(focusMetric.disk_total_bytes)
+    const u = Number(focusMetric.disk_used_bytes)
+    const a = Number(focusMetric.disk_avail_bytes)
+    if (Number.isFinite(t) && Number.isFinite(u) && t > 0) {
+      const avail = Number.isFinite(a) ? a : Math.max(0, t - u)
+      return `磁盘 已用 ${fmtBytesShort(u)} / 总计 ${fmtBytesShort(t)}\n剩余 ${fmtBytesShort(avail)}`
+    }
+    return '磁盘 未采集'
+  })()
 
   return (
     <div>
@@ -1037,6 +1115,7 @@ export default function Overview({ onNavigate }) {
             loading={!focusMetric}
             cpu={focusCpu}
             mem={focusMem}
+            disk={focusDisk}
             ts={focusMetric?.ts || runtime.ts}
             sampled={cluster.sampled}
             total={cluster.total}
@@ -1044,13 +1123,16 @@ export default function Overview({ onNavigate }) {
             servers={servers}
             focusId={focusId}
             onFocus={(id) => setFocusServerId(id)}
+            cpuTip={cpuTip}
+            memTip={memTip}
+            diskTip={diskTip}
           />
         </div>
 
         <div className="overview-bottom">
           <div className="card" style={{ padding: 18, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-              <div className="tabs" style={{ borderBottom: 0 }}>
+              <div className="tabs tabs-equal" style={{ borderBottom: 0 }}>
                 <button className={`tab ${bottomTab === 'deploy' ? 'active' : ''}`} onClick={() => setBottomTab('deploy')}>
                   部署动态
                 </button>
@@ -1079,16 +1161,10 @@ export default function Overview({ onNavigate }) {
                         <span className={`status-dot ${statusDotClass(it.status)}`} />
                         <div style={{ minWidth: 0, flex: 1 }}>
                           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
-                            <div style={{ color: 'var(--text-main)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {it.deployment_name || '部署任务'}
-                            </div>
-                            <div style={{ color: 'var(--text-sub)', fontSize: 12, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>
-                              {it.created_at ? new Date(it.created_at).toLocaleTimeString() : ''}
-                            </div>
+                            <div className="feed-title">{it.deployment_name || '部署任务'}</div>
+                            <div className="feed-time">{it.created_at ? new Date(it.created_at).toLocaleTimeString() : ''}</div>
                           </div>
-                          <div style={{ color: 'var(--text-sub)', fontSize: 12, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {`${it.repo_name || '-'}${it.branch ? ` · ${it.branch}` : ''} → ${it.server_name || '-'}`}
-                          </div>
+                          <div className="feed-sub">{`${it.repo_name || '-'}${it.branch ? ` · ${it.branch}` : ''} → ${it.server_name || '-'}`}</div>
                         </div>
                       </div>
                     ))
@@ -1101,12 +1177,8 @@ export default function Overview({ onNavigate }) {
                       <span className={`status-dot ${a.level === 'bad' ? 'offline' : a.level === 'warn' ? 'canceled' : 'online'}`} />
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
-                          <div style={{ color: 'var(--text-main)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {a.msg}
-                          </div>
-                          <div style={{ color: 'var(--text-sub)', fontSize: 12, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>
-                            {a.ts ? new Date(a.ts).toLocaleTimeString() : ''}
-                          </div>
+                          <div className="feed-title">{a.msg}</div>
+                          <div className="feed-time">{a.ts ? new Date(a.ts).toLocaleTimeString() : ''}</div>
                         </div>
                       </div>
                     </div>

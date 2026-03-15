@@ -3,6 +3,7 @@ import Drawer from '../components/Drawer.jsx'
 import Icon from '../components/Icon.jsx'
 import Modal from '../components/Modal.jsx'
 import Select from '../components/Select.jsx'
+import Tooltip from '../components/Tooltip.jsx'
 import { api } from '../services/api.js'
 
 export default function History({ onNavigate, initialPreset }) {
@@ -95,23 +96,23 @@ export default function History({ onNavigate, initialPreset }) {
               <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索仓库 / 主机 / 分支 / Pipeline / 状态" />
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            <div style={{ width: 180 }}>
-              <Select
-                value={selectedServerId}
-                onChange={(v) => setSelectedServerId(v)}
-                popWidth={240}
-                options={[{ value: 'all', label: '全部服务器' }, ...servers.map((s) => ({ value: s.id, label: s.name }))]}
-              />
-            </div>
-            <div style={{ width: 180 }}>
-              <Select
-                value={selectedStatus}
-                onChange={(v) => setSelectedStatus(v)}
-                popWidth={240}
-                options={[{ value: 'all', label: '全部状态' }, ...statusOptions.map((s) => ({ value: s, label: statusLabel(s) }))]}
-              />
-            </div>
+          <div className="action-right">
+            <Select
+              className="action-select"
+              style={{ width: 180 }}
+              value={selectedServerId}
+              onChange={(v) => setSelectedServerId(v)}
+              align="right"
+              options={[{ value: 'all', label: '全部服务器' }, ...servers.map((s) => ({ value: s.id, label: s.name }))]}
+            />
+            <Select
+              className="action-select"
+              style={{ width: 180 }}
+              value={selectedStatus}
+              onChange={(v) => setSelectedStatus(v)}
+              align="right"
+              options={[{ value: 'all', label: '全部状态' }, ...statusOptions.map((s) => ({ value: s, label: statusLabel(s) }))]}
+            />
           </div>
         </div>
 
@@ -164,20 +165,21 @@ export default function History({ onNavigate, initialPreset }) {
                       '-'
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        <span
-                          className="vars-pill"
-                          title="点击查看详情"
-                          onClick={(ev) => {
-                            ev.stopPropagation()
-                            setVarsView({
-                              title: `${pipelineText} 变量参数`,
-                              text: JSON.stringify(h.variables, null, 2)
-                            })
-                          }}
-                        >
-                          <Icon name="code" style={{ fontSize: 12 }} />
-                          {`${varKeys.length} 个变量`}
-                        </span>
+                        <Tooltip content="点击查看详情">
+                          <span
+                            className="vars-pill"
+                            onClick={(ev) => {
+                              ev.stopPropagation()
+                              setVarsView({
+                                title: `${pipelineText} 变量参数`,
+                                text: JSON.stringify(h.variables, null, 2)
+                              })
+                            }}
+                          >
+                            <Icon name="code" style={{ fontSize: 12 }} />
+                            {`${varKeys.length} 个变量`}
+                          </span>
+                        </Tooltip>
                         {hintVars.length ? (
                           <div style={{ fontSize: 12, color: 'var(--text-sub)', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                             {hintVars.map(([k, v]) => (
