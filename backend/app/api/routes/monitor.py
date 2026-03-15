@@ -3,10 +3,11 @@ import shlex
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from starlette.concurrency import run_in_threadpool
 from sqlmodel import select
 
+from ...auth.deps import require_permission
 from ...db.models import Deployment, DeploymentHistory, Server
 from ...db.session import run_db
 from ...ssh import ssh_exec
@@ -81,7 +82,7 @@ def _parse_compose_ps_output(raw: str):
         return out
     return []
 
-@router.get("/{dep_id}/monitor")
+@router.get("/{dep_id}/monitor", dependencies=[Depends(require_permission("monitor:read"))])
 async def monitor_services(dep_id: str):
     did = uuid.UUID(dep_id)
     now = datetime.utcnow().timestamp()

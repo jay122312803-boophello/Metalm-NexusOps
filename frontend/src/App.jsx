@@ -5,8 +5,12 @@ import Detail from './pages/Detail.jsx'
 import History from './pages/History.jsx'
 import Overview from './pages/Overview.jsx'
 import Settings from './pages/Settings.jsx'
+import Login from './pages/Login.jsx'
+import NoAccess from './pages/NoAccess.jsx'
+import { useAuth } from './contexts/AuthContext.jsx'
 
 export default function App() {
+  const auth = useAuth()
   const initialNav = useMemo(() => {
     try {
       const raw = localStorage.getItem('nexusops_nav')
@@ -55,6 +59,9 @@ export default function App() {
     return '部署管理'
   }, [page])
 
+  if (auth?.loading) return null
+  if (!auth?.token || !auth?.user) return <Login />
+
   const navigate = (p, id, opts = {}) => {
     if (p === 'detail') {
       setReturnPage(page)
@@ -80,15 +87,23 @@ export default function App() {
 
   const content =
     page === 'settings' ? (
-      <Settings initialTab={settingsTab} />
+      auth.hasPerm('page:settings') ? (
+        <Settings initialTab={settingsTab} />
+      ) : (
+        <NoAccess detail="无权访问系统设置" />
+      )
     ) : page === 'history' ? (
-      <History onNavigate={navigate} initialPreset={historyPreset} />
+      auth.hasPerm('page:history') ? <History onNavigate={navigate} initialPreset={historyPreset} /> : <NoAccess detail="无权访问审计日志" />
     ) : page === 'overview' ? (
-      <Overview onNavigate={navigate} />
+      auth.hasPerm('page:overview') ? <Overview onNavigate={navigate} /> : <NoAccess detail="无权访问概览大屏" />
     ) : page === 'detail' ? (
-      <Detail taskId={detailId} historyId={detailHistoryId} onBack={() => setPage(returnPage)} onNavigate={navigate} />
+      auth.hasPerm('page:dashboard') ? (
+        <Detail taskId={detailId} historyId={detailHistoryId} onBack={() => setPage(returnPage)} onNavigate={navigate} />
+      ) : (
+        <NoAccess detail="无权访问部署详情" />
+      )
     ) : (
-      <Dashboard onNavigate={navigate} />
+      auth.hasPerm('page:dashboard') ? <Dashboard onNavigate={navigate} /> : <NoAccess detail="无权访问部署大盘" />
     )
 
   return (

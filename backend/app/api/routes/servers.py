@@ -2,9 +2,10 @@ import json
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from starlette.concurrency import run_in_threadpool
 
+from ...auth.deps import require_permission
 from ...schemas import CreateServerRequest, UpdateServerRequest
 from ...db.models import Server
 from ...db.session import run_db
@@ -34,7 +35,7 @@ def _norm_env(v: str | None, name: str) -> str:
 
 
 @router.get("")
-async def list_servers():
+async def list_servers(user=Depends(require_permission("servers:read"))):
     def _work(session):
         rows = session.query(Server).order_by(Server.created_at.asc()).all()
         return [
@@ -56,7 +57,7 @@ async def list_servers():
 
 
 @router.post("")
-async def create_server(req: CreateServerRequest):
+async def create_server(req: CreateServerRequest, user=Depends(require_permission("servers:manage"))):
     data = req.model_dump()
     def _work(session):
         name = (data.get("name") or "").strip()
@@ -97,7 +98,7 @@ async def create_server(req: CreateServerRequest):
 
 
 @router.get("/{server_id}")
-async def get_server(server_id: str):
+async def get_server(server_id: str, user=Depends(require_permission("servers:read"))):
     def _work(session):
         s = session.get(Server, uuid.UUID(server_id))
         if not s:
@@ -118,7 +119,7 @@ async def get_server(server_id: str):
 
 
 @router.put("/{server_id}")
-async def update_server(server_id: str, req: UpdateServerRequest):
+async def update_server(server_id: str, req: UpdateServerRequest, user=Depends(require_permission("servers:manage"))):
     data = req.model_dump(exclude_unset=True)
 
     def _work(session):
@@ -152,7 +153,7 @@ async def update_server(server_id: str, req: UpdateServerRequest):
 
 
 @router.delete("/{server_id}")
-async def delete_server(server_id: str):
+async def delete_server(server_id: str, user=Depends(require_permission("servers:manage"))):
     def _work(session):
         s = session.get(Server, uuid.UUID(server_id))
         if not s:
@@ -171,7 +172,7 @@ async def delete_server(server_id: str):
 
 
 @router.get("/{server_id}/metrics")
-async def get_server_metrics(server_id: str):
+async def get_server_metrics(server_id: str, user=Depends(require_permission("servers:metrics"))):
     sid = uuid.UUID(server_id)
     now = datetime.utcnow().timestamp()
     cached = _metrics_cache.get(server_id)

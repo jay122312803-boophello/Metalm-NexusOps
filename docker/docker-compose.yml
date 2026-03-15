@@ -5,7 +5,13 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:${NEXUSOPS_PG_PASS:-metalm2024}@${NEXUSOPS_PG_HOST:-nexusops-pg}:5432/nexusops_db
-      NEXUSOPS_DB_INIT: "0"
+      NEXUSOPS_DB_INIT: ${NEXUSOPS_DB_INIT:-0}
+      NEXUSOPS_ADMIN_USER: ${NEXUSOPS_ADMIN_USER:-admin}
+      NEXUSOPS_ADMIN_PASS: ${NEXUSOPS_ADMIN_PASS:-admin123}
+      NEXUSOPS_JWT_SECRET: ${NEXUSOPS_JWT_SECRET:-nexusops-change-me}
+      NEXUSOPS_TZ: ${NEXUSOPS_TZ:-Asia/Shanghai}
+      TZ: ${NEXUSOPS_TZ:-Asia/Shanghai}
+      REDIS_URL: redis://:${NEXUSOPS_REDIS_PASS:-metalm2024}@${NEXUSOPS_REDIS_HOST:-nexusops-redis}:6379/0
     ports:
       - "18070:8000"
     networks:

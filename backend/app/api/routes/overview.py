@@ -3,9 +3,10 @@ import uuid
 from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from sqlmodel import select
 
+from ...auth.deps import require_permission
 from ...db.models import Deployment, DeploymentHistory, Repo, Server
 from ...db.session import run_db
 
@@ -34,7 +35,7 @@ def _env_key(name: str) -> str:
 
 
 @router.get("/overview")
-async def get_overview():
+async def get_overview(user=Depends(require_permission("page:overview"))):
     def _work(session):
         tz = _get_app_tz()
         now_local = datetime.now(timezone.utc).astimezone(tz)

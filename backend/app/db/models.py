@@ -101,3 +101,54 @@ class TaskConfigSnapshotFile(SQLModel, table=True):
     rel_path: str
     content: str = Field(default="")
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class User(SQLModel, table=True):
+    __tablename__ = "users"
+    __table_args__ = (UniqueConstraint("username", name="uq_users_username"),)
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    username: str
+    password_hash: str
+    display_name: Optional[str] = None
+    is_active: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class Role(SQLModel, table=True):
+    __tablename__ = "roles"
+    __table_args__ = (UniqueConstraint("code", name="uq_roles_code"),)
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    name: str
+    code: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class Permission(SQLModel, table=True):
+    __tablename__ = "permissions"
+    __table_args__ = (UniqueConstraint("code", name="uq_permissions_code"),)
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    name: str
+    code: str
+    type: str = Field(default="api")
+    parent_id: Optional[uuid.UUID] = Field(default=None, foreign_key="permissions.id")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class UserRole(SQLModel, table=True):
+    __tablename__ = "user_roles"
+    user_id: uuid.UUID = Field(primary_key=True, foreign_key="users.id")
+    role_id: uuid.UUID = Field(primary_key=True, foreign_key="roles.id")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class RolePermission(SQLModel, table=True):
+    __tablename__ = "role_permissions"
+    role_id: uuid.UUID = Field(primary_key=True, foreign_key="roles.id")
+    permission_id: uuid.UUID = Field(primary_key=True, foreign_key="permissions.id")
+    created_at: datetime = Field(default_factory=datetime.utcnow)

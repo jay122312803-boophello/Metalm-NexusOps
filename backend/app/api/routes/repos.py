@@ -1,15 +1,16 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from ...schemas import CreateRepoRequest, UpdateRepoRequest
 from ...db.models import Repo
 from ...db.session import run_db
+from ...auth.deps import require_permission
 import uuid
 from sqlalchemy.exc import IntegrityError
 
 router = APIRouter()
 
 
-@router.get("")
+@router.get("", dependencies=[Depends(require_permission("repos:read"))])
 async def list_repos():
     def _work(session):
         rows = session.query(Repo).order_by(Repo.created_at.asc()).all()
@@ -30,7 +31,7 @@ async def list_repos():
     return await run_db(_work)
 
 
-@router.post("")
+@router.post("", dependencies=[Depends(require_permission("repos:manage"))])
 async def create_repo(req: CreateRepoRequest):
     data = req.model_dump()
     def _work(session):
@@ -66,7 +67,7 @@ async def create_repo(req: CreateRepoRequest):
     return await run_db(_work)
 
 
-@router.get("/{repo_id}")
+@router.get("/{repo_id}", dependencies=[Depends(require_permission("repos:read"))])
 async def get_repo(repo_id: str):
     def _work(session):
         r = session.get(Repo, uuid.UUID(repo_id))
@@ -88,7 +89,7 @@ async def get_repo(repo_id: str):
     return await run_db(_work)
 
 
-@router.put("/{repo_id}")
+@router.put("/{repo_id}", dependencies=[Depends(require_permission("repos:manage"))])
 async def update_repo(repo_id: str, req: UpdateRepoRequest):
     data = req.model_dump(exclude_unset=True)
 
@@ -126,7 +127,7 @@ async def update_repo(repo_id: str, req: UpdateRepoRequest):
     return await run_db(_work)
 
 
-@router.delete("/{repo_id}")
+@router.delete("/{repo_id}", dependencies=[Depends(require_permission("repos:manage"))])
 async def delete_repo(repo_id: str):
     def _work(session):
         r = session.get(Repo, uuid.UUID(repo_id))

@@ -3,6 +3,7 @@ import Editor from '@monaco-editor/react'
 import Icon from '../components/Icon.jsx'
 import Modal from '../components/Modal.jsx'
 import Tooltip from '../components/Tooltip.jsx'
+import Can from '../components/Can.jsx'
 import XTerm from '../components/XTerm.jsx'
 import { api } from '../services/api.js'
 import { toast } from '../services/toast.js'
@@ -597,21 +598,23 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
                 <Icon name="clock-rotate-left" />
               </button>
             </Tooltip>
-            <button
-              className="btn btn-primary"
-              onClick={() => {
-                if (viewHistory) return
-                if (hasDirty) {
-                  setPendingTrigger(true)
-                  setDiscardOpen(true)
-                } else {
-                  setTriggerOpen(true)
-                }
-              }}
-              disabled={busy || viewHistory}
-            >
-              <Icon name={deploying ? 'spinner fa-spin' : 'rocket'} /> {deploying ? '部署中...' : '触发部署'}
-            </button>
+            <Can perm="deploy:trigger">
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  if (viewHistory) return
+                  if (hasDirty) {
+                    setPendingTrigger(true)
+                    setDiscardOpen(true)
+                  } else {
+                    setTriggerOpen(true)
+                  }
+                }}
+                disabled={busy || viewHistory}
+              >
+                <Icon name={deploying ? 'spinner fa-spin' : 'rocket'} /> {deploying ? '部署中...' : '触发部署'}
+              </button>
+            </Can>
           </div>
         </div>
 

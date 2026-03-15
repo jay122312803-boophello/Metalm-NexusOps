@@ -5,10 +5,11 @@ from datetime import datetime
 
 import anyio
 import requests
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlmodel import select
 
+from ...auth.deps import require_permission
 from ...db.models import Deployment, DeploymentHistory, Repo, TaskConfig, TaskConfigSnapshot, TaskConfigSnapshotFile
 from ...db.session import run_db
 from .configs import ensure_snapshot, ensure_snapshot_if_success
@@ -44,7 +45,7 @@ async def _append_history_log_tail(history_id: uuid.UUID, lines: list[str]) -> N
     await run_db(_work)
 
 
-@router.get("/history/{history_id}/events")
+@router.get("/history/{history_id}/events", dependencies=[Depends(require_permission("events:read"))])
 async def history_events(history_id: str):
     hid = uuid.UUID(history_id)
     try:

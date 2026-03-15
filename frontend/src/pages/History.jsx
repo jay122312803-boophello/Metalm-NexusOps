@@ -4,6 +4,7 @@ import Icon from '../components/Icon.jsx'
 import Modal from '../components/Modal.jsx'
 import Select from '../components/Select.jsx'
 import Tooltip from '../components/Tooltip.jsx'
+import Can from '../components/Can.jsx'
 import { api } from '../services/api.js'
 
 export default function History({ onNavigate, initialPreset }) {
@@ -213,34 +214,38 @@ export default function History({ onNavigate, initialPreset }) {
                       >
                         <Icon name="circle-info" /> 查看详情
                       </button>
-                      <button
-                        className="btn btn-primary btn-action"
-                        onClick={async (ev) => {
-                          ev.stopPropagation()
-                          setRedeployError(null)
-                          setRedeployTarget({
-                            history_id: h.id,
-                            deployment_id: h.deployment_id,
-                            deployment_name: h.deployment_name,
-                            server_name: h.server_snapshot?.name,
-                            repo_name: h.repo_snapshot?.name,
-                            ref: h.ref,
-                            created_at: h.created_at
-                          })
-                        }}
-                      >
-                        <Icon name="rocket" /> 重新部署
-                      </button>
-                      <button
-                        className="btn btn-danger btn-action"
-                        onClick={(ev) => {
-                          ev.stopPropagation()
-                          setDeleteError(null)
-                          setDeleteTarget({ id: h.id, deployment_id: h.deployment_id, status: h.status, created_at: h.created_at })
-                        }}
-                      >
-                        <Icon name="trash" /> 删除
-                      </button>
+                      <Can perm="deploy:trigger">
+                        <button
+                          className="btn btn-primary btn-action"
+                          onClick={async (ev) => {
+                            ev.stopPropagation()
+                            setRedeployError(null)
+                            setRedeployTarget({
+                              history_id: h.id,
+                              deployment_id: h.deployment_id,
+                              deployment_name: h.deployment_name,
+                              server_name: h.server_snapshot?.name,
+                              repo_name: h.repo_snapshot?.name,
+                              ref: h.ref,
+                              created_at: h.created_at
+                            })
+                          }}
+                        >
+                          <Icon name="rocket" /> 重新部署
+                        </button>
+                      </Can>
+                      <Can perm="history:delete">
+                        <button
+                          className="btn btn-danger btn-action"
+                          onClick={(ev) => {
+                            ev.stopPropagation()
+                            setDeleteError(null)
+                            setDeleteTarget({ id: h.id, deployment_id: h.deployment_id, status: h.status, created_at: h.created_at })
+                          }}
+                        >
+                          <Icon name="trash" /> 删除
+                        </button>
+                      </Can>
                     </div>
                   </td>
                 </tr>

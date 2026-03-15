@@ -6,3 +6,7 @@ sqlmodel
 psycopg[binary]
 uvicorn
 paramiko
+redis
+PyJWT
+passlib[bcrypt]
+bcrypt<4.0.0

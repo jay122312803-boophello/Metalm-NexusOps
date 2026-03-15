@@ -1,5 +1,13 @@
 const base = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
 
+const getToken = () => {
+  try {
+    return localStorage.getItem('nexusops_token') || ''
+  } catch {
+    return ''
+  }
+}
+
 const parseBody = async (res) => {
   const ct = (res.headers.get('content-type') || '').toLowerCase()
   if (ct.includes('application/json')) return res.json()
@@ -15,6 +23,8 @@ const request = async (method, url, data, opts) => {
   const isAbs = /^https?:\/\//i.test(url)
   const full = isAbs ? url : `${base}${url}`
   const o = { method, headers: {}, ...(opts || {}) }
+  const t = getToken()
+  if (t) o.headers['Authorization'] = `Bearer ${t}`
   if (data !== undefined) {
     o.headers['Content-Type'] = 'application/json'
     o.body = JSON.stringify(data)

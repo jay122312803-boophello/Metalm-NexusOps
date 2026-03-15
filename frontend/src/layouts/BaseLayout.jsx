@@ -1,7 +1,13 @@
 import Icon from '../components/Icon.jsx'
 import ToastHost from '../components/ToastHost.jsx'
+import Can from '../components/Can.jsx'
+import { useAuth } from '../contexts/AuthContext.jsx'
 
 export default function BaseLayout({ page, setPage, breadcrumb, children }) {
+  const auth = useAuth()
+  const u = auth?.user
+  const name = u?.display_name || u?.username || ''
+  const avatar = (name || 'U').slice(0, 1).toUpperCase()
   return (
     <div className="app-layout">
       <ToastHost />
@@ -11,31 +17,41 @@ export default function BaseLayout({ page, setPage, breadcrumb, children }) {
           NexusOps
         </div>
         <div className="menu">
-          <div className={`menu-item ${page === 'overview' ? 'active' : ''}`} onClick={() => setPage('overview')}>
-            <Icon name="chart-line" />
-            概览大屏
-          </div>
-          <div
-            className={`menu-item ${page === 'dashboard' || page === 'detail' ? 'active' : ''}`}
-            onClick={() => setPage('dashboard')}
-          >
-            <Icon name="table-columns" />
-            部署大盘
-          </div>
-          <div className={`menu-item ${page === 'history' ? 'active' : ''}`} onClick={() => setPage('history')}>
-            <Icon name="clock-rotate-left" />
-            审计日志
-          </div>
-          <div className={`menu-item ${page === 'settings' ? 'active' : ''}`} onClick={() => setPage('settings')}>
-            <Icon name="gears" />
-            系统设置
-          </div>
+          <Can perm="page:overview">
+            <div className={`menu-item ${page === 'overview' ? 'active' : ''}`} onClick={() => setPage('overview')}>
+              <Icon name="chart-line" />
+              概览大屏
+            </div>
+          </Can>
+          <Can perm="page:dashboard">
+            <div
+              className={`menu-item ${page === 'dashboard' || page === 'detail' ? 'active' : ''}`}
+              onClick={() => setPage('dashboard')}
+            >
+              <Icon name="table-columns" />
+              部署大盘
+            </div>
+          </Can>
+          <Can perm="page:history">
+            <div className={`menu-item ${page === 'history' ? 'active' : ''}`} onClick={() => setPage('history')}>
+              <Icon name="clock-rotate-left" />
+              审计日志
+            </div>
+          </Can>
+          <Can perm="page:settings">
+            <div className={`menu-item ${page === 'settings' ? 'active' : ''}`} onClick={() => setPage('settings')}>
+              <Icon name="gears" />
+              系统设置
+            </div>
+          </Can>
         </div>
         <div className="user-panel">
-          <div className="avatar">A</div>
+          <div className="avatar">{avatar}</div>
           <div>
-            <div style={{ fontWeight: 500 }}>Admin</div>
-            <div style={{ fontSize: 12, color: '#94a3b8' }}>DevOps Engineer</div>
+            <div style={{ fontWeight: 700 }}>{name || '-'}</div>
+            <button className="btn btn-ghost btn-sm" style={{ padding: '0 0', height: 22 }} onClick={() => auth?.logout?.()}>
+              退出登录
+            </button>
           </div>
         </div>
       </div>

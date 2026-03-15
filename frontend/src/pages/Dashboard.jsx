@@ -4,6 +4,7 @@ import Drawer from '../components/Drawer.jsx'
 import Modal from '../components/Modal.jsx'
 import Select from '../components/Select.jsx'
 import Tooltip from '../components/Tooltip.jsx'
+import Can from '../components/Can.jsx'
 import { api } from '../services/api.js'
 import { toast } from '../services/toast.js'
 
@@ -244,9 +245,11 @@ export default function Dashboard({ onNavigate }) {
             />
           </div>
           <div>
-            <button className="btn btn-primary" onClick={openCreate}>
-              <Icon name="plus" /> 创建新实例
-            </button>
+            <Can perm="deployments:manage">
+              <button className="btn btn-primary" onClick={openCreate}>
+                <Icon name="plus" /> 创建新实例
+              </button>
+            </Can>
           </div>
         </div>
 
@@ -281,27 +284,31 @@ export default function Dashboard({ onNavigate }) {
                     </Tooltip>
                     {openMenuId === t.id ? (
                       <div className="menu-pop" onClick={(ev) => ev.stopPropagation()}>
-                        <button
-                          className="menu-item-btn"
-                          onClick={(ev) => {
-                            ev.stopPropagation()
-                            setOpenMenuId(null)
-                            openEdit(t)
-                          }}
-                        >
-                          实例配置 <Icon name="gear" />
-                        </button>
+                        <Can perm="deployments:manage">
+                          <button
+                            className="menu-item-btn"
+                            onClick={(ev) => {
+                              ev.stopPropagation()
+                              setOpenMenuId(null)
+                              openEdit(t)
+                            }}
+                          >
+                            实例配置 <Icon name="gear" />
+                          </button>
+                        </Can>
                         <div style={{ height: 1, background: 'var(--border)', margin: '6px 0' }} />
-                        <button
-                          className="menu-item-btn menu-item-danger"
-                          onClick={async (ev) => {
-                            ev.stopPropagation()
-                            setOpenMenuId(null)
-                            await handleDelete(t.id)
-                          }}
-                        >
-                          删除实例 <Icon name="trash" />
-                        </button>
+                        <Can perm="deployments:manage">
+                          <button
+                            className="menu-item-btn menu-item-danger"
+                            onClick={async (ev) => {
+                              ev.stopPropagation()
+                              setOpenMenuId(null)
+                              await handleDelete(t.id)
+                            }}
+                          >
+                            删除实例 <Icon name="trash" />
+                          </button>
+                        </Can>
                       </div>
                     ) : null}
                   </div>

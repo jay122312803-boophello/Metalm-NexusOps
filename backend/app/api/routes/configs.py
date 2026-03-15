@@ -4,10 +4,11 @@ import uuid
 import zipfile
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlmodel import select
 
+from ...auth.deps import require_permission
 from ...db.models import Deployment, DeploymentHistory, TaskConfig, TaskConfigSnapshot, TaskConfigSnapshotFile
 from ...db.session import run_db
 
@@ -26,7 +27,7 @@ def _validate_rel_path(p: str) -> str:
     return "/".join(parts)
 
 
-@router.get("/deployments/{dep_id}/configs")
+@router.get("/deployments/{dep_id}/configs", dependencies=[Depends(require_permission("configs:read"))])
 async def list_task_configs(dep_id: str):
     def _work(session):
         did = uuid.UUID(dep_id)
@@ -45,7 +46,7 @@ async def list_task_configs(dep_id: str):
     return await run_db(_work)
 
 
-@router.post("/deployments/{dep_id}/configs")
+@router.post("/deployments/{dep_id}/configs", dependencies=[Depends(require_permission("configs:manage"))])
 async def create_task_config(dep_id: str, body: dict):
     rel_path = _validate_rel_path(body.get("rel_path"))
 
@@ -69,7 +70,7 @@ async def create_task_config(dep_id: str, body: dict):
     return await run_db(_work)
 
 
-@router.get("/deployments/{dep_id}/configs/{config_id}")
+@router.get("/deployments/{dep_id}/configs/{config_id}", dependencies=[Depends(require_permission("configs:read"))])
 async def get_task_config(dep_id: str, config_id: str):
     def _work(session):
         did = uuid.UUID(dep_id)
@@ -87,7 +88,7 @@ async def get_task_config(dep_id: str, config_id: str):
     return await run_db(_work)
 
 
-@router.put("/deployments/{dep_id}/configs/{config_id}")
+@router.put("/deployments/{dep_id}/configs/{config_id}", dependencies=[Depends(require_permission("configs:manage"))])
 async def update_task_config(dep_id: str, config_id: str, body: dict):
     content = body.get("content")
     if content is None:
@@ -109,7 +110,7 @@ async def update_task_config(dep_id: str, config_id: str, body: dict):
     return await run_db(_work)
 
 
-@router.put("/deployments/{dep_id}/configs/{config_id}/rename")
+@router.put("/deployments/{dep_id}/configs/{config_id}/rename", dependencies=[Depends(require_permission("configs:manage"))])
 async def rename_task_config(dep_id: str, config_id: str, body: dict):
     rel_path = _validate_rel_path(body.get("rel_path"))
 
@@ -138,7 +139,7 @@ async def rename_task_config(dep_id: str, config_id: str, body: dict):
     return await run_db(_work)
 
 
-@router.delete("/deployments/{dep_id}/configs/{config_id}")
+@router.delete("/deployments/{dep_id}/configs/{config_id}", dependencies=[Depends(require_permission("configs:manage"))])
 async def delete_task_config(dep_id: str, config_id: str):
     def _work(session):
         did = uuid.UUID(dep_id)
@@ -156,7 +157,7 @@ async def delete_task_config(dep_id: str, config_id: str):
     return {"ok": True}
 
 
-@router.post("/deployments/{dep_id}/configs/clear")
+@router.post("/deployments/{dep_id}/configs/clear", dependencies=[Depends(require_permission("configs:manage"))])
 async def clear_task_configs(dep_id: str):
     def _work(session):
         did = uuid.UUID(dep_id)
@@ -179,7 +180,7 @@ def _zip_bytes(files: list[tuple[str, str]]) -> bytes:
     return buf.getvalue()
 
 
-@router.get("/deployments/{dep_id}/configs.zip")
+@router.get("/deployments/{dep_id}/configs.zip", dependencies=[Depends(require_permission("configs:read"))])
 async def download_current_configs_zip(dep_id: str):
     def _work(session):
         did = uuid.UUID(dep_id)
@@ -194,7 +195,7 @@ async def download_current_configs_zip(dep_id: str):
     return StreamingResponse(io.BytesIO(data), media_type="application/zip", headers=headers)
 
 
-@router.get("/history/{history_id}/configs")
+@router.get("/history/{history_id}/configs", dependencies=[Depends(require_permission("configs:read"))])
 async def list_snapshot_configs(history_id: str):
     hid = uuid.UUID(history_id)
     try:
@@ -222,7 +223,7 @@ async def list_snapshot_configs(history_id: str):
     return await run_db(_work)
 
 
-@router.get("/history/{history_id}/configs/{file_id}")
+@router.get("/history/{history_id}/configs/{file_id}", dependencies=[Depends(require_permission("configs:read"))])
 async def get_snapshot_config(history_id: str, file_id: str):
     def _work(session):
         hid = uuid.UUID(history_id)
@@ -238,7 +239,7 @@ async def get_snapshot_config(history_id: str, file_id: str):
     return await run_db(_work)
 
 
-@router.get("/history/{history_id}/configs.zip")
+@router.get("/history/{history_id}/configs.zip", dependencies=[Depends(require_permission("configs:read"))])
 async def download_snapshot_configs_zip(history_id: str):
     def _work(session):
         hid = uuid.UUID(history_id)
