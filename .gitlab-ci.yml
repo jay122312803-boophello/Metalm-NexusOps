@@ -15,7 +15,7 @@ deploy:
 
   before_script:
     - sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
-    - apk add --no-cache openssh-client rsync curl
+    - apk add --no-cache openssh-client rsync curl jq
     - eval $(ssh-agent -s)
     - echo "$SERVER_SSH_KEY" | tr -d '\r' | ssh-add -
     - mkdir -p ~/.ssh
@@ -48,6 +48,18 @@ deploy:
         esac
       fi
 
+      if [ -n "${NEXUSOPS_CONFIG_ZIP_URL:-}" ]; then
+        if [ -z "${NEXUSOPS_API_TOKEN:-}" ] && [ -n "${api_base:-}" ] && [ -n "${NEXUSOPS_API_USER:-}" ] && [ -n "${NEXUSOPS_API_PASS:-}" ]; then
+          login_json="$(curl -fsSL -X POST "${api_base%/}/api/auth/login" -H "Content-Type: application/json" \
+            -d "{\"username\":\"${NEXUSOPS_API_USER}\",\"password\":\"${NEXUSOPS_API_PASS}\"}")"
+          NEXUSOPS_API_TOKEN="$(printf "%s" "$login_json" | jq -r '.token // empty')"
+        fi
+        if [ -z "${NEXUSOPS_API_TOKEN:-}" ]; then
+          echo "!! [NexusOps] 下载配置需要鉴权：请设置 NEXUSOPS_API_TOKEN（建议 masked 变量），或提供 NEXUSOPS_API_USER/NEXUSOPS_API_PASS + NEXUSOPS_API_BASE_URL"
+          exit 22
+        fi
+      fi
+
       if [ "$SERVER_HOST" = "10.88.36.61" ]; then
         case "${DEST_DIR%/}/" in
           /home/metalm/deploy/NexusOps/*) ;;
@@ -71,33 +83,30 @@ deploy:
       ssh "$SERVER_USER@$SERVER_HOST" "mkdir -p '${DEST_DIR%/}/.nexusops'"
       rsync -rz --no-perms --no-owner --no-group remote_executor.sh "$SERVER_USER@$SERVER_HOST:${DEST_DIR%/}/.nexusops/remote_executor.sh"
 
+      if [ -n "${NEXUSOPS_CONFIG_ZIP_URL:-}" ] && [ "${test:-}" != "true" ]; then
+        echo "====== [NexusOps] Download Configs ======"
+        tmp_local="/tmp/nexusops-configs.zip"
+        rm -f "$tmp_local"
+        curl -fsSL -H "Authorization: Bearer ${NEXUSOPS_API_TOKEN}" "$NEXUSOPS_CONFIG_ZIP_URL" -o "$tmp_local"
+        rsync -rz --no-perms --no-owner --no-group "$tmp_local" "$SERVER_USER@$SERVER_HOST:${DEST_DIR%/}/.nexusops/configs.zip"
+        rm -f "$tmp_local"
+      fi
+
       ssh "$SERVER_USER@$SERVER_HOST" "set -e; \
         if [ \"${test:-}\" = \"true\" ]; then \
           echo '====== [NexusOps] Test Mode: Skip Config Inject ======'; \
         elif [ -n \"${NEXUSOPS_CONFIG_ZIP_URL:-}\" ]; then \
           echo '====== [NexusOps] Inject Configs ======'; \
           tmp=\"${DEST_DIR%/}/.nexusops/configs.zip\"; \
-          tmp_local=\"/tmp/nexusops-configs.zip\"; \
-          rm -f \"\$tmp_local\"; \
           mkdir -p \"${DEST_DIR%/}/.nexusops\"; \
-          if command -v curl >/dev/null 2>&1; then \
-            curl -fsSL \"$NEXUSOPS_CONFIG_ZIP_URL\" -o \"\$tmp_local\"; \
-          elif command -v wget >/dev/null 2>&1; then \
-            wget -qO \"\$tmp_local\" \"$NEXUSOPS_CONFIG_ZIP_URL\"; \
-          else \
-            true; \
-          fi; \
-          if [ -s \"\$tmp_local\" ]; then \
-            if ! mv -f \"\$tmp_local\" \"\$tmp\"; then \
-              echo \"!! [NexusOps] 无法写入: \$tmp\"; \
-              ls -ld \"${DEST_DIR%/}\" \"${DEST_DIR%/}/.nexusops\" || true; \
-              df -h \"${DEST_DIR%/}\" || true; \
-              exit 23; \
-            fi; \
+          if [ -s \"\$tmp\" ]; then \
             if command -v unzip >/dev/null 2>&1; then unzip -o \"\$tmp\" -d \"${DEST_DIR%/}\" >/dev/null; \
             elif command -v python3 >/dev/null 2>&1; then python3 -m zipfile -e \"\$tmp\" \"${DEST_DIR%/}\" >/dev/null; \
             else echo unzip/python3 not found; exit 1; fi; \
             rm -f \"\$tmp\"; \
+          else \
+            echo \"!! [NexusOps] 配置包不存在或为空: \$tmp\"; \
+            exit 22; \
           fi; \
           echo '====== [NexusOps] Configs Ready ======'; \
         fi; \
