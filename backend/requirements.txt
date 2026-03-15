@@ -1,0 +1,8 @@
+fastapi
+python-dotenv
+requests
+sqlalchemy
+sqlmodel
+psycopg[binary]
+uvicorn
+paramiko

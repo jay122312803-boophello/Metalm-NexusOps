@@ -11,17 +11,13 @@ ENV PATH="/opt/venv/bin:$PATH"
 WORKDIR /app/backend
 
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories && \
-    apk add --no-cache python3 py3-pip && \
+    apk add --no-cache python3 py3-pip openssl libffi && \
     python3 -m venv /opt/venv && \
-    apk add --no-cache --virtual .build-deps build-base python3-dev && \
-    /opt/venv/bin/pip install --no-cache-dir \
-      fastapi \
-      python-dotenv \
-      requests \
-      sqlalchemy \
-      sqlmodel \
-      "psycopg[binary]" \
-      uvicorn && \
+    /opt/venv/bin/pip install --no-cache-dir -U pip setuptools wheel
+
+COPY backend/requirements.txt /app/backend/requirements.txt
+RUN apk add --no-cache --virtual .build-deps build-base python3-dev && \
+    /opt/venv/bin/pip install --no-cache-dir -r /app/backend/requirements.txt && \
     apk del .build-deps
 
 COPY backend/ /app/backend/
