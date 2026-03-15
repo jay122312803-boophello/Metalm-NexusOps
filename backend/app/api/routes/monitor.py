@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException
+from starlette.concurrency import run_in_threadpool
 from sqlmodel import select
 
 from ...db.models import Deployment, DeploymentHistory, Server
@@ -11,6 +12,8 @@ from ...db.session import run_db
 from ...ssh import ssh_exec
 
 router = APIRouter()
+_monitor_cache: dict[str, tuple[float, dict]] = {}
+_monitor_cache_ttl_s = 12.0
 
 def _ports_from_inspect(ports_obj) -> str:
     if not isinstance(ports_obj, dict):
@@ -81,6 +84,10 @@ def _parse_compose_ps_output(raw: str):
 @router.get("/{dep_id}/monitor")
 async def monitor_services(dep_id: str):
     did = uuid.UUID(dep_id)
+    now = datetime.utcnow().timestamp()
+    cached = _monitor_cache.get(dep_id)
+    if cached and now - float(cached[0]) < _monitor_cache_ttl_s:
+        return cached[1]
 
 
     def _work(session):
@@ -142,7 +149,9 @@ done
 """.strip()
 
     try:
-        code, out, err = ssh_exec(s.address, s.ssh_user or "metalm", s.ssh_key, script, timeout=18.0)
+        code, out, err = await run_in_threadpool(
+            ssh_exec, s.address, s.ssh_user or "metalm", s.ssh_key, script, timeout=18.0
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -199,7 +208,7 @@ done
     groups = [g for g in groups if g.get("compose_path")]
     groups.sort(key=lambda x: str(x.get("compose_path")))
 
-    return {
+    resp = {
         "ok": True,
         "deployment_id": str(d.id),
         "server_id": str(s.id),
@@ -207,3 +216,5 @@ done
         "groups": groups,
         "ts": datetime.utcnow().isoformat(),
     }
+    _monitor_cache[dep_id] = (datetime.utcnow().timestamp(), resp)
+    return resp

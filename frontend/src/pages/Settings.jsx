@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import Drawer from '../components/Drawer.jsx'
 import Icon from '../components/Icon.jsx'
 import Modal from '../components/Modal.jsx'
+import Select from '../components/Select.jsx'
 import { api } from '../services/api.js'
 
 export default function Settings({ initialTab }) {
@@ -313,13 +314,18 @@ export default function Settings({ initialTab }) {
               />
             </div>
             {activeTab === 'servers' ? (
-              <select className="action-select" value={serverEnv} onChange={(e) => setServerEnv(e.target.value)}>
-                <option value="ALL">全部环境</option>
-                <option value="PROD">PROD</option>
-                <option value="TEST">TEST</option>
-                <option value="DEV">DEV</option>
-                <option value="OTHER">OTHER</option>
-              </select>
+              <Select
+                className="action-select"
+                value={serverEnv}
+                onChange={(v) => setServerEnv(v)}
+                options={[
+                  { value: 'ALL', label: '全部环境' },
+                  { value: 'PROD', label: 'PROD' },
+                  { value: 'TEST', label: 'TEST' },
+                  { value: 'DEV', label: 'DEV' },
+                  { value: 'OTHER', label: 'OTHER' }
+                ]}
+              />
             ) : null}
           </div>
           <div>
@@ -549,16 +555,17 @@ export default function Settings({ initialTab }) {
               </div>
               <div className="form-item">
                 <label className="form-label">环境标识</label>
-                <select
+                <Select
                   className="form-input"
                   value={formServer.environment || 'OTHER'}
-                  onChange={(e) => setFormServer({ ...formServer, environment: e.target.value })}
-                >
-                  <option value="PROD">PROD（生产）</option>
-                  <option value="TEST">TEST（测试）</option>
-                  <option value="DEV">DEV（开发）</option>
-                  <option value="OTHER">OTHER（其他）</option>
-                </select>
+                  onChange={(v) => setFormServer({ ...formServer, environment: v })}
+                  options={[
+                    { value: 'PROD', label: 'PROD（生产）' },
+                    { value: 'TEST', label: 'TEST（测试）' },
+                    { value: 'DEV', label: 'DEV（开发）' },
+                    { value: 'OTHER', label: 'OTHER（其他）' }
+                  ]}
+                />
               </div>
               <div className="form-item">
                 <label className="form-label">

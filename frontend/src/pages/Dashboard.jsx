@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import Icon from '../components/Icon.jsx'
 import Drawer from '../components/Drawer.jsx'
 import Modal from '../components/Modal.jsx'
+import Select from '../components/Select.jsx'
 import { api } from '../services/api.js'
 import { toast } from '../services/toast.js'
 
@@ -227,14 +228,19 @@ export default function Dashboard({ onNavigate }) {
               <Icon name="magnifying-glass" />
               <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索任务 / 目标主机 / 仓库 / 分支" />
             </div>
-            <select className="action-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-              <option value="all">全部状态</option>
-              <option value="success">就绪</option>
-              <option value="failed">失败</option>
-              <option value="running">运行中</option>
-              <option value="pending">排队中</option>
-              <option value="canceled">已取消</option>
-            </select>
+            <Select
+              className="action-select"
+              value={statusFilter}
+              onChange={(v) => setStatusFilter(v)}
+              options={[
+                { value: 'all', label: '全部状态' },
+                { value: 'success', label: '就绪' },
+                { value: 'failed', label: '失败' },
+                { value: 'running', label: '运行中' },
+                { value: 'pending', label: '排队中' },
+                { value: 'canceled', label: '已取消' }
+              ]}
+            />
           </div>
           <div>
             <button className="btn btn-primary" onClick={openCreate}>
@@ -491,35 +497,33 @@ export default function Dashboard({ onNavigate }) {
             <label className="form-label">
               选择目标服务器 <span className="req-star">*</span>
             </label>
-            <select
+            <Select
               className="form-input"
               value={newTask.server_id || ''}
-              onChange={(e) => setNewTask({ ...newTask, server_id: e.target.value })}
-            >
-              <option value="">请选择...</option>
-              {servers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {`${s.name} (${s.address})`}
-                </option>
-              ))}
-            </select>
+              placeholder="请选择..."
+              onChange={(v) => setNewTask({ ...newTask, server_id: v })}
+              options={[
+                { value: '', label: '请选择...' },
+                ...servers.map((s) => ({ value: s.id, label: `${s.name} (${s.address})` }))
+              ]}
+              popWidth={360}
+            />
           </div>
           <div className="form-item">
             <label className="form-label">
               选择来源仓库 <span className="req-star">*</span>
             </label>
-            <select
+            <Select
               className="form-input"
               value={newTask.repo_id || ''}
-              onChange={(e) => setNewTask({ ...newTask, repo_id: e.target.value })}
-            >
-              <option value="">请选择...</option>
-              {repos.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {`${r.name} [${r.branch || 'master'}]`}
-                </option>
-              ))}
-            </select>
+              placeholder="请选择..."
+              onChange={(v) => setNewTask({ ...newTask, repo_id: v })}
+              options={[
+                { value: '', label: '请选择...' },
+                ...repos.map((r) => ({ value: r.id, label: `${r.name} [${r.branch || 'master'}]` }))
+              ]}
+              popWidth={360}
+            />
           </div>
 
           <div className="form-item">

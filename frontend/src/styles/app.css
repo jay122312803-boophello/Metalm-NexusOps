@@ -356,17 +356,134 @@ body {
 .drawer-footer { padding: 20px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 12px; }
 
 .overview-grid { display: flex; flex-direction: column; gap: 24px; }
+.overview-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: -6px; }
+.overview-filter { display: inline-flex; align-items: center; gap: 10px; }
+.overview-filter-label { color: var(--text-sub); font-size: 12px; font-weight: 700; }
+.overview-filter-select { height: 32px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--border); background: white; font-size: 12px; font-weight: 700; color: var(--text-main); box-shadow: var(--shadow-sm); }
+.overview-filter-select:focus { outline: none; border-color: rgba(22,163,74,0.35); box-shadow: 0 0 0 3px rgba(22,163,74,0.12); }
+.overview-updated { display: flex; align-items: center; gap: 12px; color: var(--text-sub); font-size: 12px; white-space: nowrap; }
 .overview-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
 .overview-charts { display: grid; grid-template-columns: 1.3fr 0.7fr; gap: 16px; align-items: stretch; }
 .overview-bottom { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 16px; align-items: stretch; }
 
-.metric-card { padding: 16px 18px; }
-.metric-icon { width: 44px; height: 44px; border-radius: 14px; background: #e8f5e9; color: var(--primary); display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid rgba(22,163,74,0.14); }
+.metric-card { padding: 20px 22px; }
+.metric-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.metric-title { color: var(--text-sub); font-size: 13px; font-weight: 700; letter-spacing: 0.1px; }
+.metric-icon { width: 40px; height: 40px; border-radius: 14px; background: rgba(16,185,129,0.12); color: var(--primary); display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid rgba(22,163,74,0.14); }
 .metric-icon i { font-size: 18px; }
-.metric-value { font-size: 30px; font-weight: 900; color: var(--text-main); letter-spacing: 0.2px; line-height: 1; }
+.metric-value { font-size: 34px; font-weight: 950; color: var(--text-main); letter-spacing: 0.2px; line-height: 1; }
 .metric-value.warn { color: var(--warning); }
 .metric-value.bad { color: var(--danger); }
+.metric-unit { color: rgba(100,116,139,0.95); font-size: 13px; font-weight: 800; }
+.metric-subtext { margin-top: 10px; color: var(--text-sub); font-size: 12px; }
 .legend-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.metric-sub { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+.metric-sub-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.metric-sub-label { color: var(--text-sub); font-size: 12px; font-weight: 700; letter-spacing: 0.2px; }
+.metric-select { height: 30px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--border); background: white; font-size: 12px; color: var(--text-main); max-width: 200px; }
+.metric-select:focus { outline: none; border-color: rgba(22,163,74,0.35); box-shadow: 0 0 0 3px rgba(22,163,74,0.12); }
+.metric-sub-hint { display: flex; align-items: center; gap: 14px; color: var(--text-sub); font-size: 12px; }
+
+.select { position: relative; display: inline-flex; }
+.select-btn {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: white;
+  color: var(--text-main);
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  font-size: 12px;
+  font-weight: 700;
+  min-width: 140px;
+}
+.select-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.select.is-open .select-btn { border-color: rgba(22,163,74,0.35); box-shadow: 0 0 0 3px rgba(22,163,74,0.12); }
+.select-btn i { font-size: 12px; color: rgba(100,116,139,0.95); }
+.select-btn-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.select-btn-text.is-placeholder { color: rgba(100,116,139,0.85); font-weight: 600; }
+.select-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  min-width: 100%;
+  max-width: 320px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+  padding: 6px;
+  z-index: 40;
+  max-height: 240px;
+  overflow: auto;
+}
+.select-pop.align-left { left: 0; }
+.select-pop.align-right { right: 0; }
+.select-item {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 10px 10px;
+  border-radius: 10px;
+  text-align: left;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-main);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.select-item:hover { background: #f1f5f9; }
+.select-item.active { background: rgba(16,185,129,0.12); color: var(--primary); }
+.select-item i { font-size: 12px; }
+.select-empty { padding: 10px 10px; color: var(--text-sub); font-size: 12px; }
+
+.select.action-select,
+.select.form-input,
+.select.overview-filter-select {
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.select.action-select .select-btn {
+  height: 40px;
+  padding: 0 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  min-width: 170px;
+}
+
+.select.overview-filter-select .select-btn {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  min-width: 0;
+}
+
+.select.form-input { width: 100%; }
+.select.form-input .select-btn {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  height: auto;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: none;
+}
 
 .feed-list { display: flex; flex-direction: column; gap: 10px; overflow: auto; min-height: 0; }
 .feed-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 10px; border-radius: 12px; cursor: pointer; transition: background 0.15s ease; }

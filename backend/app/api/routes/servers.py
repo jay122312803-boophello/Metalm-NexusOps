@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException
+from starlette.concurrency import run_in_threadpool
 
 from ...schemas import CreateServerRequest, UpdateServerRequest
 from ...db.models import Server
@@ -11,6 +12,8 @@ from sqlalchemy.exc import IntegrityError
 from ...ssh import ssh_exec
 
 router = APIRouter()
+_metrics_cache: dict[str, tuple[float, dict]] = {}
+_metrics_cache_ttl_s = 10.0
 
 def _infer_env(name: str) -> str:
     s = (name or "").lower()
@@ -170,6 +173,10 @@ async def delete_server(server_id: str):
 @router.get("/{server_id}/metrics")
 async def get_server_metrics(server_id: str):
     sid = uuid.UUID(server_id)
+    now = datetime.utcnow().timestamp()
+    cached = _metrics_cache.get(server_id)
+    if cached and now - float(cached[0]) < _metrics_cache_ttl_s:
+        return cached[1]
 
     def _work(session):
         s = session.get(Server, sid)
@@ -284,7 +291,9 @@ printf "}\n"
 """.strip()
 
     try:
-        code, out, err = ssh_exec(s.address, s.ssh_user or "metalm", s.ssh_key, script, timeout=14.0)
+        code, out, err = await run_in_threadpool(
+            ssh_exec, s.address, s.ssh_user or "metalm", s.ssh_key, script, timeout=14.0
+        )
     except Exception as e:
         msg = str(e).replace("\n", " ").strip()
         if len(msg) > 200:
@@ -304,9 +313,11 @@ printf "}\n"
     except Exception:
         raise HTTPException(status_code=502, detail="Remote output is not valid JSON")
 
-    return {
+    resp = {
         "ok": True,
         "server_id": str(s.id),
         "ts": datetime.utcnow().isoformat(),
         "metrics": payload,
     }
+    _metrics_cache[server_id] = (datetime.utcnow().timestamp(), resp)
+    return resp

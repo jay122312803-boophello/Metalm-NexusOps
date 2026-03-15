@@ -4,7 +4,7 @@ import { api } from '../services/api.js'
 
 const overviewCacheKey = 'nexusops_overview_cache_v1'
 const runtimeCacheKey = 'nexusops_overview_runtime_v1'
-const containersCacheKey = 'nexusops_overview_containers_v1'
+const containersCacheKey = 'nexusops_overview_containers_v2'
 const serverMetricsCacheKey = 'nexusops_overview_server_metrics_v1'
 
 const fmtPct = (v) => {
@@ -479,16 +479,14 @@ function MetricCard({ title, value, sub, icon, tone, onClick, tooltip }) {
       onClick={clickable ? onClick : undefined}
       title={tooltip || undefined}
     >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ color: 'var(--text-sub)', fontSize: 13 }}>{title}</div>
-          <div className={`metric-value ${tone || ''}`}>{value}</div>
-          {sub ? <div style={{ color: 'var(--text-sub)', fontSize: 12 }}>{sub}</div> : null}
-        </div>
+      <div className="metric-head">
+        <div className="metric-title">{title}</div>
         <div className="metric-icon">
           <Icon name={icon} />
         </div>
       </div>
+      <div className={`metric-value ${tone || ''}`}>{value}</div>
+      {typeof sub === 'string' ? <div className="metric-subtext">{sub}</div> : sub ? <div className="metric-subtext">{sub}</div> : null}
     </div>
   )
 }
@@ -581,6 +579,7 @@ export default function Overview({ onNavigate }) {
   const [servers, setServers] = useState([])
   const [deployments, setDeployments] = useState([])
   const [focusServerId, setFocusServerId] = useState(null)
+  const [focusDeploymentId, setFocusDeploymentId] = useState(null)
   const [serverMetricsById, setServerMetricsById] = useState(() => {
     try {
       const raw = localStorage.getItem(serverMetricsCacheKey)
@@ -646,6 +645,7 @@ export default function Overview({ onNavigate }) {
     serversRef.current = s
     deploymentsRef.current = d
     setFocusServerId((p) => (p ? p : s[0]?.id || null))
+    setFocusDeploymentId((p) => (p ? p : d[0]?.id || null))
   }
 
   const pushAlert = (level, key, msg) => {
@@ -757,18 +757,18 @@ export default function Overview({ onNavigate }) {
       pollCtlRef.current.containersRunning = false
       return
     }
+    const targetId = focusDeploymentId || list[0]?.id
+    const target = list.find((x) => x.id === targetId) || list[0]
+    if (!target?.id) {
+      pollCtlRef.current.containersRunning = false
+      return
+    }
     const seen = new Set()
     let total = 0
     let running = 0
     let abnormal = 0
-    const results = await mapLimit(list, 2, async (d) => {
-      const res = await api.get(`/api/deployments/${d.id}/monitor`, { signal: ctl.signal })
-      return { d, res }
-    })
-    for (const it of results) {
-      const d = it?.d
-      const res = it?.res
-      if (!d || !res?.ok) continue
+    const res = await api.get(`/api/deployments/${target.id}/monitor`, { signal: ctl.signal })
+    if (res?.ok) {
       const groups = Array.isArray(res.groups) ? res.groups : []
       for (const g of groups) {
         const cts = Array.isArray(g?.containers) ? g.containers : []
@@ -782,21 +782,26 @@ export default function Overview({ onNavigate }) {
           else abnormal++
           if (st && st !== 'running') {
             const name = String(c?.Name || c?.Names || c?.Service || 'container')
-            pushAlert('bad', `container_${id}`, `【严重】${d.name || '实例'} 容器异常：${name}（${st}）`)
+            pushAlert('bad', `container_${target.id}_${id}`, `【严重】${target.name || '实例'} 容器异常：${name}（${st}）`)
           } else {
             const name = String(c?.Name || c?.Names || c?.Service || 'container')
-            pushAlert('ok', `container_${id}`, `【恢复】${d.name || '实例'} 容器已恢复运行：${name}`)
+            pushAlert('ok', `container_${target.id}_${id}`, `【恢复】${target.name || '实例'} 容器已恢复运行：${name}`)
           }
         }
       }
     }
-    const next = { ts: Date.now(), total, running, abnormal }
+    const next = { ts: Date.now(), total, running, abnormal, deployment_id: target.id }
     setContainers({ loading: false, ...next })
     try {
       localStorage.setItem(containersCacheKey, JSON.stringify(next))
     } catch (_) {}
     pollCtlRef.current.containersRunning = false
   }
+
+  useEffect(() => {
+    if (!focusDeploymentId) return
+    pollContainers()
+  }, [focusDeploymentId])
 
   const stopPolling = () => {
     if (pollRef.current.metrics) clearInterval(pollRef.current.metrics)
@@ -822,12 +827,26 @@ export default function Overview({ onNavigate }) {
   const startPolling = () => {
     if (!pollRef.current.metrics) {
       pollServerMetrics()
-      pollRef.current.metrics = setInterval(pollServerMetrics, 15000)
+      pollRef.current.metrics = setInterval(pollServerMetrics, 30000)
     }
-    if (!pollRef.current.containers) {
-      pollContainers()
-      pollRef.current.containers = setInterval(pollContainers, 30000)
+  }
+
+  const startContainersPolling = () => {
+    if (pollRef.current.containers) return
+    pollContainers()
+    pollRef.current.containers = setInterval(pollContainers, 90000)
+  }
+
+  const stopContainersPolling = () => {
+    if (pollRef.current.containers) clearInterval(pollRef.current.containers)
+    pollRef.current.containers = null
+    if (pollCtlRef.current.containers) {
+      try {
+        pollCtlRef.current.containers.abort()
+      } catch (_) {}
     }
+    pollCtlRef.current.containers = null
+    pollCtlRef.current.containersRunning = false
   }
 
   useEffect(() => {
@@ -851,6 +870,15 @@ export default function Overview({ onNavigate }) {
       window.removeEventListener('beforeunload', onUnload)
     }
   }, [])
+
+  useEffect(() => {
+    if (document.hidden) return
+    if (bottomTab === 'alerts') {
+      startContainersPolling()
+      return
+    }
+    stopContainersPolling()
+  }, [bottomTab, containers.loading])
 
   const m = data?.metrics || {}
   const trend = Array.isArray(data?.trend_7d) ? data.trend_7d : []
@@ -909,7 +937,7 @@ export default function Overview({ onNavigate }) {
   }, [servers, serverMetricsById])
 
   const clusterTone = cluster.offline > 0 ? 'bad' : cluster.warn > 0 ? 'warn' : 'ok'
-  const containerTone = containers.abnormal > 0 ? 'bad' : 'ok'
+  const containerTone = containers.abnormal > 0 ? 'bad' : containers.total > 0 ? 'ok' : 'warn'
   const clusterTip = `正常：资源采集成功，CPU/内存 < 85%\n告警：CPU 或 内存 ≥ 85%（资源水位偏高）\n离线：资源采集失败（SSH/网络/鉴权问题）\n未巡检：尚未采集到该节点资源数据`
   const envText = (() => {
     const arr = Array.isArray(servers) ? servers : []
@@ -950,7 +978,13 @@ export default function Overview({ onNavigate }) {
             icon="rocket"
             tone="ok"
           />
-          <MetricCard title="部署成功率" value={loading ? '-' : fmtPct(m?.success_rate_today)} sub="今日" icon="bullseye" tone={succTone} />
+          <MetricCard
+            title="今日部署成功率"
+            value={loading ? '-' : fmtPct(m?.success_rate_today)}
+            sub={loading ? '总计 - 次部署' : `总计 ${Number(m?.deploy_today || 0)} 次部署`}
+            icon="bullseye"
+            tone={succTone}
+          />
           <MetricCard
             title="集群健康度"
             value={
@@ -958,21 +992,39 @@ export default function Overview({ onNavigate }) {
                 '-'
               ) : (
                 <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8 }}>
-                  <span>{cluster.ok} 正常</span>
-                  <span style={{ color: 'rgba(148,163,184,0.95)', fontWeight: 700, fontSize: 14 }}>{`/ ${cluster.warn} 告警 / ${cluster.offline} 离线`}</span>
+                  <span style={{ fontWeight: 900 }}>{cluster.ok + cluster.warn}</span>
+                  <span className="metric-unit">台在线</span>
                 </span>
               )
             }
-            sub={cluster.total ? `采样 ${cluster.sampled}/${cluster.total}${cluster.unchecked ? ` · 未巡检 ${cluster.unchecked}` : ''} · 点击进入服务器管理` : '点击进入服务器管理'}
+            sub={
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: cluster.warn > 0 ? 'var(--danger)' : 'var(--text-sub)' }}>
+                  <span className="legend-dot" style={{ background: cluster.warn > 0 ? 'var(--danger)' : 'rgba(148,163,184,0.9)' }} /> 告警 {cluster.warn}
+                </span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: cluster.offline > 0 ? 'var(--danger)' : 'var(--text-sub)' }}>
+                  <span className="legend-dot" style={{ background: cluster.offline > 0 ? 'var(--danger)' : 'rgba(148,163,184,0.9)' }} /> 离线 {cluster.offline}
+                </span>
+              </div>
+            }
             icon="server"
             tone={clusterTone}
             onClick={() => (onNavigate ? onNavigate('settings') : null)}
             tooltip={clusterTip}
           />
           <MetricCard
-            title="活跃容器"
+            title="活跃容器总数"
             value={containers.loading ? '-' : String(containers.total)}
-            sub={containers.loading ? '' : `🟢 ${containers.running} 运行中  ·  🔴 ${containers.abnormal} 异常`}
+            sub={
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span className="legend-dot" style={{ background: 'var(--success)' }} /> 运行中 {containers.running}
+                </span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span className="legend-dot" style={{ background: 'var(--danger)' }} /> 异常 {containers.abnormal}
+                </span>
+              </div>
+            }
             icon="cubes"
             tone={containerTone}
             onClick={() => (onNavigate ? onNavigate('dashboard') : null)}
@@ -1078,10 +1130,6 @@ export default function Overview({ onNavigate }) {
               <button className="btn btn-outline" onClick={() => (onNavigate ? onNavigate('settings', null, { tab: 'repos' }) : null)}>
                 <Icon name="code-branch" /> 管理 Git 仓库
               </button>
-            </div>
-            <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'var(--text-sub)', fontSize: 12 }}>
-              <span>资源轮询 {runtime.ts ? new Date(runtime.ts).toLocaleTimeString() : '未更新'}</span>
-              <span>容器轮询 {containers.ts ? new Date(containers.ts).toLocaleTimeString() : '未更新'}</span>
             </div>
           </div>
         </div>

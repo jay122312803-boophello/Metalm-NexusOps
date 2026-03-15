@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import Drawer from '../components/Drawer.jsx'
 import Icon from '../components/Icon.jsx'
 import Modal from '../components/Modal.jsx'
+import Select from '../components/Select.jsx'
 import { api } from '../services/api.js'
 
 export default function History({ onNavigate, initialPreset }) {
@@ -95,22 +96,22 @@ export default function History({ onNavigate, initialPreset }) {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            <select className="action-select" style={{ width: 180 }} value={selectedServerId} onChange={(e) => setSelectedServerId(e.target.value)}>
-              <option value="all">全部服务器</option>
-              {servers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-            <select className="action-select" style={{ width: 180 }} value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)}>
-              <option value="all">全部状态</option>
-              {statusOptions.map((s) => (
-                <option key={s} value={s}>
-                  {statusLabel(s)}
-                </option>
-              ))}
-            </select>
+            <div style={{ width: 180 }}>
+              <Select
+                value={selectedServerId}
+                onChange={(v) => setSelectedServerId(v)}
+                popWidth={240}
+                options={[{ value: 'all', label: '全部服务器' }, ...servers.map((s) => ({ value: s.id, label: s.name }))]}
+              />
+            </div>
+            <div style={{ width: 180 }}>
+              <Select
+                value={selectedStatus}
+                onChange={(v) => setSelectedStatus(v)}
+                popWidth={240}
+                options={[{ value: 'all', label: '全部状态' }, ...statusOptions.map((s) => ({ value: s, label: statusLabel(s) }))]}
+              />
+            </div>
           </div>
         </div>
 
