@@ -17,13 +17,13 @@ export default function BaseLayout({ page, setPage, breadcrumb, children }) {
           NexusOps
         </div>
         <div className="menu">
-          <Can perm="page:overview">
+          <Can perm="overview:read">
             <div className={`menu-item ${page === 'overview' ? 'active' : ''}`} onClick={() => setPage('overview')}>
               <Icon name="chart-line" />
               概览大屏
             </div>
           </Can>
-          <Can perm="page:dashboard">
+          <Can perm="deploy:manage">
             <div
               className={`menu-item ${page === 'dashboard' || page === 'detail' ? 'active' : ''}`}
               onClick={() => setPage('dashboard')}
@@ -32,13 +32,13 @@ export default function BaseLayout({ page, setPage, breadcrumb, children }) {
               部署大盘
             </div>
           </Can>
-          <Can perm="page:history">
+          <Can perm="audit:read">
             <div className={`menu-item ${page === 'history' ? 'active' : ''}`} onClick={() => setPage('history')}>
               <Icon name="clock-rotate-left" />
               审计日志
             </div>
           </Can>
-          <Can perm="page:settings">
+          <Can perm="settings:access">
             <div className={`menu-item ${page === 'settings' ? 'active' : ''}`} onClick={() => setPage('settings')}>
               <Icon name="gears" />
               系统设置

@@ -45,7 +45,7 @@ async def _append_history_log_tail(history_id: uuid.UUID, lines: list[str]) -> N
     await run_db(_work)
 
 
-@router.get("/history/{history_id}/events", dependencies=[Depends(require_permission("events:read"))])
+@router.get("/history/{history_id}/events", dependencies=[Depends(require_permission("audit:read"))])
 async def history_events(history_id: str):
     hid = uuid.UUID(history_id)
     try:

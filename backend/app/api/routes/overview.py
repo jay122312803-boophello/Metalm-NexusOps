@@ -35,7 +35,7 @@ def _env_key(name: str) -> str:
 
 
 @router.get("/overview")
-async def get_overview(user=Depends(require_permission("page:overview"))):
+async def get_overview(user=Depends(require_permission("overview:read"))):
     def _work(session):
         tz = _get_app_tz()
         now_local = datetime.now(timezone.utc).astimezone(tz)

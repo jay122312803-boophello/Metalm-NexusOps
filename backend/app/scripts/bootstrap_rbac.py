@@ -2,6 +2,7 @@ import os
 import uuid
 
 from sqlmodel import Session, SQLModel, select
+from sqlalchemy import text
 
 from app.auth.security import hash_password
 from app.db.models import Permission, Role, RolePermission, User, UserRole
@@ -11,23 +12,12 @@ from app.db.session import engine
 def _p_defs():
     return [
         ("RBAC 管理", "rbac:manage", "api"),
-        ("概览大屏", "page:overview", "page"),
-        ("部署大盘", "page:dashboard", "page"),
-        ("审计日志", "page:history", "page"),
-        ("系统设置", "page:settings", "page"),
-        ("服务器读取", "servers:read", "api"),
-        ("服务器管理", "servers:manage", "api"),
-        ("服务器监控", "servers:metrics", "api"),
-        ("仓库读取", "repos:read", "api"),
-        ("仓库管理", "repos:manage", "api"),
-        ("实例读取", "deployments:read", "api"),
-        ("实例管理", "deployments:manage", "api"),
-        ("触发部署", "deploy:trigger", "api"),
-        ("配置读取", "configs:read", "api"),
-        ("配置管理", "configs:manage", "api"),
-        ("审计读取", "history:read", "api"),
-        ("审计删除", "history:delete", "api"),
-        ("事件读取", "events:read", "api"),
+        ("概览大屏", "overview:read", "page"),
+        ("部署大盘", "deploy:manage", "page"),
+        ("审计日志", "audit:read", "page"),
+        ("系统设置", "settings:access", "page"),
+        ("基础资源管理", "infra:manage", "api"),
+        ("审计管理", "audit:manage", "api"),
         ("容器监控", "monitor:read", "api"),
     ]
 
@@ -40,6 +30,8 @@ def main():
     reset = (os.getenv("NEXUSOPS_ADMIN_RESET") or "").strip() == "1"
 
     with Session(engine) as session:
+        session.exec(text("ALTER TABLE permissions ADD COLUMN IF NOT EXISTS is_visible boolean NOT NULL DEFAULT true"))
+        session.commit()
         perm_by_code = {}
         for name, code, typ in _p_defs():
             p = session.exec(select(Permission).where(Permission.code == code)).first()
@@ -89,4 +81,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

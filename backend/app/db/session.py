@@ -104,71 +104,92 @@ async def init_db() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_task_configs_deployment_id ON task_configs(deployment_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_task_config_snapshots_history_id ON task_config_snapshots(history_id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_task_config_snapshot_files_snapshot_id ON task_config_snapshot_files(snapshot_id)"))
+            conn.execute(text("ALTER TABLE permissions ADD COLUMN IF NOT EXISTS is_visible boolean NOT NULL DEFAULT true"))
 
-        if (os.getenv("NEXUSOPS_DB_INIT") or "").strip() == "1":
-            from app.auth.security import hash_password
-            from app.db.models import Permission, Role, RolePermission, User, UserRole
+        from app.auth.security import hash_password
+        from app.db.models import Permission, Role, RolePermission, User, UserRole
 
-            with Session(engine) as session:
-                if not session.exec(select(User.id).limit(1)).first():
-                    admin_user = (os.getenv("NEXUSOPS_ADMIN_USER") or "admin").strip() or "admin"
-                    admin_pass = (os.getenv("NEXUSOPS_ADMIN_PASS") or "admin123").strip() or "admin123"
+        core_defs = [
+            ("RBAC 管理", "rbac:manage", "api"),
+            ("概览大屏", "overview:read", "page"),
+            ("部署大盘", "deploy:manage", "page"),
+            ("审计日志", "audit:read", "page"),
+            ("系统设置", "settings:access", "page"),
+            ("基础资源管理", "infra:manage", "api"),
+            ("审计管理", "audit:manage", "api"),
+            ("运行监控", "monitor:read", "api"),
+        ]
+        legacy_codes = [
+            "page:overview",
+            "page:dashboard",
+            "page:history",
+            "page:settings",
+            "servers:read",
+            "servers:manage",
+            "servers:metrics",
+            "repos:read",
+            "repos:manage",
+            "deployments:read",
+            "deployments:manage",
+            "deploy:trigger",
+            "configs:read",
+            "configs:manage",
+            "history:read",
+            "history:delete",
+            "events:read",
+        ]
 
-                    p_defs = [
-                        ("RBAC 管理", "rbac:manage", "api"),
-                        ("概览大屏", "page:overview", "page"),
-                        ("部署大盘", "page:dashboard", "page"),
-                        ("审计日志", "page:history", "page"),
-                        ("系统设置", "page:settings", "page"),
-                        ("服务器读取", "servers:read", "api"),
-                        ("服务器管理", "servers:manage", "api"),
-                        ("服务器监控", "servers:metrics", "api"),
-                        ("仓库读取", "repos:read", "api"),
-                        ("仓库管理", "repos:manage", "api"),
-                        ("实例读取", "deployments:read", "api"),
-                        ("实例管理", "deployments:manage", "api"),
-                        ("触发部署", "deploy:trigger", "api"),
-                        ("配置读取", "configs:read", "api"),
-                        ("配置管理", "configs:manage", "api"),
-                        ("审计读取", "history:read", "api"),
-                        ("审计删除", "history:delete", "api"),
-                        ("事件读取", "events:read", "api"),
-                        ("容器监控", "monitor:read", "api"),
-                    ]
-                    perm_by_code = {}
-                    for name, code, typ in p_defs:
-                        p = session.exec(select(Permission).where(Permission.code == code)).first()
-                        if not p:
-                            p = Permission(name=name, code=code, type=typ)
-                            session.add(p)
-                            session.commit()
-                            session.refresh(p)
-                        perm_by_code[code] = p
-
-                    r_admin = session.exec(select(Role).where(Role.code == "admin")).first()
-                    if not r_admin:
-                        r_admin = Role(name="管理员", code="admin")
-                        session.add(r_admin)
-                        session.commit()
-                        session.refresh(r_admin)
-
-                    u = User(username=admin_user, password_hash=hash_password(admin_pass), display_name="Admin", is_active=True)
-                    session.add(u)
+        with Session(engine) as session:
+            perm_by_code = {}
+            for name, code, typ in core_defs:
+                p = session.exec(select(Permission).where(Permission.code == code)).first()
+                if not p:
+                    p = Permission(name=name, code=code, type=typ, is_visible=True)
+                    session.add(p)
                     session.commit()
-                    session.refresh(u)
-
-                    session.add(UserRole(user_id=u.id, role_id=r_admin.id))
+                    session.refresh(p)
+                else:
+                    p.name = name
+                    p.type = typ
+                    p.is_visible = True
+                    session.add(p)
                     session.commit()
+                    session.refresh(p)
+                perm_by_code[code] = p
 
-                    existing = {
-                        (str(x.role_id), str(x.permission_id))
-                        for x in session.exec(select(RolePermission).where(RolePermission.role_id == r_admin.id)).all()
-                    }
-                    for p in perm_by_code.values():
-                        key = (str(r_admin.id), str(p.id))
-                        if key in existing:
-                            continue
-                        session.add(RolePermission(role_id=r_admin.id, permission_id=p.id))
-                    session.commit()
+            for code in legacy_codes:
+                p = session.exec(select(Permission).where(Permission.code == code)).first()
+                if p:
+                    p.is_visible = False
+                    session.add(p)
+            session.commit()
+
+            r_admin = session.exec(select(Role).where(Role.code == "admin")).first()
+            if not r_admin:
+                r_admin = Role(name="管理员", code="admin")
+                session.add(r_admin)
+                session.commit()
+                session.refresh(r_admin)
+
+            existing = {
+                (str(x.role_id), str(x.permission_id))
+                for x in session.exec(select(RolePermission).where(RolePermission.role_id == r_admin.id)).all()
+            }
+            for p in perm_by_code.values():
+                key = (str(r_admin.id), str(p.id))
+                if key in existing:
+                    continue
+                session.add(RolePermission(role_id=r_admin.id, permission_id=p.id))
+            session.commit()
+
+            if (os.getenv("NEXUSOPS_DB_INIT") or "").strip() == "1" and not session.exec(select(User.id).limit(1)).first():
+                admin_user = (os.getenv("NEXUSOPS_ADMIN_USER") or "admin").strip() or "admin"
+                admin_pass = (os.getenv("NEXUSOPS_ADMIN_PASS") or "admin123").strip() or "admin123"
+                u = User(username=admin_user, password_hash=hash_password(admin_pass), display_name="Admin", is_active=True)
+                session.add(u)
+                session.commit()
+                session.refresh(u)
+                session.add(UserRole(user_id=u.id, role_id=r_admin.id))
+                session.commit()
 
     await run_in_threadpool(_work)

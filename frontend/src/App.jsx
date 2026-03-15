@@ -87,23 +87,23 @@ export default function App() {
 
   const content =
     page === 'settings' ? (
-      auth.hasPerm('page:settings') ? (
+      auth.hasPerm('settings:access') ? (
         <Settings initialTab={settingsTab} />
       ) : (
         <NoAccess detail="无权访问系统设置" />
       )
     ) : page === 'history' ? (
-      auth.hasPerm('page:history') ? <History onNavigate={navigate} initialPreset={historyPreset} /> : <NoAccess detail="无权访问审计日志" />
+      auth.hasPerm('audit:read') ? <History onNavigate={navigate} initialPreset={historyPreset} /> : <NoAccess detail="无权访问审计日志" />
     ) : page === 'overview' ? (
-      auth.hasPerm('page:overview') ? <Overview onNavigate={navigate} /> : <NoAccess detail="无权访问概览大屏" />
+      auth.hasPerm('overview:read') ? <Overview onNavigate={navigate} /> : <NoAccess detail="无权访问概览大屏" />
     ) : page === 'detail' ? (
-      auth.hasPerm('page:dashboard') ? (
+      auth.hasPerm('deploy:manage') ? (
         <Detail taskId={detailId} historyId={detailHistoryId} onBack={() => setPage(returnPage)} onNavigate={navigate} />
       ) : (
         <NoAccess detail="无权访问部署详情" />
       )
     ) : (
-      auth.hasPerm('page:dashboard') ? <Dashboard onNavigate={navigate} /> : <NoAccess detail="无权访问部署大盘" />
+      auth.hasPerm('deploy:manage') ? <Dashboard onNavigate={navigate} /> : <NoAccess detail="无权访问部署大盘" />
     )
 
   return (

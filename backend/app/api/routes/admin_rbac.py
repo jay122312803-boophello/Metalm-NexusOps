@@ -47,7 +47,7 @@ class SetRolePermissionsRequest(BaseModel):
 @router.get("/admin/permissions", dependencies=[Depends(require_permission("rbac:manage"))])
 async def list_permissions():
     def _work(session):
-        rows = session.exec(select(Permission).order_by(Permission.type.asc(), Permission.code.asc())).all()
+        rows = session.exec(select(Permission).where(Permission.is_visible == True).order_by(Permission.type.asc(), Permission.code.asc())).all()
         out = []
         for p in rows:
             out.append({"id": str(p.id), "name": p.name, "code": p.code, "type": p.type, "parent_id": str(p.parent_id) if p.parent_id else None})
@@ -63,7 +63,12 @@ async def list_roles():
         role_ids = [r.id for r in roles]
         rp = {}
         if role_ids:
-            rows = session.exec(select(RolePermission.role_id, RolePermission.permission_id).where(RolePermission.role_id.in_(role_ids))).all()
+            rows = session.exec(
+                select(RolePermission.role_id, RolePermission.permission_id)
+                .select_from(RolePermission)
+                .join(Permission, Permission.id == RolePermission.permission_id)
+                .where(RolePermission.role_id.in_(role_ids), Permission.is_visible == True)
+            ).all()
             for rid, pid in rows:
                 rp.setdefault(str(rid), []).append(str(pid))
         out = []

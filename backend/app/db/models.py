@@ -136,6 +136,7 @@ class Permission(SQLModel, table=True):
     code: str
     type: str = Field(default="api")
     parent_id: Optional[uuid.UUID] = Field(default=None, foreign_key="permissions.id")
+    is_visible: bool = Field(default=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 

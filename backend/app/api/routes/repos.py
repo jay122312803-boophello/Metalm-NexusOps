@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 router = APIRouter()
 
 
-@router.get("", dependencies=[Depends(require_permission("repos:read"))])
+@router.get("", dependencies=[Depends(require_permission("infra:manage"))])
 async def list_repos():
     def _work(session):
         rows = session.query(Repo).order_by(Repo.created_at.asc()).all()
@@ -31,7 +31,7 @@ async def list_repos():
     return await run_db(_work)
 
 
-@router.post("", dependencies=[Depends(require_permission("repos:manage"))])
+@router.post("", dependencies=[Depends(require_permission("infra:manage"))])
 async def create_repo(req: CreateRepoRequest):
     data = req.model_dump()
     def _work(session):
@@ -67,7 +67,7 @@ async def create_repo(req: CreateRepoRequest):
     return await run_db(_work)
 
 
-@router.get("/{repo_id}", dependencies=[Depends(require_permission("repos:read"))])
+@router.get("/{repo_id}", dependencies=[Depends(require_permission("infra:manage"))])
 async def get_repo(repo_id: str):
     def _work(session):
         r = session.get(Repo, uuid.UUID(repo_id))
@@ -89,7 +89,7 @@ async def get_repo(repo_id: str):
     return await run_db(_work)
 
 
-@router.put("/{repo_id}", dependencies=[Depends(require_permission("repos:manage"))])
+@router.put("/{repo_id}", dependencies=[Depends(require_permission("infra:manage"))])
 async def update_repo(repo_id: str, req: UpdateRepoRequest):
     data = req.model_dump(exclude_unset=True)
 
@@ -127,7 +127,7 @@ async def update_repo(repo_id: str, req: UpdateRepoRequest):
     return await run_db(_work)
 
 
-@router.delete("/{repo_id}", dependencies=[Depends(require_permission("repos:manage"))])
+@router.delete("/{repo_id}", dependencies=[Depends(require_permission("infra:manage"))])
 async def delete_repo(repo_id: str):
     def _work(session):
         r = session.get(Repo, uuid.UUID(repo_id))

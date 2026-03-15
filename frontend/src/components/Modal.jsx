@@ -1,9 +1,9 @@
 import Icon from './Icon.jsx'
 
-export default function Modal({ title, onClose, children, footer, danger }) {
+export default function Modal({ title, onClose, children, footer, danger, className = '' }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(ev) => ev.stopPropagation()}>
+      <div className={`modal ${className}`.trim()} onClick={(ev) => ev.stopPropagation()}>
         <div className="modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {danger ? (
@@ -21,4 +21,3 @@ export default function Modal({ title, onClose, children, footer, danger }) {
     </div>
   )
 }
-

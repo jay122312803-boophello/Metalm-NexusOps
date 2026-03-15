@@ -15,7 +15,7 @@ from ...auth.deps import require_permission
 router = APIRouter()
 
 
-@router.get("", dependencies=[Depends(require_permission("deployments:read"))])
+@router.get("", dependencies=[Depends(require_permission("deploy:manage"))])
 async def list_deployments():
     def _work(session):
         rows = session.query(Deployment).order_by(Deployment.created_at.asc()).all()
@@ -36,7 +36,7 @@ async def list_deployments():
     return await run_db(_work)
 
 
-@router.post("", dependencies=[Depends(require_permission("deployments:manage"))])
+@router.post("", dependencies=[Depends(require_permission("deploy:manage"))])
 async def create_deployment(req: CreateDeploymentRequest):
     data = req.model_dump()
 
@@ -72,7 +72,7 @@ async def create_deployment(req: CreateDeploymentRequest):
     return await run_db(_work)
 
 
-@router.get("/{dep_id}", dependencies=[Depends(require_permission("deployments:read"))])
+@router.get("/{dep_id}", dependencies=[Depends(require_permission("deploy:manage"))])
 async def get_deployment(dep_id: str):
     def _work(session):
         d = session.get(Deployment, uuid.UUID(dep_id))
@@ -92,7 +92,7 @@ async def get_deployment(dep_id: str):
     return await run_db(_work)
 
 
-@router.put("/{dep_id}", dependencies=[Depends(require_permission("deployments:manage"))])
+@router.put("/{dep_id}", dependencies=[Depends(require_permission("deploy:manage"))])
 async def update_deployment(dep_id: str, req: UpdateDeploymentRequest):
     data = req.model_dump(exclude_unset=True)
 
@@ -128,7 +128,7 @@ async def update_deployment(dep_id: str, req: UpdateDeploymentRequest):
     return await run_db(_work)
 
 
-@router.delete("/{dep_id}", dependencies=[Depends(require_permission("deployments:manage"))])
+@router.delete("/{dep_id}", dependencies=[Depends(require_permission("deploy:manage"))])
 async def delete_deployment(dep_id: str):
     def _work(session):
         d = session.get(Deployment, uuid.UUID(dep_id))
@@ -144,7 +144,7 @@ async def delete_deployment(dep_id: str):
     return {"ok": True}
 
 
-@router.post("/{dep_id}/trigger", dependencies=[Depends(require_permission("deploy:trigger"))])
+@router.post("/{dep_id}/trigger", dependencies=[Depends(require_permission("deploy:manage"))])
 async def trigger_deployment(dep_id: str, request: Request, req: TriggerDeploymentRequest = TriggerDeploymentRequest()):
     payload = req.model_dump()
     api_base = (os.getenv("NEXUSOPS_PUBLIC_API_BASE_URL") or os.getenv("NEXUSOPS_API_BASE_URL") or "").rstrip("/")

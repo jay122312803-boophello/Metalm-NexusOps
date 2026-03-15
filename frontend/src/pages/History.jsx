@@ -214,7 +214,7 @@ export default function History({ onNavigate, initialPreset }) {
                       >
                         <Icon name="circle-info" /> 查看详情
                       </button>
-                      <Can perm="deploy:trigger">
+                      <Can perm="deploy:manage">
                         <button
                           className="btn btn-primary btn-action"
                           onClick={async (ev) => {
@@ -234,7 +234,7 @@ export default function History({ onNavigate, initialPreset }) {
                           <Icon name="rocket" /> 重新部署
                         </button>
                       </Can>
-                      <Can perm="history:delete">
+                      <Can perm="audit:manage">
                         <button
                           className="btn btn-danger btn-action"
                           onClick={(ev) => {

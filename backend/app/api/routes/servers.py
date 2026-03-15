@@ -35,7 +35,7 @@ def _norm_env(v: str | None, name: str) -> str:
 
 
 @router.get("")
-async def list_servers(user=Depends(require_permission("servers:read"))):
+async def list_servers(user=Depends(require_permission("infra:manage"))):
     def _work(session):
         rows = session.query(Server).order_by(Server.created_at.asc()).all()
         return [
@@ -57,7 +57,7 @@ async def list_servers(user=Depends(require_permission("servers:read"))):
 
 
 @router.post("")
-async def create_server(req: CreateServerRequest, user=Depends(require_permission("servers:manage"))):
+async def create_server(req: CreateServerRequest, user=Depends(require_permission("infra:manage"))):
     data = req.model_dump()
     def _work(session):
         name = (data.get("name") or "").strip()
@@ -98,7 +98,7 @@ async def create_server(req: CreateServerRequest, user=Depends(require_permissio
 
 
 @router.get("/{server_id}")
-async def get_server(server_id: str, user=Depends(require_permission("servers:read"))):
+async def get_server(server_id: str, user=Depends(require_permission("infra:manage"))):
     def _work(session):
         s = session.get(Server, uuid.UUID(server_id))
         if not s:
@@ -119,7 +119,7 @@ async def get_server(server_id: str, user=Depends(require_permission("servers:re
 
 
 @router.put("/{server_id}")
-async def update_server(server_id: str, req: UpdateServerRequest, user=Depends(require_permission("servers:manage"))):
+async def update_server(server_id: str, req: UpdateServerRequest, user=Depends(require_permission("infra:manage"))):
     data = req.model_dump(exclude_unset=True)
 
     def _work(session):
@@ -153,7 +153,7 @@ async def update_server(server_id: str, req: UpdateServerRequest, user=Depends(r
 
 
 @router.delete("/{server_id}")
-async def delete_server(server_id: str, user=Depends(require_permission("servers:manage"))):
+async def delete_server(server_id: str, user=Depends(require_permission("infra:manage"))):
     def _work(session):
         s = session.get(Server, uuid.UUID(server_id))
         if not s:
@@ -172,7 +172,7 @@ async def delete_server(server_id: str, user=Depends(require_permission("servers
 
 
 @router.get("/{server_id}/metrics")
-async def get_server_metrics(server_id: str, user=Depends(require_permission("servers:metrics"))):
+async def get_server_metrics(server_id: str, user=Depends(require_permission("monitor:read"))):
     sid = uuid.UUID(server_id)
     now = datetime.utcnow().timestamp()
     cached = _metrics_cache.get(server_id)

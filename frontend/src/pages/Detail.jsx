@@ -598,7 +598,7 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
                 <Icon name="clock-rotate-left" />
               </button>
             </Tooltip>
-            <Can perm="deploy:trigger">
+            <Can perm="deploy:manage">
               <button
                 className="btn btn-primary"
                 onClick={() => {

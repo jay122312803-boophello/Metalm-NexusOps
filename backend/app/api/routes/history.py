@@ -14,7 +14,7 @@ from .configs import ensure_snapshot_if_success
 router = APIRouter()
 
 
-@router.get("", dependencies=[Depends(require_permission("history:read"))])
+@router.get("", dependencies=[Depends(require_permission("audit:read"))])
 async def get_history(
     server_id: str | None = Query(default=None),
     status: str | None = Query(default=None),
@@ -117,7 +117,7 @@ async def get_history(
     return await run_db(_work)
 
 
-@router.get("/{history_id}/status", dependencies=[Depends(require_permission("history:read"))])
+@router.get("/{history_id}/status", dependencies=[Depends(require_permission("audit:read"))])
 async def check_pipeline_status(history_id: str):
     def _work(session):
         gitlab_url = (os.getenv("GITLAB_BASE_URL") or "https://gitlab.xuelangyun.com").rstrip("/")
@@ -163,7 +163,7 @@ async def check_pipeline_status(history_id: str):
     return res
 
 
-@router.delete("/{history_id}", dependencies=[Depends(require_permission("history:delete"))])
+@router.delete("/{history_id}", dependencies=[Depends(require_permission("audit:manage"))])
 async def delete_history(history_id: str):
     def _work(session):
         h = session.get(DeploymentHistory, uuid.UUID(history_id))

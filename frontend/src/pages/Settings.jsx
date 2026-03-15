@@ -16,6 +16,7 @@ export default function Settings({ initialTab }) {
   const [serverEnv, setServerEnv] = useState('ALL')
   const [repoQuery, setRepoQuery] = useState('')
   const [rbacQuery, setRbacQuery] = useState('')
+  const [rbacView, setRbacView] = useState('users')
   const [showTriggerToken, setShowTriggerToken] = useState(false)
   const [showPrivateToken, setShowPrivateToken] = useState(false)
   const [formServer, setFormServer] = useState({ ssh_user: 'metalm', environment: 'OTHER' })
@@ -348,6 +349,12 @@ export default function Settings({ initialTab }) {
     return String(u?.username || '').toLowerCase().includes(q) || String(u?.display_name || '').toLowerCase().includes(q)
   })
 
+  const filteredRbacRoles = rbacRoles.filter((r) => {
+    const q = (rbacQuery || '').trim().toLowerCase()
+    if (!q) return true
+    return String(r?.name || '').toLowerCase().includes(q) || String(r?.code || '').toLowerCase().includes(q)
+  })
+
   const roleById = useMemo(() => {
     const m = {}
     ;(rbacRoles || []).forEach((r) => {
@@ -355,6 +362,29 @@ export default function Settings({ initialTab }) {
     })
     return m
   }, [rbacRoles])
+
+  const permGroups = useMemo(() => {
+    const order = [
+      { key: 'overview', title: '概览大屏', match: (c) => c === 'overview:read' },
+      { key: 'deploy', title: '部署与配置', match: (c) => c === 'deploy:manage' },
+      { key: 'audit', title: '审计日志', match: (c) => c === 'audit:read' || c === 'audit:manage' },
+      { key: 'settings', title: '系统设置', match: (c) => c === 'settings:access' },
+      { key: 'infra', title: '基础资源', match: (c) => c === 'infra:manage' },
+      { key: 'monitor', title: '运行监控', match: (c) => c === 'monitor:read' },
+      { key: 'rbac', title: '账号权限', match: (c) => c === 'rbac:manage' }
+    ]
+    const groups = order.map((g) => ({ ...g, items: [] }))
+    const other = { key: 'other', title: '其他', items: [] }
+    ;(rbacPerms || []).forEach((p) => {
+      const code = String(p?.code || '')
+      const found = groups.find((g) => g.match(code))
+      if (found) found.items.push(p)
+      else other.items.push(p)
+    })
+    return [...groups.filter((g) => g.items.length > 0), ...(other.items.length > 0 ? [other] : [])]
+  }, [rbacPerms])
+
+  const allPermIds = useMemo(() => (rbacPerms || []).map((p) => p.id).filter(Boolean), [rbacPerms])
 
   return (
     <div className="settings-canvas">
@@ -379,12 +409,38 @@ export default function Settings({ initialTab }) {
 
         <div className="action-bar">
           <div className="action-left">
+            {activeTab === 'rbac' ? (
+              <div className="segmented">
+                <button
+                  className={`seg-btn ${rbacView === 'users' ? 'active' : ''}`}
+                  onClick={() => setRbacView('users')}
+                  type="button"
+                >
+                  用户列表
+                </button>
+                <button
+                  className={`seg-btn ${rbacView === 'roles' ? 'active' : ''}`}
+                  onClick={() => setRbacView('roles')}
+                  type="button"
+                >
+                  角色列表
+                </button>
+              </div>
+            ) : null}
             <div className="search-box">
               <Icon name="magnifying-glass" />
               <input
                 value={activeTab === 'servers' ? serverQuery : activeTab === 'repos' ? repoQuery : rbacQuery}
                 onChange={(e) => (activeTab === 'servers' ? setServerQuery(e.target.value) : activeTab === 'repos' ? setRepoQuery(e.target.value) : setRbacQuery(e.target.value))}
-                placeholder={activeTab === 'servers' ? '请输入 IP 或名称搜索' : activeTab === 'repos' ? '请输入名称 / URL / 分支搜索' : '请输入账号 / 昵称搜索'}
+                placeholder={
+                  activeTab === 'servers'
+                    ? '请输入 IP 或名称搜索'
+                    : activeTab === 'repos'
+                      ? '请输入名称 / URL / 分支搜索'
+                      : rbacView === 'users'
+                        ? '请输入账号 / 昵称搜索'
+                        : '请输入角色名称 / 编码搜索'
+                }
               />
             </div>
             {activeTab === 'servers' ? (
@@ -404,27 +460,28 @@ export default function Settings({ initialTab }) {
           </div>
           <div>
             {activeTab === 'servers' ? (
-              <Can perm="servers:manage">
+              <Can perm="infra:manage">
                 <button className="btn btn-primary" onClick={() => openCreate('server')}>
                   <Icon name="plus" /> 新增服务器
                 </button>
               </Can>
             ) : activeTab === 'repos' ? (
-              <Can perm="repos:manage">
+              <Can perm="infra:manage">
                 <button className="btn btn-primary" onClick={() => openCreate('repo')}>
                   <Icon name="plus" /> 新增仓库
                 </button>
               </Can>
             ) : activeTab === 'rbac' ? (
               <Can perm="rbac:manage">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {rbacView === 'users' ? (
                   <button className="btn btn-primary" onClick={() => setRbacCreateOpen(true)}>
                     <Icon name="plus" /> 新增账号
                   </button>
-                  <button className="btn btn-outline" onClick={() => setRbacCreateRoleOpen(true)}>
+                ) : (
+                  <button className="btn btn-primary" onClick={() => setRbacCreateRoleOpen(true)}>
                     <Icon name="plus" /> 新增角色
                   </button>
-                </div>
+                )}
               </Can>
             ) : null}
           </div>
@@ -443,7 +500,7 @@ export default function Settings({ initialTab }) {
                       {envBadge(s.environment, s.name)}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <Can perm="servers:metrics">
+                      <Can perm="monitor:read">
                         <Tooltip content="资源监控">
                           <button
                             type="button"
@@ -459,14 +516,14 @@ export default function Settings({ initialTab }) {
                           </button>
                         </Tooltip>
                       </Can>
-                      <Can perm="servers:manage">
+                      <Can perm="infra:manage">
                         <Tooltip content="编辑">
                           <button type="button" className="icon-btn" onClick={() => openEditServer(s)}>
                             <Icon name="pen-to-square" />
                           </button>
                         </Tooltip>
                       </Can>
-                      <Can perm="servers:manage">
+                      <Can perm="infra:manage">
                         <Tooltip content="删除">
                           <button type="button" className="icon-btn" style={{ color: 'var(--danger)' }} onClick={() => openDelete('server', s)}>
                             <Icon name="trash" />
@@ -551,14 +608,14 @@ export default function Settings({ initialTab }) {
                         )}
                       </td>
                       <td>
-                        <Can perm="repos:manage">
+                        <Can perm="infra:manage">
                           <Tooltip content="编辑">
                             <button className="btn btn-ghost btn-sm" onClick={() => openEditRepo(r)}>
                               <Icon name="pen-to-square" />
                             </button>
                           </Tooltip>
                         </Can>
-                        <Can perm="repos:manage">
+                        <Can perm="infra:manage">
                           <Tooltip content="删除">
                             <button className="btn btn-ghost btn-sm" onClick={() => openDelete('repo', r)}>
                               <Icon name="trash" />
@@ -579,9 +636,8 @@ export default function Settings({ initialTab }) {
               </table>
             </div>
           ) : activeTab === 'rbac' ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div className="card">
-                <div style={{ padding: '14px 16px', fontWeight: 900 }}>用户</div>
+            <div className="rbac-table">
+              {rbacView === 'users' ? (
                 <table className="repo-table" style={{ width: '100%' }}>
                   <thead>
                     <tr>
@@ -670,10 +726,7 @@ export default function Settings({ initialTab }) {
                     )}
                   </tbody>
                 </table>
-              </div>
-
-              <div className="card">
-                <div style={{ padding: '14px 16px', fontWeight: 900 }}>角色</div>
+              ) : (
                 <table className="repo-table" style={{ width: '100%' }}>
                   <thead>
                     <tr>
@@ -698,7 +751,7 @@ export default function Settings({ initialTab }) {
                       </tr>
                     ) : (
                       <>
-                        {(rbacRoles || []).map((r) => (
+                        {filteredRbacRoles.map((r) => (
                           <tr key={r.id}>
                             <td>
                               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
@@ -721,7 +774,7 @@ export default function Settings({ initialTab }) {
                             </td>
                           </tr>
                         ))}
-                        {!rbacRoles || rbacRoles.length === 0 ? (
+                        {filteredRbacRoles.length === 0 ? (
                           <tr>
                             <td colSpan={4} style={{ padding: 24, color: 'var(--text-sub)', textAlign: 'center' }}>
                               暂无角色
@@ -732,14 +785,14 @@ export default function Settings({ initialTab }) {
                     )}
                   </tbody>
                 </table>
-              </div>
+              )}
             </div>
           ) : null}
         </div>
 
         <div className="settings-pager">
           <div className="settings-pager-left">
-            共 {activeTab === 'servers' ? filteredServers.length : activeTab === 'repos' ? filteredRepos.length : filteredRbacUsers.length} 条
+            共 {activeTab === 'servers' ? filteredServers.length : activeTab === 'repos' ? filteredRepos.length : rbacView === 'users' ? filteredRbacUsers.length : filteredRbacRoles.length} 条
           </div>
           <div className="settings-pager-right">
             <button className="btn btn-ghost btn-sm" disabled>
@@ -1250,6 +1303,7 @@ export default function Settings({ initialTab }) {
 
       {rbacPermsOpen ? (
         <Modal
+          className="modal-wide"
           title={`配置权限 - ${rbacPermsOpen.name}`}
           onClose={() => (rbacSaving ? null : setRbacPermsOpen(null))}
           footer={[
@@ -1277,31 +1331,66 @@ export default function Settings({ initialTab }) {
             </button>
           ]}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 420, overflow: 'auto', paddingRight: 4 }}>
-            {(rbacPerms || []).map((p) => {
-              const checked = rbacPermPick.includes(p.id)
-              return (
-                <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={(e) => {
-                      const next = e.target.checked ? Array.from(new Set([...rbacPermPick, p.id])) : rbacPermPick.filter((x) => x !== p.id)
-                      setRbacPermPick(next)
-                    }}
-                  />
-                  <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
-                      <span className="badge badge-gray" style={{ fontFamily: 'inherit' }}>
-                        {p.type}
-                      </span>
+          <div className="perm-panel">
+            <label className="perm-all">
+              <input
+                type="checkbox"
+                checked={allPermIds.length > 0 && allPermIds.every((id) => rbacPermPick.includes(id))}
+                onChange={(e) => {
+                  setRbacPermPick(e.target.checked ? [...allPermIds] : [])
+                }}
+              />
+              授予所有系统权限
+            </label>
+
+            <div className="perm-groups">
+              {permGroups.map((g) => {
+                const ids = (g.items || []).map((p) => p.id).filter(Boolean)
+                const allChecked = ids.length > 0 && ids.every((id) => rbacPermPick.includes(id))
+                return (
+                  <div key={g.key} className="perm-group">
+                    <div className="perm-group-head">
+                      <div className="perm-group-title">{g.title}</div>
+                      <label className="perm-group-all">
+                        <input
+                          type="checkbox"
+                          checked={allChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setRbacPermPick(Array.from(new Set([...rbacPermPick, ...ids])))
+                            } else {
+                              setRbacPermPick(rbacPermPick.filter((x) => !ids.includes(x)))
+                            }
+                          }}
+                        />
+                        模块全选
+                      </label>
                     </div>
-                    <div style={{ color: 'var(--text-sub)', fontSize: 12, fontFamily: 'monospace' }}>{p.code}</div>
+                    <div className="perm-grid">
+                      {g.items.map((p) => {
+                        const checked = rbacPermPick.includes(p.id)
+                        return (
+                          <label key={p.id} className={`perm-item ${checked ? 'checked' : ''}`}>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                const next = e.target.checked ? Array.from(new Set([...rbacPermPick, p.id])) : rbacPermPick.filter((x) => x !== p.id)
+                                setRbacPermPick(next)
+                              }}
+                            />
+                            <div className="perm-item-body">
+                              <div className="perm-item-name">{p.name}</div>
+                              <div className="perm-item-code">{p.code}</div>
+                            </div>
+                          </label>
+                        )
+                      })}
+                    </div>
                   </div>
-                </label>
-              )
-            })}
+                )
+              })}
+            </div>
           </div>
         </Modal>
       ) : null}

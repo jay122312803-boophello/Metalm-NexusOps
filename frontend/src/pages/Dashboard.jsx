@@ -245,7 +245,7 @@ export default function Dashboard({ onNavigate }) {
             />
           </div>
           <div>
-            <Can perm="deployments:manage">
+            <Can perm="deploy:manage">
               <button className="btn btn-primary" onClick={openCreate}>
                 <Icon name="plus" /> 创建新实例
               </button>
@@ -284,7 +284,7 @@ export default function Dashboard({ onNavigate }) {
                     </Tooltip>
                     {openMenuId === t.id ? (
                       <div className="menu-pop" onClick={(ev) => ev.stopPropagation()}>
-                        <Can perm="deployments:manage">
+                        <Can perm="deploy:manage">
                           <button
                             className="menu-item-btn"
                             onClick={(ev) => {
@@ -297,7 +297,7 @@ export default function Dashboard({ onNavigate }) {
                           </button>
                         </Can>
                         <div style={{ height: 1, background: 'var(--border)', margin: '6px 0' }} />
-                        <Can perm="deployments:manage">
+                        <Can perm="deploy:manage">
                           <button
                             className="menu-item-btn menu-item-danger"
                             onClick={async (ev) => {
