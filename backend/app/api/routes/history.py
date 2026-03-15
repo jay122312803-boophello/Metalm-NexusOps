@@ -14,8 +14,9 @@ from .configs import ensure_snapshot_if_success
 router = APIRouter()
 
 
-@router.get("", dependencies=[Depends(require_permission("audit:read"))])
+@router.get("")
 async def get_history(
+    user=Depends(require_permission("audit:read")),
     server_id: str | None = Query(default=None),
     status: str | None = Query(default=None),
     deployment_id: str | None = Query(default=None),
@@ -34,7 +35,7 @@ async def get_history(
             )
             .join(Deployment, Deployment.id == DeploymentHistory.deployment_id)
             .join(Repo, Repo.id == Deployment.repo_id)
-            .where(DeploymentHistory.status.in_(["pending", "running"]))
+            .where(DeploymentHistory.status.in_(["pending", "running"]), Deployment.created_by_user_id == user.id)
             .order_by(DeploymentHistory.created_at.desc())
             .limit(30)
         ).all()
@@ -78,6 +79,7 @@ async def get_history(
         q = (
             select(DeploymentHistory)
             .join(Deployment, Deployment.id == DeploymentHistory.deployment_id)
+            .where(Deployment.created_by_user_id == user.id)
             .order_by(DeploymentHistory.created_at.desc())
         )
         if sid:
@@ -90,7 +92,7 @@ async def get_history(
 
         rows = session.exec(q).all()
 
-        servers = session.exec(select(Server.id, Server.name).order_by(Server.name.asc())).all()
+        servers = session.exec(select(Server.id, Server.name).where(Server.created_by_user_id == user.id).order_by(Server.name.asc())).all()
         server_options = [{"id": str(i), "name": n} for i, n in servers]
         status_options = ["pending", "running", "success", "failed", "canceled"]
 
@@ -117,8 +119,8 @@ async def get_history(
     return await run_db(_work)
 
 
-@router.get("/{history_id}/status", dependencies=[Depends(require_permission("audit:read"))])
-async def check_pipeline_status(history_id: str):
+@router.get("/{history_id}/status")
+async def check_pipeline_status(history_id: str, user=Depends(require_permission("audit:read"))):
     def _work(session):
         gitlab_url = (os.getenv("GITLAB_BASE_URL") or "https://gitlab.xuelangyun.com").rstrip("/")
         verify_tls = (os.getenv("GITLAB_TLS_INSECURE") or "").strip() != "1"
@@ -128,6 +130,8 @@ async def check_pipeline_status(history_id: str):
             raise HTTPException(404, "History not found")
 
         d = session.get(Deployment, h.deployment_id)
+        if not d or d.created_by_user_id != user.id:
+            raise HTTPException(404, "History not found")
         r = session.get(Repo, d.repo_id) if d else None
 
         pid = h.pipeline_id
@@ -163,11 +167,14 @@ async def check_pipeline_status(history_id: str):
     return res
 
 
-@router.delete("/{history_id}", dependencies=[Depends(require_permission("audit:manage"))])
-async def delete_history(history_id: str):
+@router.delete("/{history_id}")
+async def delete_history(history_id: str, user=Depends(require_permission("audit:manage"))):
     def _work(session):
         h = session.get(DeploymentHistory, uuid.UUID(history_id))
         if not h:
+            raise HTTPException(status_code=404, detail="History not found")
+        d = session.get(Deployment, h.deployment_id)
+        if not d or d.created_by_user_id != user.id:
             raise HTTPException(status_code=404, detail="History not found")
         session.delete(h)
         session.commit()

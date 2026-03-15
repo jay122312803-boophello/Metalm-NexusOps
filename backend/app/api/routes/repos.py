@@ -10,10 +10,10 @@ from sqlalchemy.exc import IntegrityError
 router = APIRouter()
 
 
-@router.get("", dependencies=[Depends(require_permission("infra:manage"))])
-async def list_repos():
+@router.get("")
+async def list_repos(user=Depends(require_permission("infra:manage"))):
     def _work(session):
-        rows = session.query(Repo).order_by(Repo.created_at.asc()).all()
+        rows = session.query(Repo).filter(Repo.created_by_user_id == user.id).order_by(Repo.created_at.asc()).all()
         return [
             {
                 "id": str(r.id),
@@ -31,14 +31,14 @@ async def list_repos():
     return await run_db(_work)
 
 
-@router.post("", dependencies=[Depends(require_permission("infra:manage"))])
-async def create_repo(req: CreateRepoRequest):
+@router.post("")
+async def create_repo(req: CreateRepoRequest, user=Depends(require_permission("infra:manage"))):
     data = req.model_dump()
     def _work(session):
         name = (data.get("name") or "").strip()
         if not name:
             raise HTTPException(status_code=400, detail="name required")
-        exists = session.query(Repo).filter(Repo.name == name).first()
+        exists = session.query(Repo).filter(Repo.created_by_user_id == user.id, Repo.name == name).first()
         if exists:
             raise HTTPException(status_code=409, detail="仓库名称已存在，请更换")
         r = Repo(
@@ -49,6 +49,7 @@ async def create_repo(req: CreateRepoRequest):
             trigger_token=(data.get("trigger_token") or None),
             private_token=(data.get("private_token") or None),
             description=data.get("description"),
+            created_by_user_id=user.id,
         )
         session.add(r)
         session.commit()
@@ -67,11 +68,11 @@ async def create_repo(req: CreateRepoRequest):
     return await run_db(_work)
 
 
-@router.get("/{repo_id}", dependencies=[Depends(require_permission("infra:manage"))])
-async def get_repo(repo_id: str):
+@router.get("/{repo_id}")
+async def get_repo(repo_id: str, user=Depends(require_permission("infra:manage"))):
     def _work(session):
         r = session.get(Repo, uuid.UUID(repo_id))
-        if not r:
+        if not r or r.created_by_user_id != user.id:
             raise HTTPException(status_code=404, detail="Repo not found")
         return {
             "id": str(r.id),
@@ -89,20 +90,20 @@ async def get_repo(repo_id: str):
     return await run_db(_work)
 
 
-@router.put("/{repo_id}", dependencies=[Depends(require_permission("infra:manage"))])
-async def update_repo(repo_id: str, req: UpdateRepoRequest):
+@router.put("/{repo_id}")
+async def update_repo(repo_id: str, req: UpdateRepoRequest, user=Depends(require_permission("infra:manage"))):
     data = req.model_dump(exclude_unset=True)
 
     def _work(session):
         r = session.get(Repo, uuid.UUID(repo_id))
-        if not r:
+        if not r or r.created_by_user_id != user.id:
             raise HTTPException(status_code=404, detail="Repo not found")
 
         if "name" in data and data["name"] is not None:
             name = str(data["name"]).strip()
             if not name:
                 raise HTTPException(status_code=400, detail="name required")
-            exists = session.query(Repo).filter(Repo.name == name, Repo.id != r.id).first()
+            exists = session.query(Repo).filter(Repo.created_by_user_id == user.id, Repo.name == name, Repo.id != r.id).first()
             if exists:
                 raise HTTPException(status_code=409, detail="仓库名称已存在，请更换")
             data["name"] = name
@@ -127,11 +128,11 @@ async def update_repo(repo_id: str, req: UpdateRepoRequest):
     return await run_db(_work)
 
 
-@router.delete("/{repo_id}", dependencies=[Depends(require_permission("infra:manage"))])
-async def delete_repo(repo_id: str):
+@router.delete("/{repo_id}")
+async def delete_repo(repo_id: str, user=Depends(require_permission("infra:manage"))):
     def _work(session):
         r = session.get(Repo, uuid.UUID(repo_id))
-        if not r:
+        if not r or r.created_by_user_id != user.id:
             return False
         session.delete(r)
         session.commit()

@@ -27,10 +27,13 @@ def _validate_rel_path(p: str) -> str:
     return "/".join(parts)
 
 
-@router.get("/deployments/{dep_id}/configs", dependencies=[Depends(require_permission("deploy:manage"))])
-async def list_task_configs(dep_id: str):
+@router.get("/deployments/{dep_id}/configs")
+async def list_task_configs(dep_id: str, user=Depends(require_permission("deploy:manage"))):
     def _work(session):
         did = uuid.UUID(dep_id)
+        d = session.get(Deployment, did)
+        if not d or d.created_by_user_id != user.id:
+            raise HTTPException(404, "Deployment not found")
         rows = session.exec(
             select(TaskConfig).where(TaskConfig.deployment_id == did).order_by(TaskConfig.rel_path.asc())
         ).all()
@@ -46,13 +49,14 @@ async def list_task_configs(dep_id: str):
     return await run_db(_work)
 
 
-@router.post("/deployments/{dep_id}/configs", dependencies=[Depends(require_permission("deploy:manage"))])
-async def create_task_config(dep_id: str, body: dict):
+@router.post("/deployments/{dep_id}/configs")
+async def create_task_config(dep_id: str, body: dict, user=Depends(require_permission("deploy:manage"))):
     rel_path = _validate_rel_path(body.get("rel_path"))
 
     def _work(session):
         did = uuid.UUID(dep_id)
-        if not session.get(Deployment, did):
+        d = session.get(Deployment, did)
+        if not d or d.created_by_user_id != user.id:
             raise HTTPException(404, "Deployment not found")
 
         exists = session.exec(
@@ -70,10 +74,13 @@ async def create_task_config(dep_id: str, body: dict):
     return await run_db(_work)
 
 
-@router.get("/deployments/{dep_id}/configs/{config_id}", dependencies=[Depends(require_permission("deploy:manage"))])
-async def get_task_config(dep_id: str, config_id: str):
+@router.get("/deployments/{dep_id}/configs/{config_id}")
+async def get_task_config(dep_id: str, config_id: str, user=Depends(require_permission("deploy:manage"))):
     def _work(session):
         did = uuid.UUID(dep_id)
+        d = session.get(Deployment, did)
+        if not d or d.created_by_user_id != user.id:
+            raise HTTPException(404, "Deployment not found")
         cid = uuid.UUID(config_id)
         c = session.get(TaskConfig, cid)
         if not c or c.deployment_id != did:
@@ -88,14 +95,17 @@ async def get_task_config(dep_id: str, config_id: str):
     return await run_db(_work)
 
 
-@router.put("/deployments/{dep_id}/configs/{config_id}", dependencies=[Depends(require_permission("deploy:manage"))])
-async def update_task_config(dep_id: str, config_id: str, body: dict):
+@router.put("/deployments/{dep_id}/configs/{config_id}")
+async def update_task_config(dep_id: str, config_id: str, body: dict, user=Depends(require_permission("deploy:manage"))):
     content = body.get("content")
     if content is None:
         raise HTTPException(400, "content required")
 
     def _work(session):
         did = uuid.UUID(dep_id)
+        d = session.get(Deployment, did)
+        if not d or d.created_by_user_id != user.id:
+            raise HTTPException(404, "Deployment not found")
         cid = uuid.UUID(config_id)
         c = session.get(TaskConfig, cid)
         if not c or c.deployment_id != did:
@@ -110,12 +120,15 @@ async def update_task_config(dep_id: str, config_id: str, body: dict):
     return await run_db(_work)
 
 
-@router.put("/deployments/{dep_id}/configs/{config_id}/rename", dependencies=[Depends(require_permission("deploy:manage"))])
-async def rename_task_config(dep_id: str, config_id: str, body: dict):
+@router.put("/deployments/{dep_id}/configs/{config_id}/rename")
+async def rename_task_config(dep_id: str, config_id: str, body: dict, user=Depends(require_permission("deploy:manage"))):
     rel_path = _validate_rel_path(body.get("rel_path"))
 
     def _work(session):
         did = uuid.UUID(dep_id)
+        d = session.get(Deployment, did)
+        if not d or d.created_by_user_id != user.id:
+            raise HTTPException(404, "Deployment not found")
         cid = uuid.UUID(config_id)
         c = session.get(TaskConfig, cid)
         if not c or c.deployment_id != did:
@@ -139,10 +152,13 @@ async def rename_task_config(dep_id: str, config_id: str, body: dict):
     return await run_db(_work)
 
 
-@router.delete("/deployments/{dep_id}/configs/{config_id}", dependencies=[Depends(require_permission("deploy:manage"))])
-async def delete_task_config(dep_id: str, config_id: str):
+@router.delete("/deployments/{dep_id}/configs/{config_id}")
+async def delete_task_config(dep_id: str, config_id: str, user=Depends(require_permission("deploy:manage"))):
     def _work(session):
         did = uuid.UUID(dep_id)
+        d = session.get(Deployment, did)
+        if not d or d.created_by_user_id != user.id:
+            raise HTTPException(404, "Deployment not found")
         cid = uuid.UUID(config_id)
         c = session.get(TaskConfig, cid)
         if not c or c.deployment_id != did:
@@ -157,11 +173,12 @@ async def delete_task_config(dep_id: str, config_id: str):
     return {"ok": True}
 
 
-@router.post("/deployments/{dep_id}/configs/clear", dependencies=[Depends(require_permission("deploy:manage"))])
-async def clear_task_configs(dep_id: str):
+@router.post("/deployments/{dep_id}/configs/clear")
+async def clear_task_configs(dep_id: str, user=Depends(require_permission("deploy:manage"))):
     def _work(session):
         did = uuid.UUID(dep_id)
-        if not session.get(Deployment, did):
+        d = session.get(Deployment, did)
+        if not d or d.created_by_user_id != user.id:
             raise HTTPException(404, "Deployment not found")
         rows = session.exec(select(TaskConfig).where(TaskConfig.deployment_id == did)).all()
         for c in rows:
@@ -180,11 +197,12 @@ def _zip_bytes(files: list[tuple[str, str]]) -> bytes:
     return buf.getvalue()
 
 
-@router.get("/deployments/{dep_id}/configs.zip", dependencies=[Depends(require_permission("deploy:manage"))])
-async def download_current_configs_zip(dep_id: str):
+@router.get("/deployments/{dep_id}/configs.zip")
+async def download_current_configs_zip(dep_id: str, user=Depends(require_permission("deploy:manage"))):
     def _work(session):
         did = uuid.UUID(dep_id)
-        if not session.get(Deployment, did):
+        d = session.get(Deployment, did)
+        if not d or d.created_by_user_id != user.id:
             raise HTTPException(404, "Deployment not found")
         rows = session.exec(select(TaskConfig.rel_path, TaskConfig.content).where(TaskConfig.deployment_id == did)).all()
         files = [(rp, ct or "") for rp, ct in rows]
@@ -195,8 +213,8 @@ async def download_current_configs_zip(dep_id: str):
     return StreamingResponse(io.BytesIO(data), media_type="application/zip", headers=headers)
 
 
-@router.get("/history/{history_id}/configs", dependencies=[Depends(require_permission("audit:read"))])
-async def list_snapshot_configs(history_id: str):
+@router.get("/history/{history_id}/configs")
+async def list_snapshot_configs(history_id: str, user=Depends(require_permission("audit:read"))):
     hid = uuid.UUID(history_id)
     try:
         await ensure_snapshot(hid)
@@ -204,6 +222,12 @@ async def list_snapshot_configs(history_id: str):
         pass
 
     def _work(session):
+        h = session.get(DeploymentHistory, hid)
+        if not h:
+            raise HTTPException(404, "History not found")
+        d = session.get(Deployment, h.deployment_id)
+        if not d or d.created_by_user_id != user.id:
+            raise HTTPException(404, "History not found")
         snap = session.exec(select(TaskConfigSnapshot).where(TaskConfigSnapshot.history_id == hid)).first()
         if not snap:
             return {"ok": True, "readonly": True, "snapshot_ready": False, "files": []}
@@ -223,11 +247,17 @@ async def list_snapshot_configs(history_id: str):
     return await run_db(_work)
 
 
-@router.get("/history/{history_id}/configs/{file_id}", dependencies=[Depends(require_permission("audit:read"))])
-async def get_snapshot_config(history_id: str, file_id: str):
+@router.get("/history/{history_id}/configs/{file_id}")
+async def get_snapshot_config(history_id: str, file_id: str, user=Depends(require_permission("audit:read"))):
     def _work(session):
         hid = uuid.UUID(history_id)
         fid = uuid.UUID(file_id)
+        h = session.get(DeploymentHistory, hid)
+        if not h:
+            raise HTTPException(404, "History not found")
+        d = session.get(Deployment, h.deployment_id)
+        if not d or d.created_by_user_id != user.id:
+            raise HTTPException(404, "History not found")
         snap = session.exec(select(TaskConfigSnapshot).where(TaskConfigSnapshot.history_id == hid)).first()
         if not snap:
             raise HTTPException(404, "Snapshot not ready")
@@ -239,10 +269,16 @@ async def get_snapshot_config(history_id: str, file_id: str):
     return await run_db(_work)
 
 
-@router.get("/history/{history_id}/configs.zip", dependencies=[Depends(require_permission("audit:read"))])
-async def download_snapshot_configs_zip(history_id: str):
+@router.get("/history/{history_id}/configs.zip")
+async def download_snapshot_configs_zip(history_id: str, user=Depends(require_permission("audit:read"))):
     def _work(session):
         hid = uuid.UUID(history_id)
+        h = session.get(DeploymentHistory, hid)
+        if not h:
+            raise HTTPException(404, "History not found")
+        d = session.get(Deployment, h.deployment_id)
+        if not d or d.created_by_user_id != user.id:
+            raise HTTPException(404, "History not found")
         snap = session.exec(select(TaskConfigSnapshot).where(TaskConfigSnapshot.history_id == hid)).first()
         if not snap:
             raise HTTPException(404, "Snapshot not ready")

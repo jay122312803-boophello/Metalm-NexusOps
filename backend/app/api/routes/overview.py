@@ -46,7 +46,9 @@ async def get_overview(user=Depends(require_permission("overview:read"))):
         cutoff_dt = cutoff_local_start.astimezone(timezone.utc).replace(tzinfo=None)
 
         rows = session.exec(
-            select(DeploymentHistory.created_at, DeploymentHistory.status).where(DeploymentHistory.created_at >= cutoff_dt)
+            select(DeploymentHistory.created_at, DeploymentHistory.status)
+            .join(Deployment, Deployment.id == DeploymentHistory.deployment_id)
+            .where(DeploymentHistory.created_at >= cutoff_dt, Deployment.created_by_user_id == user.id)
         ).all()
 
         trend = {}
@@ -82,7 +84,9 @@ async def get_overview(user=Depends(require_permission("overview:read"))):
             d = (today - timedelta(days=i)).isoformat()
             days.append(trend.get(d) or {"date": d, "success": 0, "failed": 0, "total": 0})
 
-        sv_rows = session.exec(select(Server.id, Server.name, Server.environment).order_by(Server.name.asc())).all()
+        sv_rows = session.exec(
+            select(Server.id, Server.name, Server.environment).where(Server.created_by_user_id == user.id).order_by(Server.name.asc())
+        ).all()
         server_total = len(sv_rows)
         server_online = server_total
         env_dist = {}
@@ -94,7 +98,7 @@ async def get_overview(user=Depends(require_permission("overview:read"))):
         for k in ("PROD", "TEST", "DEV", "OTHER"):
             env_dist.setdefault(k, 0)
 
-        repo_total = session.exec(select(Repo.id)).all()
+        repo_total = session.exec(select(Repo.id).where(Repo.created_by_user_id == user.id)).all()
         repo_count = len(repo_total)
 
         feed_rows = session.exec(
@@ -113,6 +117,7 @@ async def get_overview(user=Depends(require_permission("overview:read"))):
             .join(Deployment, Deployment.id == DeploymentHistory.deployment_id)
             .join(Server, Server.id == Deployment.server_id)
             .join(Repo, Repo.id == Deployment.repo_id)
+            .where(Deployment.created_by_user_id == user.id)
             .order_by(DeploymentHistory.created_at.desc())
             .limit(20)
         ).all()

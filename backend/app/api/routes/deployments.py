@@ -15,10 +15,10 @@ from ...auth.deps import require_permission
 router = APIRouter()
 
 
-@router.get("", dependencies=[Depends(require_permission("deploy:manage"))])
-async def list_deployments():
+@router.get("")
+async def list_deployments(user=Depends(require_permission("deploy:manage"))):
     def _work(session):
-        rows = session.query(Deployment).order_by(Deployment.created_at.asc()).all()
+        rows = session.query(Deployment).filter(Deployment.created_by_user_id == user.id).order_by(Deployment.created_at.asc()).all()
         return [
             {
                 "id": str(d.id),
@@ -36,24 +36,33 @@ async def list_deployments():
     return await run_db(_work)
 
 
-@router.post("", dependencies=[Depends(require_permission("deploy:manage"))])
-async def create_deployment(req: CreateDeploymentRequest):
+@router.post("")
+async def create_deployment(req: CreateDeploymentRequest, user=Depends(require_permission("deploy:manage"))):
     data = req.model_dump()
 
     def _work(session):
         name = (data.get("name") or "").strip()
         if not name:
             raise HTTPException(status_code=400, detail="name required")
-        exists = session.query(Deployment).filter(Deployment.name == name).first()
+        exists = session.query(Deployment).filter(Deployment.created_by_user_id == user.id, Deployment.name == name).first()
         if exists:
             raise HTTPException(status_code=409, detail="任务名称已存在，请更换")
+        server_id = uuid.UUID(data["server_id"])
+        repo_id = uuid.UUID(data["repo_id"])
+        s = session.get(Server, server_id)
+        r = session.get(Repo, repo_id)
+        if not s or s.created_by_user_id != user.id:
+            raise HTTPException(status_code=404, detail="Server configuration not found")
+        if not r or r.created_by_user_id != user.id:
+            raise HTTPException(status_code=404, detail="Repository configuration not found")
         d = Deployment(
             name=name,
-            server_id=uuid.UUID(data["server_id"]),
-            repo_id=uuid.UUID(data["repo_id"]),
+            server_id=server_id,
+            repo_id=repo_id,
             input_dir=(data.get("input_dir") or None),
             dest_dir=(data.get("dest_dir") or None),
             deploy_script=(data.get("deploy_script") or None),
+            created_by_user_id=user.id,
         )
         session.add(d)
         session.commit()
@@ -72,11 +81,11 @@ async def create_deployment(req: CreateDeploymentRequest):
     return await run_db(_work)
 
 
-@router.get("/{dep_id}", dependencies=[Depends(require_permission("deploy:manage"))])
-async def get_deployment(dep_id: str):
+@router.get("/{dep_id}")
+async def get_deployment(dep_id: str, user=Depends(require_permission("deploy:manage"))):
     def _work(session):
         d = session.get(Deployment, uuid.UUID(dep_id))
-        if not d:
+        if not d or d.created_by_user_id != user.id:
             raise HTTPException(status_code=404, detail="Deployment not found")
         return {
             "id": str(d.id),
@@ -92,28 +101,36 @@ async def get_deployment(dep_id: str):
     return await run_db(_work)
 
 
-@router.put("/{dep_id}", dependencies=[Depends(require_permission("deploy:manage"))])
-async def update_deployment(dep_id: str, req: UpdateDeploymentRequest):
+@router.put("/{dep_id}")
+async def update_deployment(dep_id: str, req: UpdateDeploymentRequest, user=Depends(require_permission("deploy:manage"))):
     data = req.model_dump(exclude_unset=True)
 
     def _work(session):
         d = session.get(Deployment, uuid.UUID(dep_id))
-        if not d:
+        if not d or d.created_by_user_id != user.id:
             raise HTTPException(status_code=404, detail="Deployment not found")
 
         if "name" in data and data["name"] is not None:
             name = str(data["name"]).strip()
             if not name:
                 raise HTTPException(status_code=400, detail="name required")
-            exists = session.query(Deployment).filter(Deployment.name == name, Deployment.id != d.id).first()
+            exists = session.query(Deployment).filter(Deployment.created_by_user_id == user.id, Deployment.name == name, Deployment.id != d.id).first()
             if exists:
                 raise HTTPException(status_code=409, detail="任务名称已存在，请更换")
             data["name"] = name
 
         if "server_id" in data and data["server_id"] is not None:
-            data["server_id"] = uuid.UUID(str(data["server_id"]))
+            sid = uuid.UUID(str(data["server_id"]))
+            s = session.get(Server, sid)
+            if not s or s.created_by_user_id != user.id:
+                raise HTTPException(status_code=404, detail="Server configuration not found")
+            data["server_id"] = sid
         if "repo_id" in data and data["repo_id"] is not None:
-            data["repo_id"] = uuid.UUID(str(data["repo_id"]))
+            rid = uuid.UUID(str(data["repo_id"]))
+            r = session.get(Repo, rid)
+            if not r or r.created_by_user_id != user.id:
+                raise HTTPException(status_code=404, detail="Repository configuration not found")
+            data["repo_id"] = rid
 
         for k, v in data.items():
             if k in {"input_dir", "dest_dir", "deploy_script"} and v is not None and str(v).strip() == "":
@@ -128,11 +145,11 @@ async def update_deployment(dep_id: str, req: UpdateDeploymentRequest):
     return await run_db(_work)
 
 
-@router.delete("/{dep_id}", dependencies=[Depends(require_permission("deploy:manage"))])
-async def delete_deployment(dep_id: str):
+@router.delete("/{dep_id}")
+async def delete_deployment(dep_id: str, user=Depends(require_permission("deploy:manage"))):
     def _work(session):
         d = session.get(Deployment, uuid.UUID(dep_id))
-        if not d:
+        if not d or d.created_by_user_id != user.id:
             return False
         session.delete(d)
         session.commit()
@@ -144,8 +161,8 @@ async def delete_deployment(dep_id: str):
     return {"ok": True}
 
 
-@router.post("/{dep_id}/trigger", dependencies=[Depends(require_permission("deploy:manage"))])
-async def trigger_deployment(dep_id: str, request: Request, req: TriggerDeploymentRequest = TriggerDeploymentRequest()):
+@router.post("/{dep_id}/trigger")
+async def trigger_deployment(dep_id: str, request: Request, req: TriggerDeploymentRequest = TriggerDeploymentRequest(), user=Depends(require_permission("deploy:manage"))):
     payload = req.model_dump()
     api_base = (os.getenv("NEXUSOPS_PUBLIC_API_BASE_URL") or os.getenv("NEXUSOPS_API_BASE_URL") or "").rstrip("/")
     if not api_base:
@@ -182,14 +199,14 @@ async def trigger_deployment(dep_id: str, request: Request, req: TriggerDeployme
 
     def _work(session):
         d = session.get(Deployment, uuid.UUID(dep_id))
-        if not d:
+        if not d or d.created_by_user_id != user.id:
             raise HTTPException(status_code=404, detail="Deployment not found")
 
         s = session.get(Server, d.server_id)
         r = session.get(Repo, d.repo_id)
-        if not s:
+        if not s or s.created_by_user_id != user.id:
             raise HTTPException(status_code=404, detail="Server configuration not found")
-        if not r:
+        if not r or r.created_by_user_id != user.id:
             raise HTTPException(status_code=404, detail="Repository configuration not found")
 
         project_id = r.project_id or os.getenv("GITLAB_PROJECT")

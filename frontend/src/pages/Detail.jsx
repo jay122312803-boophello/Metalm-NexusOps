@@ -669,7 +669,7 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
             <div className="node-content">
               <h4>CI/CD 流水线</h4>
               <p>{pipelineStatus === 'unknown' ? 'Ready' : `Status: ${pipelineStatus}`}</p>
-              {activeHistoryId ? <p>{busy ? 'Monitoring...' : `Latest: history #${String(activeHistoryId).slice(0, 6)}`}</p> : null}
+              {activeHistoryId ? <p>{busy ? 'Monitoring...' : 'Latest: history'}</p> : null}
             </div>
           </div>
           <div className="status-node">

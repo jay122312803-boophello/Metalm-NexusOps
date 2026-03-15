@@ -20,6 +20,7 @@ class Server(SQLModel, table=True):
     ssh_key: Optional[str] = Field(default=None)
     deploy_path: str
     description: Optional[str] = None
+    created_by_user_id: Optional[uuid.UUID] = Field(default=None, foreign_key="users.id")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -35,6 +36,7 @@ class Repo(SQLModel, table=True):
     trigger_token: Optional[str] = None
     private_token: Optional[str] = None
     description: Optional[str] = None
+    created_by_user_id: Optional[uuid.UUID] = Field(default=None, foreign_key="users.id")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -49,6 +51,7 @@ class Deployment(SQLModel, table=True):
     input_dir: Optional[str] = Field(default=None)
     dest_dir: Optional[str] = Field(default=None)
     deploy_script: Optional[str] = Field(default=None)
+    created_by_user_id: Optional[uuid.UUID] = Field(default=None, foreign_key="users.id")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 

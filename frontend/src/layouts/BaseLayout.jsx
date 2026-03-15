@@ -64,8 +64,13 @@ export default function BaseLayout({ page, setPage, breadcrumb, children }) {
               <span>/</span>
               <span className="current">{breadcrumb}</span>
             </div>
-            <div>
-              <Icon name="bell" style={{ color: '#94a3b8', cursor: 'pointer' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button className="icon-btn" type="button" title="通知">
+                <Icon name="bell" />
+              </button>
+              <button className="icon-btn" type="button" title="退出登录" onClick={() => auth?.logout?.()}>
+                <Icon name="right-from-bracket" />
+              </button>
             </div>
           </div>
         </div>

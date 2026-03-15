@@ -106,6 +106,47 @@ async def init_db() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS idx_task_config_snapshot_files_snapshot_id ON task_config_snapshot_files(snapshot_id)"))
             conn.execute(text("ALTER TABLE permissions ADD COLUMN IF NOT EXISTS is_visible boolean NOT NULL DEFAULT true"))
 
+            conn.execute(text("ALTER TABLE servers ADD COLUMN IF NOT EXISTS created_by_user_id uuid"))
+            conn.execute(text("ALTER TABLE repos ADD COLUMN IF NOT EXISTS created_by_user_id uuid"))
+            conn.execute(text("ALTER TABLE deployments ADD COLUMN IF NOT EXISTS created_by_user_id uuid"))
+            conn.execute(
+                text(
+                    """
+                    UPDATE servers
+                    SET created_by_user_id = (SELECT id FROM users ORDER BY created_at ASC LIMIT 1)
+                    WHERE created_by_user_id IS NULL
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    UPDATE repos
+                    SET created_by_user_id = (SELECT id FROM users ORDER BY created_at ASC LIMIT 1)
+                    WHERE created_by_user_id IS NULL
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    UPDATE deployments
+                    SET created_by_user_id = (SELECT id FROM users ORDER BY created_at ASC LIMIT 1)
+                    WHERE created_by_user_id IS NULL
+                    """
+                )
+            )
+
+            conn.execute(text("DROP INDEX IF EXISTS uq_servers_name"))
+            conn.execute(text("DROP INDEX IF EXISTS uq_repos_name"))
+            conn.execute(text("DROP INDEX IF EXISTS uq_deployments_name"))
+            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_servers_user_name ON servers (created_by_user_id, name)"))
+            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_repos_user_name ON repos (created_by_user_id, name)"))
+            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_deployments_user_name ON deployments (created_by_user_id, name)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_servers_created_by_user_id ON servers (created_by_user_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_repos_created_by_user_id ON repos (created_by_user_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_deployments_created_by_user_id ON deployments (created_by_user_id)"))
+
         from app.auth.security import hash_password
         from app.db.models import Permission, Role, RolePermission, User, UserRole
 

@@ -85,7 +85,7 @@ export default function History({ onNavigate, initialPreset }) {
     return sName.includes(q) || rName.includes(q) || ref.includes(q) || pid.includes(q) || st.includes(q) || created.includes(q)
   })
 
-  const pageSize = 20
+  const pageSize = 10
   const total = filteredHistory.length
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   useEffect(() => {

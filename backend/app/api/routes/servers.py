@@ -37,7 +37,7 @@ def _norm_env(v: str | None, name: str) -> str:
 @router.get("")
 async def list_servers(user=Depends(require_permission("infra:manage"))):
     def _work(session):
-        rows = session.query(Server).order_by(Server.created_at.asc()).all()
+        rows = session.query(Server).filter(Server.created_by_user_id == user.id).order_by(Server.created_at.asc()).all()
         return [
             {
                 "id": str(s.id),
@@ -63,7 +63,7 @@ async def create_server(req: CreateServerRequest, user=Depends(require_permissio
         name = (data.get("name") or "").strip()
         if not name:
             raise HTTPException(status_code=400, detail="name required")
-        exists = session.query(Server).filter(Server.name == name).first()
+        exists = session.query(Server).filter(Server.created_by_user_id == user.id, Server.name == name).first()
         if exists:
             raise HTTPException(status_code=409, detail="服务器名称已存在，请更换")
         ssh_key = data.get("ssh_key")
@@ -78,6 +78,7 @@ async def create_server(req: CreateServerRequest, user=Depends(require_permissio
             ssh_key=ssh_key,
             deploy_path=data["deploy_path"],
             description=data.get("description"),
+            created_by_user_id=user.id,
         )
         session.add(s)
         session.commit()
@@ -101,7 +102,7 @@ async def create_server(req: CreateServerRequest, user=Depends(require_permissio
 async def get_server(server_id: str, user=Depends(require_permission("infra:manage"))):
     def _work(session):
         s = session.get(Server, uuid.UUID(server_id))
-        if not s:
+        if not s or s.created_by_user_id != user.id:
             raise HTTPException(status_code=404, detail="Server not found")
         return {
             "id": str(s.id),
@@ -124,13 +125,13 @@ async def update_server(server_id: str, req: UpdateServerRequest, user=Depends(r
 
     def _work(session):
         s = session.get(Server, uuid.UUID(server_id))
-        if not s:
+        if not s or s.created_by_user_id != user.id:
             raise HTTPException(status_code=404, detail="Server not found")
         if "name" in data and data["name"] is not None:
             name = str(data["name"]).strip()
             if not name:
                 raise HTTPException(status_code=400, detail="name required")
-            exists = session.query(Server).filter(Server.name == name, Server.id != s.id).first()
+            exists = session.query(Server).filter(Server.created_by_user_id == user.id, Server.name == name, Server.id != s.id).first()
             if exists:
                 raise HTTPException(status_code=409, detail="服务器名称已存在，请更换")
             data["name"] = name
@@ -156,7 +157,7 @@ async def update_server(server_id: str, req: UpdateServerRequest, user=Depends(r
 async def delete_server(server_id: str, user=Depends(require_permission("infra:manage"))):
     def _work(session):
         s = session.get(Server, uuid.UUID(server_id))
-        if not s:
+        if not s or s.created_by_user_id != user.id:
             return False
         session.delete(s)
         session.commit()
@@ -181,7 +182,7 @@ async def get_server_metrics(server_id: str, user=Depends(require_permission("mo
 
     def _work(session):
         s = session.get(Server, sid)
-        if not s:
+        if not s or s.created_by_user_id != user.id:
             raise HTTPException(status_code=404, detail="Server not found")
         if not (s.ssh_user or "").strip():
             raise HTTPException(status_code=400, detail="Server ssh_user not configured")

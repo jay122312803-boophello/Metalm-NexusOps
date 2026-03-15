@@ -82,8 +82,8 @@ def _parse_compose_ps_output(raw: str):
         return out
     return []
 
-@router.get("/{dep_id}/monitor", dependencies=[Depends(require_permission("monitor:read"))])
-async def monitor_services(dep_id: str):
+@router.get("/{dep_id}/monitor")
+async def monitor_services(dep_id: str, user=Depends(require_permission("monitor:read"))):
     did = uuid.UUID(dep_id)
     now = datetime.utcnow().timestamp()
     cached = _monitor_cache.get(dep_id)
@@ -93,10 +93,10 @@ async def monitor_services(dep_id: str):
 
     def _work(session):
         d = session.get(Deployment, did)
-        if not d:
+        if not d or d.created_by_user_id != user.id:
             raise HTTPException(status_code=404, detail="Deployment not found")
         s = session.get(Server, d.server_id)
-        if not s:
+        if not s or s.created_by_user_id != user.id:
             raise HTTPException(status_code=404, detail="Server configuration not found")
         if not getattr(s, "ssh_key", None):
             raise HTTPException(status_code=400, detail="Server SSH key not configured")

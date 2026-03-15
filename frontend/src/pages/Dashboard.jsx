@@ -212,7 +212,7 @@ export default function Dashboard({ onNavigate }) {
     )
   })
 
-  const pageSize = 12
+  const pageSize = 8
   const total = filteredTasks.length
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   useEffect(() => {
@@ -268,7 +268,6 @@ export default function Dashboard({ onNavigate }) {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
                     <div style={{ fontWeight: 600, fontSize: 16 }}>{t.name}</div>
-                    <span style={{ color: 'var(--text-sub)', fontSize: 12, fontFamily: 'monospace' }}>{String(t.id || '').slice(0, 6)}</span>
                   </div>
                   <div className="task-actions">
                     <Tooltip content="更多操作">

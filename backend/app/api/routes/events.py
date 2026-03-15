@@ -45,8 +45,8 @@ async def _append_history_log_tail(history_id: uuid.UUID, lines: list[str]) -> N
     await run_db(_work)
 
 
-@router.get("/history/{history_id}/events", dependencies=[Depends(require_permission("audit:read"))])
-async def history_events(history_id: str):
+@router.get("/history/{history_id}/events")
+async def history_events(history_id: str, user=Depends(require_permission("audit:read"))):
     hid = uuid.UUID(history_id)
     try:
         await ensure_snapshot(hid)
@@ -59,6 +59,8 @@ async def history_events(history_id: str):
             if not h:
                 return None
             d = session.get(Deployment, h.deployment_id)
+            if not d or d.created_by_user_id != user.id:
+                return None
             r = session.get(Repo, d.repo_id) if d else None
             snap = session.exec(select(TaskConfigSnapshot).where(TaskConfigSnapshot.history_id == hid)).first()
             if snap:

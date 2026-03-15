@@ -17,6 +17,9 @@ export default function Settings({ initialTab }) {
   const [repoQuery, setRepoQuery] = useState('')
   const [rbacQuery, setRbacQuery] = useState('')
   const [rbacView, setRbacView] = useState('users')
+  const [serverPage, setServerPage] = useState(1)
+  const [repoPage, setRepoPage] = useState(1)
+  const [rbacPage, setRbacPage] = useState(1)
   const [showTriggerToken, setShowTriggerToken] = useState(false)
   const [showPrivateToken, setShowPrivateToken] = useState(false)
   const [formServer, setFormServer] = useState({ ssh_user: 'metalm', environment: 'OTHER' })
@@ -355,6 +358,30 @@ export default function Settings({ initialTab }) {
     return String(r?.name || '').toLowerCase().includes(q) || String(r?.code || '').toLowerCase().includes(q)
   })
 
+  const settingsPageSize = 10
+  useEffect(() => {
+    setServerPage(1)
+  }, [serverQuery, serverEnv, servers.length])
+  useEffect(() => {
+    setRepoPage(1)
+  }, [repoQuery, repos.length])
+  useEffect(() => {
+    setRbacPage(1)
+  }, [rbacQuery, rbacView, rbacUsers.length, rbacRoles.length])
+
+  const serverTotalPages = Math.max(1, Math.ceil(filteredServers.length / settingsPageSize))
+  const repoTotalPages = Math.max(1, Math.ceil(filteredRepos.length / settingsPageSize))
+  const rbacTotalPages = Math.max(1, Math.ceil((rbacView === 'users' ? filteredRbacUsers.length : filteredRbacRoles.length) / settingsPageSize))
+
+  const serverSafePage = Math.min(serverTotalPages, Math.max(1, serverPage))
+  const repoSafePage = Math.min(repoTotalPages, Math.max(1, repoPage))
+  const rbacSafePage = Math.min(rbacTotalPages, Math.max(1, rbacPage))
+
+  const pagedServers = filteredServers.slice((serverSafePage - 1) * settingsPageSize, serverSafePage * settingsPageSize)
+  const pagedRepos = filteredRepos.slice((repoSafePage - 1) * settingsPageSize, repoSafePage * settingsPageSize)
+  const pagedRbacUsers = filteredRbacUsers.slice((rbacSafePage - 1) * settingsPageSize, rbacSafePage * settingsPageSize)
+  const pagedRbacRoles = filteredRbacRoles.slice((rbacSafePage - 1) * settingsPageSize, rbacSafePage * settingsPageSize)
+
   const roleById = useMemo(() => {
     const m = {}
     ;(rbacRoles || []).forEach((r) => {
@@ -490,13 +517,12 @@ export default function Settings({ initialTab }) {
         <div className="settings-body">
           {activeTab === 'servers' ? (
             <div className="settings-grid">
-              {filteredServers.map((s) => (
+              {pagedServers.map((s) => (
                 <div key={s.id} className="card">
                   <div className="settings-card-header">
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 0 }}>
                       <span className="status-dot online" style={{ marginTop: 6 }} />
                       <div className="settings-card-title">{s.name}</div>
-                      <span className="settings-card-id">{String(s.id || '').slice(0, 6)}</span>
                       {envBadge(s.environment, s.name)}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -582,12 +608,11 @@ export default function Settings({ initialTab }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredRepos.map((r) => (
+                  {pagedRepos.map((r) => (
                     <tr key={r.id}>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
                           <strong>{r.name}</strong>
-                          <span style={{ color: 'var(--text-sub)', fontSize: 12, fontFamily: 'monospace' }}>{String(r.id || '').slice(0, 6)}</span>
                         </div>
                       </td>
                       <td>
@@ -663,12 +688,11 @@ export default function Settings({ initialTab }) {
                       </tr>
                     ) : (
                       <>
-                        {filteredRbacUsers.map((u) => (
+                        {pagedRbacUsers.map((u) => (
                           <tr key={u.id}>
                             <td>
                               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
                                 <strong>{u.username}</strong>
-                                <span style={{ color: 'var(--text-sub)', fontSize: 12, fontFamily: 'monospace' }}>{String(u.id || '').slice(0, 6)}</span>
                               </div>
                             </td>
                             <td>{u.display_name || '-'}</td>
@@ -751,12 +775,11 @@ export default function Settings({ initialTab }) {
                       </tr>
                     ) : (
                       <>
-                        {filteredRbacRoles.map((r) => (
+                        {pagedRbacRoles.map((r) => (
                           <tr key={r.id}>
                             <td>
                               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
                                 <strong>{r.name}</strong>
-                                <span style={{ color: 'var(--text-sub)', fontSize: 12, fontFamily: 'monospace' }}>{String(r.id || '').slice(0, 6)}</span>
                               </div>
                             </td>
                             <td>
@@ -795,11 +818,30 @@ export default function Settings({ initialTab }) {
             共 {activeTab === 'servers' ? filteredServers.length : activeTab === 'repos' ? filteredRepos.length : rbacView === 'users' ? filteredRbacUsers.length : filteredRbacRoles.length} 条
           </div>
           <div className="settings-pager-right">
-            <button className="btn btn-ghost btn-sm" disabled>
+            <button
+              className="btn btn-ghost btn-sm"
+              disabled={activeTab === 'servers' ? serverSafePage <= 1 : activeTab === 'repos' ? repoSafePage <= 1 : rbacSafePage <= 1}
+              onClick={() => {
+                if (activeTab === 'servers') setServerPage(Math.max(1, serverSafePage - 1))
+                else if (activeTab === 'repos') setRepoPage(Math.max(1, repoSafePage - 1))
+                else setRbacPage(Math.max(1, rbacSafePage - 1))
+              }}
+            >
               <Icon name="chevron-left" />
             </button>
-            <span className="settings-page-num">1</span>
-            <button className="btn btn-ghost btn-sm" disabled>
+            <span className="settings-page-num">
+              {activeTab === 'servers' ? serverSafePage : activeTab === 'repos' ? repoSafePage : rbacSafePage} /{' '}
+              {activeTab === 'servers' ? serverTotalPages : activeTab === 'repos' ? repoTotalPages : rbacTotalPages}
+            </span>
+            <button
+              className="btn btn-ghost btn-sm"
+              disabled={activeTab === 'servers' ? serverSafePage >= serverTotalPages : activeTab === 'repos' ? repoSafePage >= repoTotalPages : rbacSafePage >= rbacTotalPages}
+              onClick={() => {
+                if (activeTab === 'servers') setServerPage(Math.min(serverTotalPages, serverSafePage + 1))
+                else if (activeTab === 'repos') setRepoPage(Math.min(repoTotalPages, repoSafePage + 1))
+                else setRbacPage(Math.min(rbacTotalPages, rbacSafePage + 1))
+              }}
+            >
               <Icon name="chevron-right" />
             </button>
           </div>
