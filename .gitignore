@@ -15,6 +15,7 @@ backend/data/
 server/data/
 db/volumes/
 docker/db/volumes/
+docker/redis/volumes/
 
 develop/backend_frontend/private_configs/
 develop/backend_frontend/private_configs.zip
