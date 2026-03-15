@@ -19,6 +19,7 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
   const [draftAction, setDraftAction] = useState(null)
   const [terminalFull, setTerminalFull] = useState(false)
   const [triggerOpen, setTriggerOpen] = useState(false)
+  const [historyNavOpen, setHistoryNavOpen] = useState(false)
   const [discardOpen, setDiscardOpen] = useState(false)
   const [pendingTrigger, setPendingTrigger] = useState(false)
   const [rightTab, setRightTab] = useState('terminal')
@@ -83,12 +84,8 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
                 setRightTab('terminal')
               } else {
                 setMode('ready')
-                setShowDraftTip(true)
+                setShowDraftTip(false)
                 setRightTab('config')
-                setActiveHistoryId(null)
-                setMountedFiles([])
-                setLogs([])
-                setPipelineStatus('unknown')
               }
             }
           }
@@ -135,16 +132,10 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
       try {
         const d = JSON.parse(ev.data || '{}')
         const st = d.status || 'unknown'
+        setPipelineStatus(st)
         if (st === 'success' && !viewHistory) {
           setMode('ready')
-          setShowDraftTip(true)
-          setRightTab('config')
-          setActiveHistoryId(null)
-          setMountedFiles([])
-          setLogs([])
-          setPipelineStatus('unknown')
-        } else {
-          setPipelineStatus(st)
+          setShowDraftTip(false)
         }
         if (['success', 'failed', 'canceled'].includes(st) && !viewHistory) {
           setDeploying(false)
@@ -247,6 +238,13 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
   }
 
   const busy = deploying || pipelineStatus === 'running' || pipelineStatus === 'pending'
+
+  const mountPaths =
+    viewHistory
+      ? mountedFiles
+      : configList.length
+        ? configList.map((x) => x?.rel_path).filter(Boolean).sort((a, b) => String(a).localeCompare(String(b)))
+        : mountedFiles
 
   const loadConfigs = async (opts = {}) => {
     const forceOpenFirst = !!opts.forceOpenFirst
@@ -514,6 +512,7 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
 
   if (!task) return <div className="empty-state">Loading...</div>
 
+  const hasDirty = Object.values(dirtyById || {}).some(Boolean)
   const modeLabel = viewHistory ? '历史' : mode === 'monitor' ? '监控' : mode === 'diagnose' ? '诊断' : '就绪'
   const modeDotClass = viewHistory ? 'idle' : mode === 'monitor' ? 'busy' : mode === 'diagnose' ? 'offline' : 'online'
 
@@ -535,52 +534,37 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
               </span>
             </div>
           </div>
-        <button
-          className="btn btn-primary"
-          onClick={() => {
-            if (viewHistory) return
-            const hasDirty = Object.values(dirtyById || {}).some(Boolean)
-            if (hasDirty) {
-              setPendingTrigger(true)
-              setDiscardOpen(true)
-            } else {
-              setTriggerOpen(true)
-            }
-          }}
-          disabled={deploying || viewHistory}
-        >
-          <Icon name={deploying ? 'spinner fa-spin' : 'rocket'} /> {deploying ? '部署中...' : '触发部署'}
-        </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              className="icon-btn"
+              title="进入审计日志"
+              onClick={() => setHistoryNavOpen(true)}
+              disabled={deploying}
+            >
+              <Icon name="clock-rotate-left" />
+            </button>
+            <button
+              className="btn btn-primary"
+              onClick={() => {
+                if (viewHistory) return
+                if (hasDirty) {
+                  setPendingTrigger(true)
+                  setDiscardOpen(true)
+                } else {
+                  setTriggerOpen(true)
+                }
+              }}
+              disabled={busy || viewHistory}
+            >
+              <Icon name={deploying ? 'spinner fa-spin' : 'rocket'} /> {deploying ? '部署中...' : '触发部署'}
+            </button>
+          </div>
         </div>
 
       {mode === 'diagnose' && !viewHistory ? (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
           <div style={{ color: 'var(--text-sub)', fontSize: 13 }}>
             最近一次执行失败，优先查看现场日志再决定是否重新部署。
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button
-              className="btn btn-outline btn-sm"
-              onClick={() => {
-                if (onNavigate) onNavigate('history')
-              }}
-            >
-              <Icon name="clock-rotate-left" /> 查看审计日志
-            </button>
-            <button
-              className="btn btn-outline btn-sm"
-              onClick={() => {
-                setMode('ready')
-                setShowDraftTip(true)
-                setRightTab('config')
-                setActiveHistoryId(null)
-                setMountedFiles([])
-                setLogs([])
-                setPipelineStatus('unknown')
-              }}
-            >
-              <Icon name="arrow-rotate-left" /> 回到配置
-            </button>
           </div>
         </div>
       ) : null}
@@ -592,11 +576,6 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
           </button>
           <button className={`tab ${rightTab === 'config' ? 'active' : ''}`} onClick={() => setRightTab('config')}>
             配置文件管理
-            {!viewHistory && mode === 'ready' ? (
-              <span className="badge badge-gray" style={{ marginLeft: 8, fontFamily: 'inherit' }}>
-                草稿
-              </span>
-            ) : null}
           </button>
         </div>
       </div>
@@ -624,7 +603,7 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
             <div className="node-content">
               <h4>CI/CD 流水线</h4>
               <p>{pipelineStatus === 'unknown' ? 'Ready' : `Status: ${pipelineStatus}`}</p>
-              {activeHistoryId ? <p>Monitoring...</p> : null}
+              {activeHistoryId ? <p>{busy ? 'Monitoring...' : `Latest: history #${String(activeHistoryId).slice(0, 6)}`}</p> : null}
             </div>
           </div>
           <div className="status-node">
@@ -656,10 +635,10 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
             </div>
             <div className="meta-item">
               <div className="meta-label">挂载配置</div>
-              <div className="meta-value">{`${mountedFiles.length} 项`}</div>
-              {mountedFiles.length ? (
+              <div className="meta-value">{`${mountPaths.length} 项`}</div>
+              {mountPaths.length ? (
                 <div className="meta-files">
-                  {mountedFiles.map((p) => (
+                  {mountPaths.map((p) => (
                     <div key={p}>{p}</div>
                   ))}
                 </div>
@@ -686,18 +665,18 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
                       <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: 8 }}>
                         <Icon name="pen-to-square" style={{ color: 'var(--info)' }} />
-                        草稿工作区
+                        实例配置
                         <button className="icon-btn" title="隐藏提示" onClick={() => setShowDraftTip(false)}>
                           <Icon name="xmark" />
                         </button>
                       </div>
                       <div style={{ fontSize: 13, color: 'var(--text-sub)' }}>
-                        当前配置将作为下一次部署挂载配置，可直接编辑后触发部署。
+                        此处为该实例的固定配置文件，将在每次部署时自动挂载到目标路径。
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                       <button className="btn btn-outline btn-sm" onClick={() => setDraftAction('restore')}>
-                        <Icon name="arrow-rotate-left" /> 恢复默认模板
+                        <Icon name="arrow-rotate-left" /> 重置配置
                       </button>
                       <button className="btn btn-danger btn-sm" onClick={() => setDraftAction('clear')}>
                         <Icon name="trash" /> 清空全部
@@ -907,6 +886,38 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
               <div>{server?.name || '-'}</div>
               <div style={{ color: 'var(--text-sub)' }}>地址</div>
               <div style={{ fontFamily: 'monospace' }}>{server?.address || '-'}</div>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+
+      {historyNavOpen ? (
+        <Modal
+          title="查看审计日志"
+          onClose={() => setHistoryNavOpen(false)}
+          footer={[
+            <button key="c" className="btn btn-outline" onClick={() => setHistoryNavOpen(false)}>
+              取消
+            </button>,
+            <button
+              key="ok"
+              className="btn btn-primary"
+              onClick={() => {
+                setHistoryNavOpen(false)
+                if (onNavigate) onNavigate('history')
+              }}
+            >
+              <Icon name="clock-rotate-left" /> 确认进入
+            </button>
+          ]}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 14 }}>
+            <div style={{ color: 'var(--text-sub)' }}>将跳转到审计日志页面，查看该实例的部署记录。</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 8, marginTop: 8 }}>
+              <div style={{ color: 'var(--text-sub)' }}>实例</div>
+              <div style={{ fontWeight: 600 }}>{task?.name}</div>
+              <div style={{ color: 'var(--text-sub)' }}>服务器</div>
+              <div>{server?.name || '-'}</div>
             </div>
           </div>
         </Modal>

@@ -13,6 +13,9 @@ export default function History({ onNavigate, initialPreset }) {
   const [query, setQuery] = useState('')
   const [page, setPage] = useState(1)
   const [varsView, setVarsView] = useState(null)
+  const [redeployTarget, setRedeployTarget] = useState(null)
+  const [redeploying, setRedeploying] = useState(false)
+  const [redeployError, setRedeployError] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState(null)
@@ -202,13 +205,16 @@ export default function History({ onNavigate, initialPreset }) {
                         className="btn btn-primary btn-action"
                         onClick={async (ev) => {
                           ev.stopPropagation()
-                          if (!confirm('重新触发该任务部署？')) return
-                          const res = await api.post(`/api/deployments/${h.deployment_id}/trigger`, {})
-                          if (res?.ok && res?.history_id) {
-                            onNavigate ? onNavigate('detail', h.deployment_id, { historyId: res.history_id }) : null
-                          } else {
-                            alert('触发失败')
-                          }
+                          setRedeployError(null)
+                          setRedeployTarget({
+                            history_id: h.id,
+                            deployment_id: h.deployment_id,
+                            deployment_name: h.deployment_name,
+                            server_name: h.server_snapshot?.name,
+                            repo_name: h.repo_snapshot?.name,
+                            ref: h.ref,
+                            created_at: h.created_at
+                          })
                         }}
                       >
                         <Icon name="rocket" /> 重新部署
@@ -274,6 +280,78 @@ export default function History({ onNavigate, initialPreset }) {
         >
           <pre className="code-pre">{varsView.text}</pre>
         </Drawer>
+      ) : null}
+
+      {redeployTarget ? (
+        <Modal
+          title="重新部署"
+          onClose={() => (redeploying ? null : setRedeployTarget(null))}
+          footer={[
+            <button key="c" className="btn btn-outline" onClick={() => setRedeployTarget(null)} disabled={redeploying}>
+              取消
+            </button>,
+            <button
+              key="ok"
+              className="btn btn-primary"
+              onClick={async () => {
+                setRedeploying(true)
+                setRedeployError(null)
+                try {
+                  const res = await api.post(`/api/deployments/${redeployTarget.deployment_id}/trigger`, {})
+                  if (res?.ok && res?.history_id) {
+                    setRedeployTarget(null)
+                    onNavigate ? onNavigate('detail', redeployTarget.deployment_id, { historyId: res.history_id }) : null
+                  } else {
+                    const d = res?.detail
+                    setRedeployError(typeof d === 'string' ? d : d ? JSON.stringify(d) : '触发失败')
+                  }
+                } finally {
+                  setRedeploying(false)
+                }
+              }}
+              disabled={redeploying}
+            >
+              <Icon name={redeploying ? 'spinner fa-spin' : 'rocket'} /> {redeploying ? '触发中...' : '确认触发'}
+            </button>
+          ]}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 14 }}>
+            <div style={{ color: 'var(--text-sub)' }}>将基于该实例配置触发一次新的部署流水线。</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 8, marginTop: 8 }}>
+              <div style={{ color: 'var(--text-sub)' }}>实例</div>
+              <div style={{ fontWeight: 600 }}>{redeployTarget.deployment_name || redeployTarget.deployment_id}</div>
+              <div style={{ color: 'var(--text-sub)' }}>仓库</div>
+              <div>{redeployTarget.repo_name || '-'}</div>
+              <div style={{ color: 'var(--text-sub)' }}>分支</div>
+              <div>
+                <span className="badge badge-gray" style={{ fontFamily: 'inherit' }}>
+                  {redeployTarget.ref || '-'}
+                </span>
+              </div>
+              <div style={{ color: 'var(--text-sub)' }}>服务器</div>
+              <div>{redeployTarget.server_name || '-'}</div>
+              <div style={{ color: 'var(--text-sub)' }}>参考记录</div>
+              <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', fontSize: 12 }}>
+                {String(redeployTarget.history_id).slice(0, 8)}
+              </div>
+            </div>
+            {redeployError ? (
+              <div
+                style={{
+                  marginTop: 6,
+                  padding: '10px 12px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(239,68,68,0.25)',
+                  background: 'rgba(239,68,68,0.06)',
+                  color: '#b91c1c',
+                  fontSize: 13
+                }}
+              >
+                {redeployError}
+              </div>
+            ) : null}
+          </div>
+        </Modal>
       ) : null}
 
       {deleteTarget ? (

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Icon from '../components/Icon.jsx'
 import Drawer from '../components/Drawer.jsx'
+import Modal from '../components/Modal.jsx'
 import { api } from '../services/api.js'
 
 export default function Dashboard({ onNavigate }) {
@@ -15,6 +16,7 @@ export default function Dashboard({ onNavigate }) {
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [page, setPage] = useState(1)
+  const [scriptHelpOpen, setScriptHelpOpen] = useState(false)
 
   const load = async () => {
     const ts = await api.get('/api/deployments')
@@ -163,7 +165,7 @@ export default function Dashboard({ onNavigate }) {
           </div>
           <div>
             <button className="btn btn-primary" onClick={openCreate}>
-              <Icon name="plus" /> 创建新任务
+              <Icon name="plus" /> 创建新实例
             </button>
           </div>
         </div>
@@ -204,7 +206,7 @@ export default function Dashboard({ onNavigate }) {
                             openEdit(t)
                           }}
                         >
-                          任务配置 <Icon name="gear" />
+                          实例配置 <Icon name="gear" />
                         </button>
                         <div style={{ height: 1, background: 'var(--border)', margin: '6px 0' }} />
                         <button
@@ -215,7 +217,7 @@ export default function Dashboard({ onNavigate }) {
                             await handleDelete(t.id)
                           }}
                         >
-                          删除任务 <Icon name="trash" />
+                          删除实例 <Icon name="trash" />
                         </button>
                       </div>
                     ) : null}
@@ -290,7 +292,7 @@ export default function Dashboard({ onNavigate }) {
                       openEdit(t)
                     }}
                   >
-                    <Icon name="gear" /> 任务配置
+                    <Icon name="gear" /> 实例配置
                   </button>
                   <button
                     className="btn btn-primary btn-sm"
@@ -311,7 +313,7 @@ export default function Dashboard({ onNavigate }) {
                 <div className="empty-icon">
                   <Icon name="cubes" />
                 </div>
-                <div>{query || statusFilter !== 'all' ? '暂无匹配任务' : '暂无部署任务，请点击右上角创建'}</div>
+                <div>{query || statusFilter !== 'all' ? '暂无匹配实例' : '暂无部署实例，请点击右上角创建'}</div>
               </div>
             ) : null}
           </div>
@@ -341,7 +343,7 @@ export default function Dashboard({ onNavigate }) {
 
       {drawerOpen ? (
         <Drawer
-          title={editingTaskId ? '任务配置' : '创建部署任务'}
+          title={editingTaskId ? '实例配置' : '创建部署实例'}
           onClose={() => { setDrawerOpen(false); setEditingTaskId(null) }}
           footer={[
             <button key="c" className="btn btn-outline" onClick={() => { setDrawerOpen(false); setEditingTaskId(null) }}>
@@ -353,7 +355,7 @@ export default function Dashboard({ onNavigate }) {
           ]}
         >
           <div className="form-item">
-            <label className="form-label">任务名称</label>
+            <label className="form-label">实例名称</label>
             <input
               className="form-input"
               placeholder="Nexus 智能体部署"
@@ -413,9 +415,14 @@ export default function Dashboard({ onNavigate }) {
           <div className="form-item">
             <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               自定义执行脚本
-              <span title="此脚本将在目标服务器拉取代码及配置后执行" style={{ color: 'var(--text-sub)' }}>
+              <button
+                type="button"
+                className="icon-btn"
+                title="部署时在目标服务器执行，用于启动/重启服务"
+                onClick={() => setScriptHelpOpen(true)}
+              >
                 <Icon name="circle-question" />
-              </span>
+              </button>
             </label>
             <textarea
               className="form-input"
@@ -426,6 +433,32 @@ export default function Dashboard({ onNavigate }) {
             />
           </div>
         </Drawer>
+      ) : null}
+
+      {scriptHelpOpen ? (
+        <Modal
+          title="自定义执行脚本"
+          onClose={() => setScriptHelpOpen(false)}
+          footer={[
+            <button key="c" className="btn btn-outline" onClick={() => setScriptHelpOpen(false)}>
+              关闭
+            </button>
+          ]}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 14 }}>
+            <div style={{ color: 'var(--text-sub)' }}>
+              触发部署后，该脚本会在目标服务器执行（工作目录为服务器目标路径），用于启动/重启服务等部署收尾动作。
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ color: 'var(--text-sub)' }}>注意事项</div>
+              <div style={{ color: 'var(--text-main)', fontSize: 13, lineHeight: 1.7 }}>
+                <div>1. 脚本里引用的文件需存在于“同步源目录”中，部署时会被同步到目标路径。</div>
+                <div>2. 远端会先同步代码，再挂载配置文件，然后执行此脚本。</div>
+                <div>3. 推荐使用相对路径：如 ./down.sh、./up.sh、docker-compose.yml。</div>
+              </div>
+            </div>
+          </div>
+        </Modal>
       ) : null}
     </div>
   )
