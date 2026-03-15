@@ -91,6 +91,25 @@ export default function Settings({ initialTab }) {
     return `${x.toFixed(i === 0 ? 0 : 1)}${units[i]}`
   }
 
+  const toBytesFromDf = (v) => {
+    const n = Number(v)
+    if (!Number.isFinite(n) || n <= 0) return 0
+    return n * 1024
+  }
+
+  const fmtDiskPart = (v) => {
+    if (v == null) return '-'
+    if (typeof v === 'string' && /[a-zA-Z]/.test(v)) return v
+    const n = Number(v)
+    if (!Number.isFinite(n) || n <= 0) return '-'
+    const bytes = toBytesFromDf(n)
+    const tb = Math.floor(bytes / 1024 / 1024 / 1024 / 1024)
+    const gb = Math.floor((bytes - tb * 1024 * 1024 * 1024 * 1024) / 1024 / 1024 / 1024)
+    if (tb > 0) return `${tb}TB ${gb}GB`
+    const g = Math.max(0, Math.round(bytes / 1024 / 1024 / 1024))
+    return `${g}GB`
+  }
+
   const clampPct = (v) => {
     const n = Number(v)
     if (!Number.isFinite(n)) return 0
@@ -733,7 +752,9 @@ export default function Settings({ initialTab }) {
                 </div>
                 <div style={{ color: 'var(--text-sub)' }}>磁盘</div>
                 <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>
-                  {metricsData?.metrics?.disk?.used && metricsData?.metrics?.disk?.total ? `${metricsData.metrics.disk.used} / ${metricsData.metrics.disk.total}` : '-'}
+                  {metricsData?.metrics?.disk?.used && metricsData?.metrics?.disk?.total
+                    ? `${fmtDiskPart(metricsData.metrics.disk.used)} / ${fmtDiskPart(metricsData.metrics.disk.total)}`
+                    : '-'}
                 </div>
                 <div style={{ color: 'var(--text-sub)' }}>网络</div>
                 <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>
