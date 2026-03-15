@@ -1,7 +1,7 @@
 services:
   nexusops-redis:
     image: registry.xuelangyun.com/shuzhi-amd64/metalm/redis:6.2.20
-    # image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/redis:6.2.20
+    # image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/redis:6.2.20-linuxarm64
     container_name: nexusops-redis
     restart: always
     volumes:
