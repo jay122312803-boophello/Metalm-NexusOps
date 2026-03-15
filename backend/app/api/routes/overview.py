@@ -17,6 +17,8 @@ def _get_app_tz():
     try:
         return ZoneInfo(name)
     except Exception:
+        if name in {"Asia/Shanghai", "PRC", "CST"}:
+            return timezone(timedelta(hours=8))
         return timezone.utc
 
 

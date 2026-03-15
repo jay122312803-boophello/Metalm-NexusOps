@@ -11,7 +11,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 WORKDIR /app/backend
 
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories && \
-    apk add --no-cache python3 py3-pip openssl libffi && \
+    apk add --no-cache python3 py3-pip openssl libffi tzdata && \
     python3 -m venv /opt/venv && \
     /opt/venv/bin/pip install --no-cache-dir -U pip setuptools wheel
 
