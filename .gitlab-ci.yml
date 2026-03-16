@@ -24,10 +24,16 @@ deploy:
 
   script:
     - |
+      set -eu
+      (set -o pipefail) 2>/dev/null && set -o pipefail
       : "${INPUT_DIR:=./}"
       : "${DEST_DIR:?DEST_DIR is required}"
       : "${SERVER_HOST:?SERVER_HOST is required}"
       : "${SERVER_USER:=metalm}"
+      if [ -z "${CUSTOM_DEPLOY_SCRIPT:-}" ]; then
+        echo "!! [NexusOps] CUSTOM_DEPLOY_SCRIPT 为空：拒绝执行，避免假成功"
+        exit 22
+      fi
       NEXUSOPS_API_BASE_URL="$(printf "%s" "${NEXUSOPS_API_BASE_URL:-}" | tr -d '\r\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
       NEXUSOPS_CONFIG_ZIP_URL="$(printf "%s" "${NEXUSOPS_CONFIG_ZIP_URL:-}" | tr -d '\r\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
       api_base="${NEXUSOPS_API_BASE_URL:-}"
@@ -72,7 +78,7 @@ deploy:
       echo "SERVER=$SERVER_USER@$SERVER_HOST"
       echo "====== [NexusOps] Start Sync ======"
 
-      printf "%s\n" "${CUSTOM_DEPLOY_SCRIPT:-}" > remote_executor.sh
+      printf "%s\n" "${CUSTOM_DEPLOY_SCRIPT}" > remote_executor.sh
       chmod 600 remote_executor.sh
 
       ssh "$SERVER_USER@$SERVER_HOST" "mkdir -p '${DEST_DIR%/}'"

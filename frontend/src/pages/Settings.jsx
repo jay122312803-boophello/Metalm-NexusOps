@@ -1074,6 +1074,15 @@ export default function Settings({ initialTab }) {
                 </div>
               </div>
               <div className="form-item">
+                <label className="form-label">Project ID</label>
+                <input
+                  className="form-input"
+                  placeholder="如：group/project 或 数字项目ID"
+                  value={formRepo.project_id || ''}
+                  onChange={(e) => setFormRepo({ ...formRepo, project_id: e.target.value })}
+                />
+              </div>
+              <div className="form-item">
                 <label className="form-label">
                   分支 <span className="req-star">*</span>
                 </label>
