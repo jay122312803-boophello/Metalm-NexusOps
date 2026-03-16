@@ -255,7 +255,7 @@ export default function App() {
         <NoAccess detail="无权访问部署详情" />
       )
     ) : (
-      auth.hasPerm('deploy:manage') ? <Dashboard onNavigate={navigate} /> : <NoAccess detail="无权访问部署大盘" />
+      auth.hasPerm('deploy:manage') ? <Dashboard onNavigate={navigate} /> : <NoAccess detail="无权访问部署中心" />
     )
 
   return (

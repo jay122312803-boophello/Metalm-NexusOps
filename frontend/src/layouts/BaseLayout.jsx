@@ -31,7 +31,7 @@ export default function BaseLayout({ page, setPage, breadcrumb, children }) {
               onClick={() => setPage('dashboard')}
             >
               <Icon name="table-columns" />
-              部署大盘
+              部署中心
             </div>
           </Can>
           <Can perm="audit:read">
