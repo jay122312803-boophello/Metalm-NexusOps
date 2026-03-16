@@ -50,6 +50,7 @@ deploy:
 
       if [ -n "${NEXUSOPS_CONFIG_ZIP_URL:-}" ]; then
         if [ -z "${NEXUSOPS_API_TOKEN:-}" ] && [ -n "${api_base:-}" ] && [ -n "${NEXUSOPS_API_USER:-}" ] && [ -n "${NEXUSOPS_API_PASS:-}" ]; then
+          echo "====== [NexusOps] Login ======"
           login_json="$(curl -fsSL -X POST "${api_base%/}/api/auth/login" -H "Content-Type: application/json" \
             -d "{\"username\":\"${NEXUSOPS_API_USER}\",\"password\":\"${NEXUSOPS_API_PASS}\"}")"
           NEXUSOPS_API_TOKEN="$(printf "%s" "$login_json" | jq -r '.token // empty')"
@@ -88,6 +89,21 @@ deploy:
         tmp_local="/tmp/nexusops-configs.zip"
         rm -f "$tmp_local"
         curl -fsSL -H "Authorization: Bearer ${NEXUSOPS_API_TOKEN}" "$NEXUSOPS_CONFIG_ZIP_URL" -o "$tmp_local"
+        if [ ! -s "$tmp_local" ]; then
+          echo "!! [NexusOps] 下载失败或文件为空: $NEXUSOPS_CONFIG_ZIP_URL"
+          cat "$tmp_local" || true
+          exit 22
+        fi
+        
+        # Check for ZIP header (PK..)
+        # head -c is not standard in some alpine versions or busybox, try to use od or hexdump if needed, or just rely on unzip -t later.
+        # But simple check: read first 2 bytes.
+        if ! head -c 2 "$tmp_local" | grep -q "PK"; then
+             echo "!! [NexusOps] 下载的不是 ZIP 文件 (可能为 JSON 错误信息):"
+             cat "$tmp_local"
+             echo ""
+             exit 22
+        fi
         rsync -rz --no-perms --no-owner --no-group "$tmp_local" "$SERVER_USER@$SERVER_HOST:${DEST_DIR%/}/.nexusops/configs.zip"
         rm -f "$tmp_local"
       fi

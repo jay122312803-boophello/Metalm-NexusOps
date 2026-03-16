@@ -17,6 +17,9 @@ dependencies = [
     "sqlmodel>=0.0.25",
     "psycopg[binary]>=3.2.10",
     "uvicorn>=0.41.0",
+    "langchain-core>=0.1.0",
+    "langchain-openai>=0.0.1",
+    "langgraph>=0.0.1",
 ]
 
 [tool.uv]

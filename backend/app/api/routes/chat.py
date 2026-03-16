@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from sqlmodel import select
 
 from ...auth.deps import get_current_user
-from ...chat.service import _chat_completions_url, stream_chat_completions, stream_openai_compatible
+from ...chat.service import _chat_completions_url, stream_chat_completions, stream_openai_compatible, stream_agent_run
 from ...db.models import AIModelConfig
 from ...db.session import run_db
 
@@ -87,12 +87,13 @@ async def chat_completions(body: ChatCompletionsRequest, user=Depends(get_curren
     headers = {"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"}
     if active_ready:
         return StreamingResponse(
-            stream_openai_compatible(
+            stream_agent_run(
                 base_url=(active.base_url or "").strip(),
                 api_key=(active.api_key or "").strip(),
                 model=(active.model or "").strip(),
                 messages=compact,
                 system_prompt=str(active.system_prompt or ""),
+                user_id=str(user.id),
                 temperature=float(active.temperature or 0.2),
                 timeout_s=timeout_s,
             ),
