@@ -209,15 +209,50 @@ async def trigger_deployment(dep_id: str, request: Request, req: TriggerDeployme
         if not r or r.created_by_user_id != user.id:
             raise HTTPException(status_code=404, detail="Repository configuration not found")
 
-        project_id = r.project_id or os.getenv("GITLAB_PROJECT")
+        src_ref = r.branch or os.getenv("TRIGGER_REF") or "master"
+
+        ci_project = (os.getenv("NEXUSOPS_CI_PROJECT") or "").strip()
+        ci_repo = None
+        if not ci_project:
+            ci_repo = session.exec(
+                select(Repo)
+                .where(Repo.created_by_user_id == user.id)
+                .where(Repo.name == "Metalm-NexusOps")
+            ).first()
+            if not ci_repo:
+                ci_repo = session.exec(
+                    select(Repo)
+                    .where(Repo.created_by_user_id == user.id)
+                    .where(Repo.url.contains("Metalm-NexusOps"))
+                ).first()
+
+        use_ci_repo = bool(
+            ci_repo
+            and (ci_repo.project_id or "").strip()
+            and (((ci_repo.trigger_token or "").strip()) or ((ci_repo.private_token or "").strip()))
+        )
+
+        project_id = (
+            ci_project
+            or ((ci_repo.project_id or "").strip() if use_ci_repo else "")
+            or (r.project_id or "")
+            or os.getenv("GITLAB_PROJECT")
+        )
         if not project_id:
             raise HTTPException(status_code=400, detail="Project ID not configured in repo")
 
         gitlab_url = (os.getenv("GITLAB_BASE_URL") or "https://gitlab.xuelangyun.com").rstrip("/")
-        ref = r.branch or os.getenv("TRIGGER_REF") or "master"
+        trigger_ref = ((ci_repo.branch or "").strip() if use_ci_repo else "") or src_ref
 
-        trigger_token = (r.trigger_token or "").strip() or (os.getenv("TRIGGER_TOKEN") or "").strip() or None
-        private_token = (r.private_token or "").strip() or (os.getenv("PRIVATE_TOKEN") or "").strip() or None
+        if ci_project:
+            trigger_token = (os.getenv("NEXUSOPS_CI_TRIGGER_TOKEN") or os.getenv("TRIGGER_TOKEN") or "").strip() or None
+            private_token = (os.getenv("NEXUSOPS_CI_PRIVATE_TOKEN") or os.getenv("PRIVATE_TOKEN") or "").strip() or None
+        elif use_ci_repo:
+            trigger_token = (ci_repo.trigger_token or "").strip() or None
+            private_token = (ci_repo.private_token or "").strip() or None
+        else:
+            trigger_token = (r.trigger_token or "").strip() or (os.getenv("TRIGGER_TOKEN") or "").strip() or None
+            private_token = (r.private_token or "").strip() or (os.getenv("PRIVATE_TOKEN") or "").strip() or None
 
         variables = {}
         req_vars = payload.get("variables") or {}
@@ -234,6 +269,12 @@ async def trigger_deployment(dep_id: str, request: Request, req: TriggerDeployme
         variables["DEST_DIR"] = (d.dest_dir or "").strip() or s.deploy_path
         if d.deploy_script:
             variables["CUSTOM_DEPLOY_SCRIPT"] = d.deploy_script
+        variables["NEXUSOPS_SOURCE_REPO_URL"] = (r.url or "").strip()
+        variables["NEXUSOPS_SOURCE_REPO_REF"] = src_ref
+        if not variables["NEXUSOPS_SOURCE_REPO_URL"]:
+            raise HTTPException(status_code=400, detail="Repository URL not configured")
+        if (r.private_token or "").strip():
+            variables["NEXUSOPS_GIT_HTTP_TOKEN"] = (r.private_token or "").strip()
 
         verify_tls = (os.getenv("GITLAB_TLS_INSECURE") or "").strip() != "1"
 
@@ -241,7 +282,7 @@ async def trigger_deployment(dep_id: str, request: Request, req: TriggerDeployme
             deployment_id=d.id,
             pipeline_id=None,
             status="pending",
-            ref=ref,
+            ref=src_ref,
             web_url=None,
             created_at=datetime.utcnow(),
             server_snapshot={
@@ -255,8 +296,11 @@ async def trigger_deployment(dep_id: str, request: Request, req: TriggerDeployme
                 "id": str(r.id),
                 "name": r.name,
                 "url": r.url,
-                "branch": ref,
-                "project_id": project_id,
+                "branch": src_ref,
+                "project_id": (r.project_id or "").strip() or None,
+                "ci_project_id": project_id,
+                "ci_ref": trigger_ref,
+                "ci_repo_id": str(ci_repo.id) if use_ci_repo and ci_repo else None,
             },
             variables={},
         )
@@ -270,7 +314,7 @@ async def trigger_deployment(dep_id: str, request: Request, req: TriggerDeployme
             if "NEXUSOPS_CONFIG_ZIP_URL" not in variables:
                 variables["NEXUSOPS_CONFIG_ZIP_URL"] = f"{api_base}/api/deployments/{d.id}/configs.zip"
 
-        variables_for_history = {k: v for k, v in variables.items() if k != "SERVER_SSH_KEY"}
+        variables_for_history = {k: v for k, v in variables.items() if k not in {"SERVER_SSH_KEY", "NEXUSOPS_GIT_HTTP_TOKEN"}}
         h.variables = variables_for_history
         session.add(h)
         session.commit()
@@ -301,14 +345,14 @@ async def trigger_deployment(dep_id: str, request: Request, req: TriggerDeployme
         try:
             if trigger_token:
                 url = f"{gitlab_url}/api/v4/projects/{requests.utils.quote(project_id, safe='')}/trigger/pipeline"
-                form = {"token": trigger_token, "ref": ref}
+                form = {"token": trigger_token, "ref": trigger_ref}
                 for k, v in variables.items():
                     form[f"variables[{k}]"] = str(v)
                 resp = requests.post(url, data=form, verify=verify_tls, timeout=15)
             elif private_token:
                 url = f"{gitlab_url}/api/v4/projects/{requests.utils.quote(project_id, safe='')}/pipeline"
                 headers = {"PRIVATE-TOKEN": private_token}
-                form = {"ref": ref}
+                form = {"ref": trigger_ref}
                 for k, v in variables.items():
                     form[f"variables[{k}]"] = str(v)
                 resp = requests.post(url, headers=headers, data=form, verify=verify_tls, timeout=15)
@@ -336,7 +380,7 @@ async def trigger_deployment(dep_id: str, request: Request, req: TriggerDeployme
 
         h.pipeline_id = data.get("id")
         h.status = data.get("status")
-        h.ref = data.get("ref") or ref
+        h.ref = src_ref
         h.web_url = data.get("web_url")
         session.add(h)
         session.commit()

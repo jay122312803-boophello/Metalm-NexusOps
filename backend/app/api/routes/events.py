@@ -62,6 +62,15 @@ async def history_events(history_id: str, user=Depends(require_permission("audit
             if not d or d.created_by_user_id != user.id:
                 return None
             r = session.get(Repo, d.repo_id) if d else None
+            ci_repo = None
+            try:
+                snap = h.repo_snapshot or {}
+                if isinstance(snap, dict):
+                    ci_repo_id = str(snap.get("ci_repo_id") or "").strip()
+                    if ci_repo_id:
+                        ci_repo = session.get(Repo, uuid.UUID(ci_repo_id))
+            except Exception:
+                ci_repo = None
             snap = session.exec(select(TaskConfigSnapshot).where(TaskConfigSnapshot.history_id == hid)).first()
             if snap:
                 cfg_rows = session.exec(
@@ -73,6 +82,7 @@ async def history_events(history_id: str, user=Depends(require_permission("audit
             return {
                 "history": h,
                 "repo": r,
+                "ci_repo": ci_repo,
                 "deployment_id": str(h.deployment_id),
                 "config_files": cfg_files,
             }
@@ -226,9 +236,9 @@ async def history_events(history_id: str, user=Depends(require_permission("audit
                     yield _log(f">> Pipeline status: {status_now}")
                     await _flush(force=True)
 
-                r = base["repo"]
-                proj = ((r.project_id if r else None) or os.getenv("GITLAB_PROJECT") or "").strip()
-                token = ((r.private_token if r else None) or "").strip() or (os.getenv("PRIVATE_TOKEN") or "").strip() or None
+                rr = base.get("ci_repo") or base.get("repo")
+                proj = ((rr.project_id if rr else None) or os.getenv("GITLAB_PROJECT") or "").strip()
+                token = ((rr.private_token if rr else None) or "").strip() or (os.getenv("PRIVATE_TOKEN") or "").strip() or None
 
                 if enable_trace and not pipeline_id and not warned_missing_pipeline:
                     warned_missing_pipeline = True

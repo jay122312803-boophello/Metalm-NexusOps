@@ -32,6 +32,7 @@ async def get_history(
                 DeploymentHistory.status,
                 Repo.project_id,
                 Repo.private_token,
+                DeploymentHistory.repo_snapshot,
             )
             .join(Deployment, Deployment.id == DeploymentHistory.deployment_id)
             .join(Repo, Repo.id == Deployment.repo_id)
@@ -40,9 +41,27 @@ async def get_history(
             .limit(30)
         ).all()
 
-        for hid, pid, old_status, proj_id, private_token in refresh_rows:
+        ci_repo_cache: dict[str, tuple[str, str]] = {}
+        for hid, pid, old_status, proj_id, private_token, snap in refresh_rows:
             proj = (proj_id or os.getenv("GITLAB_PROJECT") or "").strip()
             token = (private_token or "").strip() or (os.getenv("PRIVATE_TOKEN") or "").strip() or None
+            try:
+                if isinstance(snap, dict):
+                    ci_repo_id = str(snap.get("ci_repo_id") or "").strip()
+                    if ci_repo_id:
+                        if ci_repo_id not in ci_repo_cache:
+                            rr = session.get(Repo, uuid.UUID(ci_repo_id))
+                            ci_repo_cache[ci_repo_id] = (
+                                str((rr.project_id or "") if rr else "").strip(),
+                                str((rr.private_token or "") if rr else "").strip(),
+                            )
+                        p2, t2 = ci_repo_cache.get(ci_repo_id) or ("", "")
+                        if p2:
+                            proj = p2
+                        if t2:
+                            token = t2
+            except Exception:
+                pass
             if not pid or not proj or not token:
                 continue
             url = f"{gitlab_url}/api/v4/projects/{requests.utils.quote(proj, safe='')}/pipelines/{pid}"

@@ -15,7 +15,7 @@ deploy:
 
   before_script:
     - sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
-    - apk add --no-cache openssh-client rsync curl jq
+    - apk add --no-cache openssh-client rsync curl jq git ca-certificates
     - eval $(ssh-agent -s)
     - echo "$SERVER_SSH_KEY" | tr -d '\r' | ssh-add -
     - mkdir -p ~/.ssh
@@ -26,6 +26,8 @@ deploy:
     - |
       set -eu
       (set -o pipefail) 2>/dev/null && set -o pipefail
+      : "${NEXUSOPS_SOURCE_REPO_URL:?NEXUSOPS_SOURCE_REPO_URL is required}"
+      : "${NEXUSOPS_SOURCE_REPO_REF:=master}"
       : "${INPUT_DIR:=./}"
       : "${DEST_DIR:?DEST_DIR is required}"
       : "${SERVER_HOST:?SERVER_HOST is required}"
@@ -76,14 +78,42 @@ deploy:
       echo "INPUT_DIR=$INPUT_DIR"
       echo "DEST_DIR=$DEST_DIR"
       echo "SERVER=$SERVER_USER@$SERVER_HOST"
+      echo "SOURCE_REPO=$NEXUSOPS_SOURCE_REPO_URL@$NEXUSOPS_SOURCE_REPO_REF"
       echo "====== [NexusOps] Start Sync ======"
+
+      echo "====== [NexusOps] Fetch Source Repo ======"
+      src_dir="/tmp/nexusops-src"
+      rm -rf "$src_dir"
+      mkdir -p "$src_dir"
+      src_url="$NEXUSOPS_SOURCE_REPO_URL"
+      if echo "$src_url" | grep -Eq '^https?://'; then
+        if [ -n "${NEXUSOPS_GIT_HTTP_TOKEN:-}" ]; then
+          src_url="$(printf "%s" "$src_url" | sed -E "s#^https?://#https://oauth2:${NEXUSOPS_GIT_HTTP_TOKEN}@#")"
+        else
+          : "${CI_JOB_TOKEN:?CI_JOB_TOKEN is required to clone source repo}"
+          src_url="$(printf "%s" "$src_url" | sed -E "s#^https?://#https://gitlab-ci-token:${CI_JOB_TOKEN}@#")"
+        fi
+      fi
+      git clone --depth 1 --branch "$NEXUSOPS_SOURCE_REPO_REF" "$src_url" "$src_dir/repo"
+
+      sub="${INPUT_DIR#./}"
+      if [ -z "${sub:-}" ] || [ "$sub" = "." ]; then
+        local_input="$src_dir/repo"
+      else
+        local_input="$src_dir/repo/$sub"
+      fi
+      if [ ! -d "$local_input" ]; then
+        echo "!! [NexusOps] INPUT_DIR 在来源仓库中不存在: $INPUT_DIR"
+        echo "!! [NexusOps] 实际路径: $local_input"
+        exit 22
+      fi
 
       printf "%s\n" "${CUSTOM_DEPLOY_SCRIPT}" > remote_executor.sh
       chmod 600 remote_executor.sh
 
       ssh "$SERVER_USER@$SERVER_HOST" "mkdir -p '${DEST_DIR%/}'"
 
-      rsync -rz --no-perms --no-owner --no-group "${INPUT_DIR%/}/" "$SERVER_USER@$SERVER_HOST:${DEST_DIR%/}/"
+      rsync -rz --no-perms --no-owner --no-group "${local_input%/}/" "$SERVER_USER@$SERVER_HOST:${DEST_DIR%/}/"
       echo "====== [NexusOps] Sync Done ======"
 
       ssh "$SERVER_USER@$SERVER_HOST" "mkdir -p '${DEST_DIR%/}/.nexusops'"
