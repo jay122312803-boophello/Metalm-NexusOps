@@ -696,8 +696,12 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
               <div className="meta-value meta-mono">{`${server?.ssh_user || 'metalm'} @ ${server?.address || '-'}`}</div>
             </div>
             <div className="meta-item">
+              <div className="meta-label">源目录 (Source Dir)</div>
+              <div className="meta-value meta-mono">{(task?.input_dir || '').trim() ? task.input_dir : './'}</div>
+            </div>
+            <div className="meta-item">
               <div className="meta-label">部署路径 (Deploy Path)</div>
-              <div className="meta-value meta-mono">{server?.deploy_path || '-'}</div>
+              <div className="meta-value meta-mono">{(task?.dest_dir || '').trim() ? task.dest_dir : server?.deploy_path || '-'}</div>
             </div>
             <div className="meta-item">
               <div className="meta-label">挂载配置</div>
