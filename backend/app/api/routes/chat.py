@@ -1,4 +1,5 @@
 import os
+import re
 from typing import Any
 
 import anyio
@@ -9,7 +10,8 @@ from pydantic import BaseModel
 from sqlmodel import select
 
 from ...auth.deps import get_current_user
-from ...chat.service import _chat_completions_url, stream_chat_completions, stream_openai_compatible, stream_agent_run
+from ...chat.service import _chat_completions_url, stream_chat_completions, stream_agent_run, stream_tool_then_echo_text
+from ...chat.tools import query_list_deployments, query_system_overview
 from ...db.models import AIModelConfig
 from ...db.session import run_db
 
@@ -53,7 +55,52 @@ async def chat_completions(body: ChatCompletionsRequest, user=Depends(get_curren
         compact.append({"role": r, "content": str((m or {}).get("content") or "")})
     compact = compact[-max_msgs:]
 
+    last_user = ""
+    for m in list(compact)[::-1]:
+        if (m or {}).get("role") == "user":
+            last_user = str((m or {}).get("content") or "")
+            break
+    last_user_s = re.sub(r"\s+", " ", (last_user or "")).strip()
+
+    want_overview = ("部署" in last_user_s and "成功率" in last_user_s) or ("系统概览" in last_user_s) or ("概览" in last_user_s)
+    want_list_deps = ("部署" in last_user_s) and (("最近" in last_user_s) or ("列出" in last_user_s) or ("哪些" in last_user_s) or ("看看" in last_user_s))
+
     if not body.stream:
+        if want_overview:
+            try:
+                data = query_system_overview(user_id=user.id)
+                if isinstance(data, dict) and data.get("error"):
+                    text = f"无法获取系统概览：{data.get('error')}"
+                else:
+                    text = (
+                        f"**今日部署成功率**：{data.get('success_rate_today')}\n"
+                        f"**今日部署次数**：{data.get('deployments_today')}\n"
+                        f"**服务器总数**：{data.get('total_servers')}"
+                    )
+            except Exception as e:
+                text = f"无法获取系统概览：{str(e)}"
+            return {"choices": [{"message": {"role": "assistant", "content": text}}], "finish_reason": "stop"}
+
+        if want_list_deps:
+            try:
+                rows = query_list_deployments(user_id=user.id, limit=5)
+                if not rows:
+                    text = "未找到最近部署项目"
+                else:
+                    lines = []
+                    for x in rows:
+                        name = str((x or {}).get("name") or "")
+                        server = str((x or {}).get("server") or "")
+                        created_at = str((x or {}).get("created_at") or "")
+                        if created_at:
+                            lines.append(f"- {name} @ {server} ({created_at})")
+                        else:
+                            lines.append(f"- {name} @ {server}")
+                    text = "**最近部署项目**：\n" + "\n".join(lines)
+            except Exception as e:
+                text = f"无法列出最近部署：{str(e)}"
+            return {"choices": [{"message": {"role": "assistant", "content": text}}], "finish_reason": "stop"}
+
         if not active_ready:
             text = ""
             for m in list(compact)[::-1]:
@@ -85,6 +132,50 @@ async def chat_completions(body: ChatCompletionsRequest, user=Depends(get_curren
         return {"choices": [{"message": {"role": "assistant", "content": "模型响应解析失败"}}], "finish_reason": "stop"}
 
     headers = {"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"}
+
+    if want_overview:
+        try:
+            data = query_system_overview(user_id=user.id)
+            if isinstance(data, dict) and data.get("error"):
+                text = f"无法获取系统概览：{data.get('error')}"
+            else:
+                text = (
+                    f"**今日部署成功率**：{data.get('success_rate_today')}\n"
+                    f"**今日部署次数**：{data.get('deployments_today')}\n"
+                    f"**服务器总数**：{data.get('total_servers')}"
+                )
+        except Exception as e:
+            text = f"无法获取系统概览：{str(e)}"
+        return StreamingResponse(
+            stream_tool_then_echo_text(tool_name="get_system_overview", tool_input={}, text=text, delay_ms=delay_ms),
+            media_type="text/event-stream",
+            headers=headers,
+        )
+
+    if want_list_deps:
+        try:
+            rows = query_list_deployments(user_id=user.id, limit=5)
+            if not rows:
+                text = "未找到最近部署项目"
+            else:
+                lines = []
+                for x in rows:
+                    name = str((x or {}).get("name") or "")
+                    server = str((x or {}).get("server") or "")
+                    created_at = str((x or {}).get("created_at") or "")
+                    if created_at:
+                        lines.append(f"- {name} @ {server} ({created_at})")
+                    else:
+                        lines.append(f"- {name} @ {server}")
+                text = "**最近部署项目**：\n" + "\n".join(lines)
+        except Exception as e:
+            text = f"无法列出最近部署：{str(e)}"
+        return StreamingResponse(
+            stream_tool_then_echo_text(tool_name="list_deployments", tool_input={"limit": 5}, text=text, delay_ms=delay_ms),
+            media_type="text/event-stream",
+            headers=headers,
+        )
+
     if active_ready:
         return StreamingResponse(
             stream_agent_run(

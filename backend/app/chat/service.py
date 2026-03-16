@@ -3,7 +3,7 @@ from collections.abc import AsyncIterator
 
 import anyio
 import requests
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
 from .agent import create_agent_graph
 
@@ -107,6 +107,15 @@ async def stream_chat_completions(messages: list[dict], delay_ms: int = 60) -> A
         yield chunk
 
 
+async def stream_tool_then_echo_text(
+    *, tool_name: str, tool_input: dict, text: str, delay_ms: int = 30
+) -> AsyncIterator[str]:
+    yield _sse_data({"choices": [], "type": "tool_event", "status": "start", "tool": tool_name, "input": tool_input})
+    yield _sse_data({"choices": [], "type": "tool_event", "status": "end", "tool": tool_name, "output": ""})
+    async for chunk in stream_echo_text(text, delay_ms=delay_ms):
+        yield chunk
+
+
 async def stream_agent_run(
     *,
     base_url: str,
@@ -118,7 +127,6 @@ async def stream_agent_run(
     temperature: float = 0.2,
     timeout_s: int = 180,
 ) -> AsyncIterator[str]:
-    # Convert messages
     langchain_messages = []
     for m in messages:
         role = m.get("role")
@@ -127,14 +135,10 @@ async def stream_agent_run(
             langchain_messages.append(HumanMessage(content=content))
         elif role == "assistant":
             langchain_messages.append(AIMessage(content=content))
-        elif role == "system":
-            # We handle system prompt separately or as the first message
-            pass
-            
-    # Initialize graph
+
     app = create_agent_graph(api_key=api_key, base_url=base_url, model_name=model, system_prompt=system_prompt, temperature=temperature)
     
-    inputs = {"messages": langchain_messages, "user_id": user_id, "env": "dev"}
+    inputs = {"messages": langchain_messages, "user_context": {"user_id": user_id, "env": "DEV", "token": ""}, "artifacts": []}
     config = {"configurable": {"user_id": user_id}}
 
     last_keepalive = anyio.current_time()
@@ -149,12 +153,9 @@ async def stream_agent_run(
                     yield _sse_data({"choices": [{"delta": {"content": content}}]})
             
             elif kind == "on_tool_start":
-                # Tool started, notify frontend
                 tool_data = event.get("data", {})
                 tool_name = event.get("name", "unknown_tool")
                 tool_input = tool_data.get("input")
-                # We send a special event or just data with a specific structure
-                # Here we use a custom JSON structure that frontend can parse
                 yield _sse_data({
                     "choices": [],
                     "type": "tool_event",
@@ -164,10 +165,8 @@ async def stream_agent_run(
                 })
 
             elif kind == "on_tool_end":
-                # Tool finished
                 tool_name = event.get("name", "unknown_tool")
                 tool_output = event.get("data", {}).get("output")
-                # Truncate output for frontend display if needed, but usually frontend just wants to know it's done
                 yield _sse_data({
                     "choices": [],
                     "type": "tool_event",
@@ -176,16 +175,15 @@ async def stream_agent_run(
                     "output": str(tool_output)[:200] + "..." if len(str(tool_output)) > 200 else str(tool_output)
                 })
             
-            # Send keepalives
             now = anyio.current_time()
             if now - last_keepalive >= 10.0:
                 yield ":keepalive\n\n"
                 last_keepalive = now
                 
     except Exception as e:
-         yield _sse_data({"choices": [{"delta": {"content": f"Error: {str(e)}"}}], "finish_reason": "stop"})
-         yield "data: [DONE]\n\n"
-         return
+        yield _sse_data({"choices": [{"delta": {"content": f"Error: {str(e)}"}}], "finish_reason": "stop"})
+        yield "data: [DONE]\n\n"
+        return
 
     yield _sse_data({"choices": [{"delta": {"content": ""}}], "finish_reason": "stop"})
     yield "data: [DONE]\n\n"
