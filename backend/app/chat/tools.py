@@ -335,8 +335,8 @@ def get_deployment_status(
 
 @tool
 def list_deployments(
+    config: Annotated[dict, InjectedToolArg],
     limit: Annotated[int, "最多返回多少个最近部署项目（默认 5）。"] = 5,
-    config: Annotated[dict, InjectedToolArg] = None
 ) -> str:
     """
     列出当前账号最近的部署项目，用于在用户不知道项目名时给出候选列表。
@@ -382,8 +382,8 @@ def get_system_overview(
 
 @tool
 def list_servers(
+    config: Annotated[dict, InjectedToolArg],
     limit: Annotated[int, "最多返回多少台服务器（默认 20）。"] = 20,
-    config: Annotated[dict, InjectedToolArg] = None,
 ) -> str:
     """
     列出当前账号管理的服务器清单（名称、环境、地址等基础信息）。
@@ -398,10 +398,10 @@ def list_servers(
 
 @tool
 def get_deploy_stats(
+    config: Annotated[dict, InjectedToolArg],
     start_date: Annotated[str, "开始日期（YYYY-MM-DD）。为空则默认今天。"] = "",
     end_date: Annotated[str, "结束日期（YYYY-MM-DD）。为空则默认等于开始日期。"] = "",
     environment: Annotated[str, "环境过滤：DEV/TEST/PROD/OTHER/ALL（默认 ALL）。"] = "ALL",
-    config: Annotated[dict, InjectedToolArg] = None,
 ) -> str:
     """
     查询指定日期范围的部署统计（与概览页口径一致：按系统时区折算到日期）。
@@ -417,8 +417,8 @@ def get_deploy_stats(
 
 @tool
 def list_deployment_task_configs(
+    config: Annotated[dict, InjectedToolArg],
     deployment_name: Annotated[str, "部署名称（必填）。"] = "",
-    config: Annotated[dict, InjectedToolArg] = None,
 ) -> str:
     """
     查询某个部署当前的配置文件清单（TaskConfig 列表）。
@@ -433,10 +433,10 @@ def list_deployment_task_configs(
 
 @tool
 def list_audit_deployments(
+    config: Annotated[dict, InjectedToolArg],
     days: Annotated[int, "查询最近 N 天的部署审计记录（默认 7）。"] = 7,
     status: Annotated[str, "状态过滤：success/failed/running/pending/canceled/all（默认 all）。"] = "all",
     limit: Annotated[int, "最多返回多少条（默认 50）。"] = 50,
-    config: Annotated[dict, InjectedToolArg] = None,
 ) -> str:
     """
     查询审计日志（部署历史）列表。
@@ -451,8 +451,8 @@ def list_audit_deployments(
 
 @tool
 def get_audit_deployment_detail(
+    config: Annotated[dict, InjectedToolArg],
     history_id: Annotated[str, "部署历史 ID（UUID）。"] = "",
-    config: Annotated[dict, InjectedToolArg] = None,
 ) -> str:
     """
     查询某条审计记录详情（部署/服务器/仓库信息、状态、pipeline，以及保存的日志尾部）。

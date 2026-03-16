@@ -11,7 +11,7 @@ from sqlmodel import select
 
 from ...auth.deps import get_current_user
 from ...chat.service import _chat_completions_url, stream_chat_completions, stream_agent_run, stream_tool_then_echo_text
-from ...chat.tools import query_list_deployments, query_system_overview
+from ...chat.tools import query_history_detail, query_list_deployments, query_list_history, query_system_overview
 from ...db.models import AIModelConfig
 from ...db.session import run_db
 
@@ -71,6 +71,8 @@ async def chat_completions(body: ChatCompletionsRequest, user=Depends(get_curren
     want_cluster = ("集群" in last_user_s and "健康" in last_user_s) or ("健康度" in last_user_s)
     want_containers = ("容器" in last_user_s) and (("活跃" in last_user_s) or ("总数" in last_user_s) or ("异常" in last_user_s) or ("运行" in last_user_s))
     want_waterline = ("资源" in last_user_s and ("水位" in last_user_s or "使用率" in last_user_s or "负载" in last_user_s)) or ("Top" in last_user_s and "资源" in last_user_s)
+    want_audit = ("审计" in last_user_s) or ("部署历史" in last_user_s) or ("历史" in last_user_s and "部署" in last_user_s)
+    want_audit_one = want_audit and (("第一" in last_user_s) or ("一条" in last_user_s) or ("一条信息" in last_user_s) or ("给出" in last_user_s))
 
     if not body.stream:
         if is_greeting or is_help:
@@ -83,6 +85,33 @@ async def chat_completions(body: ChatCompletionsRequest, user=Depends(get_curren
                 "- 最近 7 天失败的部署有哪些？\n"
                 "- 部署 xxx 的配置文件有哪些？"
             )
+            return {"choices": [{"message": {"role": "assistant", "content": text}}], "finish_reason": "stop"}
+
+        if want_audit_one:
+            try:
+                lst = query_list_history(user_id=user.id, days=7, status="all", limit=1)
+                items = lst.get("items") if isinstance(lst, dict) else None
+                if not items:
+                    text = "未查询到审计记录"
+                else:
+                    hid = str((items[0] or {}).get("history_id") or "")
+                    det = query_history_detail(user_id=user.id, history_id=hid)
+                    if not isinstance(det, dict) or not det.get("ok"):
+                        text = "无法获取审计记录详情"
+                    else:
+                        text = (
+                            f"**审计记录（最新 1 条）**\n"
+                            f"- history_id：{det.get('history_id')}\n"
+                            f"- 部署：{det.get('deployment_name')}\n"
+                            f"- 状态：{det.get('status')}\n"
+                            f"- 时间：{det.get('created_at')}\n"
+                            f"- 服务器：{det.get('server_name')}\n"
+                            f"- 仓库：{det.get('repo_name')}\n"
+                            f"- pipeline_id：{det.get('pipeline_id')}\n"
+                            f"- web_url：{det.get('web_url')}"
+                        )
+            except Exception as e:
+                text = f"无法获取审计记录：{str(e)}"
             return {"choices": [{"message": {"role": "assistant", "content": text}}], "finish_reason": "stop"}
 
         if want_cluster or want_containers or want_waterline:
@@ -176,6 +205,37 @@ async def chat_completions(body: ChatCompletionsRequest, user=Depends(get_curren
         )
         return StreamingResponse(
             stream_tool_then_echo_text(tool_name="help", tool_input={}, text=text, delay_ms=delay_ms),
+            media_type="text/event-stream",
+            headers=headers,
+        )
+
+    if want_audit_one:
+        try:
+            lst = query_list_history(user_id=user.id, days=7, status="all", limit=1)
+            items = lst.get("items") if isinstance(lst, dict) else None
+            if not items:
+                text = "未查询到审计记录"
+            else:
+                hid = str((items[0] or {}).get("history_id") or "")
+                det = query_history_detail(user_id=user.id, history_id=hid)
+                if not isinstance(det, dict) or not det.get("ok"):
+                    text = "无法获取审计记录详情"
+                else:
+                    text = (
+                        f"**审计记录（最新 1 条）**\n"
+                        f"- history_id：{det.get('history_id')}\n"
+                        f"- 部署：{det.get('deployment_name')}\n"
+                        f"- 状态：{det.get('status')}\n"
+                        f"- 时间：{det.get('created_at')}\n"
+                        f"- 服务器：{det.get('server_name')}\n"
+                        f"- 仓库：{det.get('repo_name')}\n"
+                        f"- pipeline_id：{det.get('pipeline_id')}\n"
+                        f"- web_url：{det.get('web_url')}"
+                    )
+        except Exception as e:
+            text = f"无法获取审计记录：{str(e)}"
+        return StreamingResponse(
+            stream_tool_then_echo_text(tool_name="list_audit_deployments", tool_input={"days": 7, "limit": 1}, text=text, delay_ms=delay_ms),
             media_type="text/event-stream",
             headers=headers,
         )
