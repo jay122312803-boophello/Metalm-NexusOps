@@ -1,6 +1,7 @@
 import Icon from '../components/Icon.jsx'
 import ToastHost from '../components/ToastHost.jsx'
 import Can from '../components/Can.jsx'
+import CopilotWidget from '../components/CopilotWidget.jsx'
 import { useAuth } from '../contexts/AuthContext.jsx'
 
 export default function BaseLayout({ page, setPage, breadcrumb, children }) {
@@ -11,6 +12,7 @@ export default function BaseLayout({ page, setPage, breadcrumb, children }) {
   return (
     <div className="app-layout">
       <ToastHost />
+      <CopilotWidget />
       <div className="sidebar">
         <div className="brand">
           <Icon name="cube" />
