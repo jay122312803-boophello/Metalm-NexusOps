@@ -32,7 +32,7 @@ async def list_task_configs(dep_id: str, user=Depends(require_permission("deploy
     def _work(session):
         did = uuid.UUID(dep_id)
         d = session.get(Deployment, did)
-        if not d:
+        if not d or d.created_by_user_id != user.id:
             raise HTTPException(404, "Deployment not found")
         rows = session.exec(
             select(TaskConfig).where(TaskConfig.deployment_id == did).order_by(TaskConfig.rel_path.asc())
@@ -56,7 +56,7 @@ async def create_task_config(dep_id: str, body: dict, user=Depends(require_permi
     def _work(session):
         did = uuid.UUID(dep_id)
         d = session.get(Deployment, did)
-        if not d:
+        if not d or d.created_by_user_id != user.id:
             raise HTTPException(404, "Deployment not found")
 
         exists = session.exec(
@@ -79,7 +79,7 @@ async def get_task_config(dep_id: str, config_id: str, user=Depends(require_perm
     def _work(session):
         did = uuid.UUID(dep_id)
         d = session.get(Deployment, did)
-        if not d:
+        if not d or d.created_by_user_id != user.id:
             raise HTTPException(404, "Deployment not found")
         cid = uuid.UUID(config_id)
         c = session.get(TaskConfig, cid)
@@ -104,7 +104,7 @@ async def update_task_config(dep_id: str, config_id: str, body: dict, user=Depen
     def _work(session):
         did = uuid.UUID(dep_id)
         d = session.get(Deployment, did)
-        if not d:
+        if not d or d.created_by_user_id != user.id:
             raise HTTPException(404, "Deployment not found")
         cid = uuid.UUID(config_id)
         c = session.get(TaskConfig, cid)
@@ -127,7 +127,7 @@ async def rename_task_config(dep_id: str, config_id: str, body: dict, user=Depen
     def _work(session):
         did = uuid.UUID(dep_id)
         d = session.get(Deployment, did)
-        if not d:
+        if not d or d.created_by_user_id != user.id:
             raise HTTPException(404, "Deployment not found")
         cid = uuid.UUID(config_id)
         c = session.get(TaskConfig, cid)
@@ -157,7 +157,7 @@ async def delete_task_config(dep_id: str, config_id: str, user=Depends(require_p
     def _work(session):
         did = uuid.UUID(dep_id)
         d = session.get(Deployment, did)
-        if not d:
+        if not d or d.created_by_user_id != user.id:
             raise HTTPException(404, "Deployment not found")
         cid = uuid.UUID(config_id)
         c = session.get(TaskConfig, cid)
@@ -178,7 +178,7 @@ async def clear_task_configs(dep_id: str, user=Depends(require_permission("deplo
     def _work(session):
         did = uuid.UUID(dep_id)
         d = session.get(Deployment, did)
-        if not d:
+        if not d or d.created_by_user_id != user.id:
             raise HTTPException(404, "Deployment not found")
         rows = session.exec(select(TaskConfig).where(TaskConfig.deployment_id == did)).all()
         for c in rows:
@@ -202,7 +202,7 @@ async def download_current_configs_zip(dep_id: str, user=Depends(require_permiss
     def _work(session):
         did = uuid.UUID(dep_id)
         d = session.get(Deployment, did)
-        if not d:
+        if not d or d.created_by_user_id != user.id:
             raise HTTPException(404, "Deployment not found")
         rows = session.exec(select(TaskConfig.rel_path, TaskConfig.content).where(TaskConfig.deployment_id == did)).all()
         files = [(rp, ct or "") for rp, ct in rows]
@@ -226,7 +226,7 @@ async def list_snapshot_configs(history_id: str, user=Depends(require_permission
         if not h:
             raise HTTPException(404, "History not found")
         d = session.get(Deployment, h.deployment_id)
-        if not d:
+        if not d or d.created_by_user_id != user.id:
             raise HTTPException(404, "History not found")
         snap = session.exec(select(TaskConfigSnapshot).where(TaskConfigSnapshot.history_id == hid)).first()
         if not snap:
@@ -256,7 +256,7 @@ async def get_snapshot_config(history_id: str, file_id: str, user=Depends(requir
         if not h:
             raise HTTPException(404, "History not found")
         d = session.get(Deployment, h.deployment_id)
-        if not d:
+        if not d or d.created_by_user_id != user.id:
             raise HTTPException(404, "History not found")
         snap = session.exec(select(TaskConfigSnapshot).where(TaskConfigSnapshot.history_id == hid)).first()
         if not snap:
@@ -277,7 +277,7 @@ async def download_snapshot_configs_zip(history_id: str, user=Depends(require_pe
         if not h:
             raise HTTPException(404, "History not found")
         d = session.get(Deployment, h.deployment_id)
-        if not d:
+        if not d or d.created_by_user_id != user.id:
             raise HTTPException(404, "History not found")
         snap = session.exec(select(TaskConfigSnapshot).where(TaskConfigSnapshot.history_id == hid)).first()
         if not snap:
