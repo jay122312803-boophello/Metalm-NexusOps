@@ -5,6 +5,7 @@ import Detail from './pages/Detail.jsx'
 import History from './pages/History.jsx'
 import Overview from './pages/Overview.jsx'
 import Settings from './pages/Settings.jsx'
+import AiModels from './pages/AiModels.jsx'
 import Login from './pages/Login.jsx'
 import NoAccess from './pages/NoAccess.jsx'
 import { useAuth } from './contexts/AuthContext.jsx'
@@ -52,6 +53,7 @@ export default function App() {
         page: 'history',
         historyPreset: params.get('date') || params.get('status') ? { date: params.get('date'), status: params.get('status') } : null
       }
+    if (p === '/aiManage/modelConfig') return { page: 'ai_models' }
     if (p === '/systemManage' || p === '/systemManage/serverManage') return { page: 'settings', settingsTab: 'servers' }
     if (p === '/systemManage/repoManage') return { page: 'settings', settingsTab: 'repos' }
     if (p === '/systemManage/accountManage') return { page: 'settings', settingsTab: 'rbac' }
@@ -92,6 +94,7 @@ export default function App() {
     const p = st?.page || 'overview'
     if (p === 'overview') return { path: '/cockpit/overview', search: '' }
     if (p === 'dashboard') return { path: '/deployManage/instanceManage', search: '' }
+    if (p === 'ai_models') return { path: '/aiManage/modelConfig', search: '' }
     if (p === 'settings') {
       const tab = st?.settingsTab ? String(st.settingsTab) : 'servers'
       if (tab === 'repos') return { path: '/systemManage/repoManage', search: '' }
@@ -196,6 +199,7 @@ export default function App() {
   }, [page, detailId, detailHistoryId, returnPage, settingsTab])
 
   const breadcrumb = useMemo(() => {
+    if (page === 'ai_models') return 'AI 助手配置'
     if (page === 'settings') return '系统设置'
     if (page === 'history') return '审计日志'
     if (page === 'overview') return '概览大屏'
@@ -232,7 +236,9 @@ export default function App() {
   }
 
   const content =
-    page === 'settings' ? (
+    page === 'ai_models' ? (
+      auth.hasPerm('ai:manage') ? <AiModels /> : <NoAccess detail="无权访问 AI 助手配置" />
+    ) : page === 'settings' ? (
       auth.hasPerm('settings:access') ? (
         <Settings initialTab={settingsTab} />
       ) : (

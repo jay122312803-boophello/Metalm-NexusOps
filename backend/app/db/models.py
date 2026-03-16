@@ -160,3 +160,21 @@ class RolePermission(SQLModel, table=True):
     role_id: uuid.UUID = Field(primary_key=True, foreign_key="roles.id")
     permission_id: uuid.UUID = Field(primary_key=True, foreign_key="permissions.id")
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class AIModelConfig(SQLModel, table=True):
+    __tablename__ = "ai_model_configs"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    name: str
+    model: str
+    base_url: str
+    api_key: str = Field(default="")
+    system_prompt: str = Field(default="")
+    temperature: float = Field(default=0.2)
+    max_history: int = Field(default=10)
+    is_active: bool = Field(default=False)
+    is_deleted: bool = Field(default=False)
+    created_by_user_id: Optional[uuid.UUID] = Field(default=None, foreign_key="users.id")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)

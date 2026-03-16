@@ -444,6 +444,7 @@ export default function Settings({ initialTab }) {
       { key: 'overview', title: '概览大屏', match: (c) => c === 'overview:read' },
       { key: 'deploy', title: '部署与配置', match: (c) => c === 'deploy:manage' },
       { key: 'audit', title: '审计日志', match: (c) => c === 'audit:read' || c === 'audit:manage' },
+      { key: 'ai', title: 'AI 助手', match: (c) => c === 'ai:manage' },
       { key: 'settings', title: '系统设置', match: (c) => c === 'settings:access' },
       { key: 'infra', title: '基础资源', match: (c) => c === 'infra:manage' },
       { key: 'monitor', title: '运行监控', match: (c) => c === 'monitor:read' },

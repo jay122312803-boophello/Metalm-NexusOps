@@ -161,6 +161,7 @@ async def init_db() -> None:
             ("部署大盘", "deploy:manage", "page"),
             ("审计日志", "audit:read", "page"),
             ("系统设置", "settings:access", "page"),
+            ("AI 助手配置", "ai:manage", "page"),
             ("基础资源管理", "infra:manage", "api"),
             ("审计管理", "audit:manage", "api"),
             ("运行监控", "monitor:read", "api"),

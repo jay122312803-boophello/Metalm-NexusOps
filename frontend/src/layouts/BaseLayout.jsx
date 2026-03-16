@@ -40,6 +40,12 @@ export default function BaseLayout({ page, setPage, breadcrumb, children }) {
               审计日志
             </div>
           </Can>
+          <Can perm="ai:manage">
+            <div className={`menu-item ${page === 'ai_models' ? 'active' : ''}`} onClick={() => setPage('ai_models')}>
+              <Icon name="robot" />
+              AI 助手配置
+            </div>
+          </Can>
           <Can perm="settings:access">
             <div className={`menu-item ${page === 'settings' ? 'active' : ''}`} onClick={() => setPage('settings')}>
               <Icon name="gears" />

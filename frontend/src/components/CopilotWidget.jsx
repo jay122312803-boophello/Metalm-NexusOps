@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import Icon from './Icon.jsx'
 import { streamChatCompletions } from '../services/chat.js'
+import { toast } from '../services/toast.js'
 
 const makeId = () => `${Date.now()}_${Math.random().toString(16).slice(2)}`
 const posKey = 'nexusops_copilot_fab_pos'
@@ -289,6 +290,21 @@ export default function CopilotWidget() {
     }
   }
 
+  const canClear = streaming || (items || []).length > 0 || (draft || '').trim() || error
+
+  const clearContext = () => {
+    try {
+      abortRef.current?.abort?.()
+    } catch {
+    }
+    abortRef.current = null
+    setStreaming(false)
+    setItems([])
+    setDraft('')
+    setError('')
+    toast.success('已清空上下文')
+  }
+
   return (
     <>
       {open ? null : (
@@ -325,9 +341,21 @@ export default function CopilotWidget() {
                 <span className="copilot-dot" />
                 NexusOps Copilot
               </div>
-              <button className="copilot-close" type="button" title="关闭" onPointerDown={(e) => e.stopPropagation()} onClick={close}>
-                <Icon name="xmark" />
-              </button>
+              <div className="copilot-actions">
+                <button
+                  className="icon-btn"
+                  type="button"
+                  title="清空上下文"
+                  disabled={!canClear}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={clearContext}
+                >
+                  <Icon name="broom" />
+                </button>
+                <button className="copilot-close" type="button" title="关闭" onPointerDown={(e) => e.stopPropagation()} onClick={close}>
+                  <Icon name="xmark" />
+                </button>
+              </div>
             </div>
 
             <div className="copilot-messages" ref={listRef}>
