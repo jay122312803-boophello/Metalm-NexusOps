@@ -61,11 +61,42 @@ async def chat_completions(body: ChatCompletionsRequest, user=Depends(get_curren
             last_user = str((m or {}).get("content") or "")
             break
     last_user_s = re.sub(r"\s+", " ", (last_user or "")).strip()
+    last_user_l = last_user_s.lower()
+
+    is_greeting = last_user_s in {"你好", "您好", "嗨", "在吗", "hi", "hello", "hey"} or last_user_l in {"hi", "hello", "hey"}
+    is_help = any(k in last_user_s for k in ("你能做什么", "你可以做什么", "帮助", "help", "功能", "怎么用"))
 
     want_overview = ("部署" in last_user_s and "成功率" in last_user_s) or ("系统概览" in last_user_s) or ("概览" in last_user_s)
     want_list_deps = ("部署" in last_user_s) and (("最近" in last_user_s) or ("列出" in last_user_s) or ("哪些" in last_user_s) or ("看看" in last_user_s))
+    want_cluster = ("集群" in last_user_s and "健康" in last_user_s) or ("健康度" in last_user_s)
+    want_containers = ("容器" in last_user_s) and (("活跃" in last_user_s) or ("总数" in last_user_s) or ("异常" in last_user_s) or ("运行" in last_user_s))
+    want_waterline = ("资源" in last_user_s and ("水位" in last_user_s or "使用率" in last_user_s or "负载" in last_user_s)) or ("Top" in last_user_s and "资源" in last_user_s)
 
     if not body.stream:
+        if is_greeting or is_help:
+            text = (
+                "你好，我是 NexusOps Copilot。\n"
+                "我可以回答：今日/时间范围部署次数与成功率、最近部署项目、某项目最新部署状态、部署配置清单、审计（部署历史）列表与详情。\n"
+                "示例：\n"
+                "- 今天部署了多少次？成功率多少？\n"
+                "- 最近部署过哪些？\n"
+                "- 最近 7 天失败的部署有哪些？\n"
+                "- 部署 xxx 的配置文件有哪些？"
+            )
+            return {"choices": [{"message": {"role": "assistant", "content": text}}], "finish_reason": "stop"}
+
+        if want_cluster or want_containers or want_waterline:
+            parts = []
+            if want_cluster:
+                parts.append("集群健康度请在 **概览页 → 集群健康度** 卡片查看（依赖资源采集巡检）。")
+                parts.append("也可在 **系统设置/监控** 中查看各节点采集状态与告警原因。")
+            if want_containers:
+                parts.append("活跃容器统计请在 **部署大盘 → 监控** 查看（选择具体部署后会展示容器列表与异常容器）。")
+            if want_waterline:
+                parts.append("全局资源水位（CPU/内存/磁盘 Top）请在 **概览页 → 资源水位** 区域或 **系统设置/监控** 查看。")
+            text = "\n".join(parts) if parts else "请在平台对应模块查看相关数据。"
+            return {"choices": [{"message": {"role": "assistant", "content": text}}], "finish_reason": "stop"}
+
         if want_overview:
             try:
                 data = query_system_overview(user_id=user.id)
@@ -132,6 +163,38 @@ async def chat_completions(body: ChatCompletionsRequest, user=Depends(get_curren
         return {"choices": [{"message": {"role": "assistant", "content": "模型响应解析失败"}}], "finish_reason": "stop"}
 
     headers = {"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"}
+
+    if is_greeting or is_help:
+        text = (
+            "你好，我是 NexusOps Copilot。\n"
+            "我可以回答：今日/时间范围部署次数与成功率、最近部署项目、某项目最新部署状态、部署配置清单、审计（部署历史）列表与详情。\n"
+            "示例：\n"
+            "- 今天部署了多少次？成功率多少？\n"
+            "- 最近部署过哪些？\n"
+            "- 最近 7 天失败的部署有哪些？\n"
+            "- 部署 xxx 的配置文件有哪些？"
+        )
+        return StreamingResponse(
+            stream_tool_then_echo_text(tool_name="help", tool_input={}, text=text, delay_ms=delay_ms),
+            media_type="text/event-stream",
+            headers=headers,
+        )
+
+    if want_cluster or want_containers or want_waterline:
+        parts = []
+        if want_cluster:
+            parts.append("集群健康度请在 **概览页 → 集群健康度** 卡片查看（依赖资源采集巡检）。")
+            parts.append("也可在 **系统设置/监控** 中查看各节点采集状态与告警原因。")
+        if want_containers:
+            parts.append("活跃容器统计请在 **部署大盘 → 监控** 查看（选择具体部署后会展示容器列表与异常容器）。")
+        if want_waterline:
+            parts.append("全局资源水位（CPU/内存/磁盘 Top）请在 **概览页 → 资源水位** 区域或 **系统设置/监控** 查看。")
+        text = "\n".join(parts) if parts else "请在平台对应模块查看相关数据。"
+        return StreamingResponse(
+            stream_tool_then_echo_text(tool_name="guidance", tool_input={}, text=text, delay_ms=delay_ms),
+            media_type="text/event-stream",
+            headers=headers,
+        )
 
     if want_overview:
         try:
