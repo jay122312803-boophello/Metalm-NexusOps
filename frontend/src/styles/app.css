@@ -926,6 +926,8 @@ body {
 
 .copilot-fab {
   position: fixed;
+  right: 22px;
+  bottom: 184px;
   width: 54px;
   height: 54px;
   border-radius: 999px;
@@ -936,13 +938,11 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  cursor: grab;
+  cursor: pointer;
   z-index: 1200;
   backdrop-filter: blur(10px);
   transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
-  touch-action: none;
 }
-.copilot-fab.dragging { cursor: grabbing; }
 .copilot-fab:hover { transform: translateY(-1px); box-shadow: 0 18px 40px rgba(15,23,42,0.18); background: rgba(255,255,255,0.94); }
 .copilot-fab i { font-size: 20px; color: var(--primary-dark); }
 

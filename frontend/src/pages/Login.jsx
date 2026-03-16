@@ -133,7 +133,19 @@ export default function Login() {
     setSubmitting(true)
     try {
       const res = await auth.login(username, password)
-      if (!res?.ok) setError(res?.detail || '登录失败')
+      if (!res?.ok) {
+        setError(res?.detail || '登录失败')
+        return
+      }
+      try {
+        localStorage.setItem('nexusops_nav', JSON.stringify({ page: 'overview' }))
+      } catch {
+      }
+      try {
+        window.history.replaceState({}, '', '/cockpit/overview')
+        window.dispatchEvent(new PopStateEvent('popstate'))
+      } catch {
+      }
     } finally {
       setSubmitting(false)
     }

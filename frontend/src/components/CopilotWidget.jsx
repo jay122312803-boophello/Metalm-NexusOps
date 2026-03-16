@@ -4,7 +4,6 @@ import { streamChatCompletions } from '../services/chat.js'
 import { toast } from '../services/toast.js'
 
 const makeId = () => `${Date.now()}_${Math.random().toString(16).slice(2)}`
-const posKey = 'nexusops_copilot_fab_pos'
 const fabSize = 54
 const fabPad = 22
 const clamp = (v, min, max) => Math.min(max, Math.max(min, v))
@@ -16,62 +15,18 @@ export default function CopilotWidget() {
   const [draft, setDraft] = useState('')
   const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState('')
-  const [fabPos, setFabPos] = useState(null)
-  const [dragging, setDragging] = useState(false)
   const [panelPos, setPanelPos] = useState(null)
   const [panelDragging, setPanelDragging] = useState(false)
   const abortRef = useRef(null)
   const listRef = useRef(null)
   const panelRef = useRef(null)
-  const dragRef = useRef({ active: false, moved: false, id: null, sx: 0, sy: 0, ox: 0, oy: 0 })
-  const suppressClickRef = useRef(false)
+  const fabRef = useRef(null)
   const anchorRef = useRef(null)
   const panelDragRef = useRef({ active: false, id: null, sx: 0, sy: 0, ox: 0, oy: 0, w: 0, h: 0 })
 
   const messages = useMemo(() => {
     return (items || []).map((m) => ({ role: m.role, content: m.content }))
   }, [items])
-
-  useEffect(() => {
-    const getDefault = () => {
-      const w = typeof window !== 'undefined' ? window.innerWidth || 0 : 0
-      const h = typeof window !== 'undefined' ? window.innerHeight || 0 : 0
-      const x = Math.max(0, w - fabPad - fabSize)
-      const y = Math.max(0, h - fabPad - fabSize)
-      return { x, y }
-    }
-
-    const readStored = () => {
-      try {
-        const raw = localStorage.getItem(posKey) || ''
-        if (!raw) return null
-        const v = JSON.parse(raw)
-        const x = Number(v?.x)
-        const y = Number(v?.y)
-        if (!Number.isFinite(x) || !Number.isFinite(y)) return null
-        return { x, y }
-      } catch {
-        return null
-      }
-    }
-
-    const clampToViewport = (p) => {
-      const w = window.innerWidth || 0
-      const h = window.innerHeight || 0
-      const maxX = Math.max(0, w - fabSize)
-      const maxY = Math.max(0, h - fabSize)
-      return { x: clamp(p.x, 0, maxX), y: clamp(p.y, 0, maxY) }
-    }
-
-    const init = clampToViewport(readStored() || getDefault())
-    setFabPos(init)
-
-    const onResize = () => {
-      setFabPos((prev) => (prev ? clampToViewport(prev) : clampToViewport(getDefault())))
-    }
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -87,7 +42,15 @@ export default function CopilotWidget() {
   }
 
   const openPanel = () => {
-    anchorRef.current = fabPos
+    const el = fabRef.current
+    if (el && typeof el.getBoundingClientRect === 'function') {
+      const rect = el.getBoundingClientRect()
+      anchorRef.current = { x: rect.left, y: rect.top }
+    } else {
+      const w = typeof window !== 'undefined' ? window.innerWidth || 0 : 0
+      const h = typeof window !== 'undefined' ? window.innerHeight || 0 : 0
+      anchorRef.current = { x: Math.max(0, w - fabPad - fabSize), y: Math.max(0, h - fabPad - fabSize) }
+    }
     setPanelPos(null)
     setOpen(true)
   }
@@ -95,9 +58,13 @@ export default function CopilotWidget() {
   useLayoutEffect(() => {
     if (!open) return
     if (panelPos) return
-    const anchor = anchorRef.current || fabPos
+    const anchor = anchorRef.current
     const el = panelRef.current
-    if (!el || !anchor) return
+    if (!el) return
+
+    const w0 = window.innerWidth || 0
+    const h0 = window.innerHeight || 0
+    const a = anchor || { x: Math.max(0, w0 - fabPad - fabSize), y: Math.max(0, h0 - fabPad - fabSize) }
 
     const rect = el.getBoundingClientRect()
     const w = window.innerWidth || 0
@@ -111,7 +78,7 @@ export default function CopilotWidget() {
     const yBelow = anchor.y + fabSize + 12
     const y = yAbove >= panelPad ? clamp(yAbove, panelPad, maxY) : clamp(yBelow, panelPad, maxY)
     setPanelPos({ x, y })
-  }, [open, panelPos, fabPos])
+  }, [open, panelPos])
 
   const send = async () => {
     const text = (draft || '').trim()
@@ -171,69 +138,6 @@ export default function CopilotWidget() {
       abortRef.current = null
       setStreaming(false)
     }
-  }
-
-  const persistFabPos = (p) => {
-    try {
-      localStorage.setItem(posKey, JSON.stringify(p))
-    } catch {
-    }
-  }
-
-  const onFabPointerDown = (e) => {
-    if (open) return
-    if (e.button !== undefined && e.button !== 0) return
-    if (!fabPos) return
-    const el = e.currentTarget
-    try {
-      el.setPointerCapture(e.pointerId)
-    } catch {
-    }
-    dragRef.current = { active: true, moved: false, id: e.pointerId, sx: e.clientX, sy: e.clientY, ox: fabPos.x, oy: fabPos.y }
-    suppressClickRef.current = false
-    setDragging(true)
-    e.preventDefault()
-  }
-
-  const onFabPointerMove = (e) => {
-    const d = dragRef.current
-    if (!d.active || d.id !== e.pointerId) return
-    const dx = e.clientX - d.sx
-    const dy = e.clientY - d.sy
-    if (!d.moved && Math.abs(dx) + Math.abs(dy) > 3) d.moved = true
-
-    const w = window.innerWidth || 0
-    const h = window.innerHeight || 0
-    const maxX = Math.max(0, w - fabSize)
-    const maxY = Math.max(0, h - fabSize)
-    const next = { x: clamp(d.ox + dx, 0, maxX), y: clamp(d.oy + dy, 0, maxY) }
-    setFabPos(next)
-    e.preventDefault()
-  }
-
-  const onFabPointerUp = (e) => {
-    const d = dragRef.current
-    if (!d.active || d.id !== e.pointerId) return
-    const el = e.currentTarget
-    try {
-      el.releasePointerCapture(e.pointerId)
-    } catch {
-    }
-    dragRef.current = { active: false, moved: false, id: null, sx: 0, sy: 0, ox: 0, oy: 0 }
-    setDragging(false)
-    if (d.moved) {
-      suppressClickRef.current = true
-      if (fabPos) persistFabPos(fabPos)
-    }
-    e.preventDefault()
-  }
-
-  const onFabClick = () => {
-    if (suppressClickRef.current) {
-      suppressClickRef.current = false
-      return
-    }
-    openPanel()
   }
 
   const onPanelPointerDown = (e) => {
@@ -309,14 +213,11 @@ export default function CopilotWidget() {
     <>
       {open ? null : (
         <button
-          className={`copilot-fab ${dragging ? 'dragging' : ''}`}
+          className="copilot-fab"
           type="button"
           title="智能助手"
-          style={fabPos ? { left: fabPos.x, top: fabPos.y } : undefined}
-          onPointerDown={onFabPointerDown}
-          onPointerMove={onFabPointerMove}
-          onPointerUp={onFabPointerUp}
-          onClick={onFabClick}
+          ref={fabRef}
+          onClick={openPanel}
         >
           <Icon name="robot" />
         </button>
