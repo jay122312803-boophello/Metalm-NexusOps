@@ -16,8 +16,12 @@ pkg_version="$(grep -E '"version"[[:space:]]*:' frontend/package.json | head -n 
 time_now="$(date "+%Y%m%d")"
 git_commit_id="$(git rev-parse --short HEAD 2>/dev/null || echo nogit)"
 tag_suffix="${tag_prefix}_${time_now}_${git_commit_id}_${pkg_version}"
+tag="${tag_suffix}"
+if [ "${tag_prefix}" = "dev" ]; then
+  tag="latest"
+fi
 
-image="${NEXUSOPS_FRONTEND_IMAGE:-${registry_base}/nexusops-frontend:${tag_suffix}}"
+image="${NEXUSOPS_FRONTEND_IMAGE:-${registry_base}/nexusops-frontend:${tag}}"
 
 echo "$image"
 

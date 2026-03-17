@@ -16,8 +16,12 @@ pyproject_version="$(sed -n 's/^[[:space:]]*version[[:space:]]*=[[:space:]]*"\([
 time_now="$(date "+%Y%m%d")"
 git_commit_id="$(git rev-parse --short HEAD 2>/dev/null || echo nogit)"
 tag_suffix="${tag_prefix}_${time_now}_${git_commit_id}_${pyproject_version:-0.0.0}"
+tag="${tag_suffix}"
+if [ "${tag_prefix}" = "dev" ]; then
+  tag="latest"
+fi
 
-image="${NEXUSOPS_BACKEND_IMAGE:-${registry_base}/nexusops-backend:${tag_suffix}}"
+image="${NEXUSOPS_BACKEND_IMAGE:-${registry_base}/nexusops-backend:${tag}}"
 
 echo "$image"
 
