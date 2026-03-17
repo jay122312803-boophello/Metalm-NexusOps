@@ -12,6 +12,7 @@ from ...db.models import Deployment, DeploymentHistory, Repo, Server, TaskConfig
 from ...db.session import run_db
 from ...schemas import CreateDeploymentRequest, TriggerDeploymentRequest, UpdateDeploymentRequest
 from ...auth.deps import require_permission
+from ...auth.redis_client import get_redis
 from ...auth.security import create_access_token
 
 router = APIRouter()
@@ -351,11 +352,20 @@ async def trigger_deployment(dep_id: str, request: Request, req: TriggerDeployme
         if "NEXUSOPS_CONFIG_ZIP_URL" not in variables:
             variables["NEXUSOPS_CONFIG_ZIP_URL"] = f"/api/deployments/{d.id}/configs.zip"
 
-        try:
-            token, _, _ = create_access_token(str(user.id))
-            variables["NEXUSOPS_API_TOKEN"] = token
-        except Exception:
-            pass
+        if "NEXUSOPS_API_TOKEN" not in variables:
+            try:
+                token, jti, ttl = create_access_token(str(user.id))
+                variables["NEXUSOPS_API_TOKEN"] = token
+                rds = get_redis()
+                if rds is not None:
+                    try:
+                        rds.setex(f"sess:{jti}", ttl, str(user.id))
+                        rds.sadd(f"user_sess:{user.id}", jti)
+                        rds.expire(f"user_sess:{user.id}", ttl)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
 
         variables_for_history = {k: v for k, v in variables.items() if k not in {"SERVER_SSH_KEY", "NEXUSOPS_GIT_HTTP_TOKEN", "NEXUSOPS_API_TOKEN"}}
         h.variables = variables_for_history
