@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Icon from '../components/Icon.jsx'
 import { api } from '../services/api.js'
 import { toast } from '../services/toast.js'
+import Modal from '../components/Modal.jsx'
 
 const emptyForm = {
   id: null,
@@ -17,12 +18,15 @@ const emptyForm = {
 }
 
 export default function AiModels() {
+  const API_KEY_MASK = '••••••••••••••••'
   const [models, setModels] = useState([])
   const [selectedId, setSelectedId] = useState(null)
   const [form, setForm] = useState(emptyForm)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
+  const [showApiKey, setShowApiKey] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
 
   const selected = useMemo(() => (models || []).find((m) => m?.id === selectedId) || null, [models, selectedId])
 
@@ -42,13 +46,14 @@ export default function AiModels() {
             name: String(m.name || ''),
             model: String(m.model || ''),
             base_url: String(m.base_url || ''),
-            api_key: '',
+              api_key: m.has_key ? API_KEY_MASK : '',
             system_prompt: String(m.system_prompt || ''),
             temperature: Number.isFinite(Number(m.temperature)) ? Number(m.temperature) : 0.2,
             max_history: Number.isFinite(Number(m.max_history)) ? Number(m.max_history) : 10,
             is_active: !!m.is_active,
             has_key: !!m.has_key
           })
+            setShowApiKey(false)
         } else {
           setSelectedId(null)
           setForm(emptyForm)
@@ -79,18 +84,20 @@ export default function AiModels() {
       name: String(m.name || ''),
       model: String(m.model || ''),
       base_url: String(m.base_url || ''),
-      api_key: '',
+      api_key: m.has_key ? API_KEY_MASK : '',
       system_prompt: String(m.system_prompt || ''),
       temperature: Number.isFinite(Number(m.temperature)) ? Number(m.temperature) : 0.2,
       max_history: Number.isFinite(Number(m.max_history)) ? Number(m.max_history) : 10,
       is_active: !!m.is_active,
       has_key: !!m.has_key
     })
+    setShowApiKey(false)
   }
 
   const addNew = () => {
     setSelectedId(null)
     setForm({ ...emptyForm, temperature: 0.2, max_history: 10 })
+    setShowApiKey(false)
   }
 
   const validate = () => {
@@ -111,7 +118,7 @@ export default function AiModels() {
     const err = validate()
     if (err) return toast.error(err)
     const key = String(form.api_key || '').trim()
-    if (!key) return toast.error('请先填写 API Key（用于测试）')
+    if (!key || key === API_KEY_MASK) return toast.error('请先填写 API Key（用于测试）')
     setTesting(true)
     try {
       const res = await api.post('/api/admin/ai/models/test', {
@@ -137,11 +144,13 @@ export default function AiModels() {
     if (err) return toast.error(err)
     setSaving(true)
     try {
+      const apiKey = String(form.api_key || '')
+      const apiKeyTrim = apiKey.trim()
       const payload = {
         name: String(form.name || '').trim(),
         model: String(form.model || '').trim(),
         base_url: String(form.base_url || '').trim(),
-        api_key: String(form.api_key || ''),
+        api_key: form.has_key && (!apiKeyTrim || apiKeyTrim === API_KEY_MASK) ? '' : apiKey,
         system_prompt: String(form.system_prompt || ''),
         temperature: Number(form.temperature),
         max_history: Number(form.max_history)
@@ -228,78 +237,112 @@ export default function AiModels() {
               {selected?.is_active ? <span className="ai-badge ai-badge-on">当前生效</span> : null}
             </div>
             <div className="ai-model-form-body">
-              <div className="form-item">
-                <label className="form-label">模型名称</label>
-                <input className="form-input" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="例如 Nexus-Ops-Copilot" />
-              </div>
-              <div className="form-item">
-                <label className="form-label">模型 ID</label>
-                <input className="form-input" value={form.model} onChange={(e) => setForm((p) => ({ ...p, model: e.target.value }))} placeholder="例如 deepseek-chat / gpt-4o-mini" />
-              </div>
-              <div className="form-item">
-                <label className="form-label">API 地址 (Base URL)</label>
-                <input className="form-input" value={form.base_url} onChange={(e) => setForm((p) => ({ ...p, base_url: e.target.value }))} placeholder="例如 https://api.deepseek.com 或 https://xxx/v1" />
-              </div>
-              <div className="form-item">
-                <label className="form-label">API Key</label>
-                <input
-                  className="form-input"
-                  type="password"
-                  value={form.api_key}
-                  onChange={(e) => setForm((p) => ({ ...p, api_key: e.target.value }))}
-                  placeholder={form.has_key ? '已配置（留空则不修改）' : '请输入 API Key'}
-                />
-              </div>
-
-              <div className="form-item">
-                <label className="form-label">系统提示词 (System Prompt)</label>
-                <textarea
-                  className="form-input"
-                  style={{ minHeight: 120, resize: 'vertical' }}
-                  value={form.system_prompt}
-                  onChange={(e) => setForm((p) => ({ ...p, system_prompt: e.target.value }))}
-                  placeholder="例如：你是一个高级运维专家，请优先使用 Markdown 输出 Shell 命令"
-                />
-              </div>
-
-              <div className="form-item">
-                <label className="form-label">模型温度 (Temperature)</label>
-                <div className="ai-slider-row">
-                  <input
-                    type="range"
-                    min="0"
-                    max="2"
-                    step="0.1"
-                    value={String(form.temperature)}
-                    onChange={(e) => setForm((p) => ({ ...p, temperature: Number(e.target.value) }))}
-                    className="ai-slider"
-                  />
-                  <div className="ai-slider-val">{Number(form.temperature).toFixed(1)}</div>
+              <div className="ai-form-section">
+                <div className="ai-form-section-title">
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                    <Icon name="plug" /> 基础与连接配置
+                  </span>
                 </div>
-                <div className="ai-hint">值越小回答越严谨，适合运维场景；值越大回答越具发散性</div>
+
+                <div className="form-item">
+                  <label className="form-label">模型名称</label>
+                  <input className="form-input" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="例如 NexusOps Copilot" />
+                </div>
+
+                <div className="ai-form-grid-mid">
+                  <div className="form-item" style={{ marginBottom: 0 }}>
+                    <label className="form-label">模型 ID</label>
+                    <input className="form-input" value={form.model} onChange={(e) => setForm((p) => ({ ...p, model: e.target.value }))} placeholder="deepseek-chat / gpt-4o-mini" />
+                  </div>
+                  <div className="form-item" style={{ marginBottom: 0 }}>
+                    <label className="form-label">API 地址 (Base URL)</label>
+                    <input className="form-input" value={form.base_url} onChange={(e) => setForm((p) => ({ ...p, base_url: e.target.value }))} placeholder="https://api.deepseek.com 或 https://xxx/v1" />
+                  </div>
+                </div>
+
+                <div className="form-item" style={{ marginTop: 14 }}>
+                  <label className="form-label">API Key</label>
+                  <div className="input-wrap">
+                    <input
+                      className="form-input"
+                      type={showApiKey ? 'text' : 'password'}
+                      value={form.api_key}
+                      onFocus={() => {
+                        if (form.has_key && String(form.api_key || '') === API_KEY_MASK) setForm((p) => ({ ...p, api_key: '' }))
+                      }}
+                      onChange={(e) => setForm((p) => ({ ...p, api_key: e.target.value, has_key: true }))}
+                      placeholder={form.has_key ? '已配置（留空不变，输入新值覆盖）' : '请输入 API Key'}
+                    />
+                    <div className="input-toggle" onClick={() => setShowApiKey((v) => !v)}>
+                      <Icon name={showApiKey ? 'eye-slash' : 'eye'} />
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <div className="form-item">
-                <label className="form-label">最大上下文对话轮数</label>
-                <input
-                  className="form-input"
-                  type="number"
-                  min={1}
-                  max={50}
-                  value={String(form.max_history)}
-                  onChange={(e) => setForm((p) => ({ ...p, max_history: Number(e.target.value) }))}
-                />
+              <div className="ai-form-section">
+                <div className="ai-form-section-title">
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                    <Icon name="brain" /> 模型行为与设定
+                  </span>
+                </div>
+
+                <div className="form-item">
+                  <label className="form-label">系统提示词 (System Prompt)</label>
+                  <textarea
+                    className="form-input ai-prompt-textarea"
+                    value={form.system_prompt}
+                    onChange={(e) => setForm((p) => ({ ...p, system_prompt: e.target.value }))}
+                    placeholder="例如：你是一个高级运维专家，请优先使用 Markdown 输出 Shell 命令"
+                  />
+                </div>
+
+                <div className="ai-form-grid-behavior">
+                  <div className="form-item" style={{ marginBottom: 0 }}>
+                    <label className="form-label">模型温度 (Temperature)</label>
+                    <div className="ai-slider-row">
+                      <input
+                        type="range"
+                        min="0"
+                        max="2"
+                        step="0.1"
+                        value={String(form.temperature)}
+                        onChange={(e) => setForm((p) => ({ ...p, temperature: Number(e.target.value) }))}
+                        className="ai-slider"
+                      />
+                      <div className="ai-slider-val">{Number(form.temperature).toFixed(1)}</div>
+                    </div>
+                    <div className="ai-hint">值越小回答越严谨，适合运维场景</div>
+                  </div>
+
+                  <div className="form-item" style={{ marginBottom: 0 }}>
+                    <label className="form-label">最大上下文轮数</label>
+                    <input
+                      className="form-input"
+                      type="number"
+                      min={1}
+                      max={50}
+                      value={String(form.max_history)}
+                      onChange={(e) => setForm((p) => ({ ...p, max_history: Number(e.target.value) }))}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
 
             <div className="ai-model-form-actions">
               <div style={{ display: 'flex', gap: 10 }}>
                 <button className="btn btn-outline" type="button" onClick={testConn} disabled={testing || saving}>
-                  <Icon name="plug" />
+                  <Icon name={testing ? 'spinner fa-spin' : 'plug'} />
                   连通性测试
                 </button>
                 {form.id ? (
-                  <button className="btn btn-danger" type="button" onClick={remove} disabled={saving || testing}>
+                  <button
+                    className="btn btn-danger"
+                    type="button"
+                    onClick={() => setDeleteOpen(true)}
+                    disabled={saving || testing || form.is_active}
+                  >
                     <Icon name="trash" />
                     删除
                   </button>
@@ -316,8 +359,35 @@ export default function AiModels() {
             </div>
           </div>
         </div>
+
+        {deleteOpen ? (
+          <Modal
+            danger
+            title="确认删除该模型？"
+            onClose={() => setDeleteOpen(false)}
+            footer={[
+              <button key="c" className="btn btn-outline" onClick={() => setDeleteOpen(false)}>
+                取消
+              </button>,
+              <button
+                key="ok"
+                className="btn btn-danger"
+                onClick={async () => {
+                  setDeleteOpen(false)
+                  await remove()
+                }}
+                disabled={saving || testing}
+              >
+                删除
+              </button>
+            ]}
+          >
+            <div style={{ color: 'var(--text-sub)', fontSize: 13, lineHeight: 1.6 }}>
+              删除后将无法恢复。
+            </div>
+          </Modal>
+        ) : null}
       </div>
     </div>
   )
 }
-
