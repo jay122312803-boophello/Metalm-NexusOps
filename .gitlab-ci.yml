@@ -143,10 +143,12 @@ deploy:
           mkdir -p \"${DEST_DIR%/}/.nexusops\"; \
           if [ -s \"\$tmp\" ]; then \
             if command -v unzip >/dev/null 2>&1; then \
-              if unzip -Z1 \"\$tmp\" | head -n 1 | grep -q .; then unzip -o \"\$tmp\" -d \"${DEST_DIR%/}\" >/dev/null; \
-              else echo '====== [NexusOps] Empty Configs: Skip Inject ======'; fi; \
+              if unzip -l \"\$tmp\" | tail -n 1 | grep -q '0 files'; then echo '====== [NexusOps] Empty Configs: Skip Inject ======'; \
+              else unzip -o \"\$tmp\" -d \"${DEST_DIR%/}\" >/dev/null; fi; \
             elif command -v python3 >/dev/null 2>&1; then \
-              python3 - <<'PY' \"\$tmp\" \"${DEST_DIR%/}\" >/dev/null || exit 1\nimport sys, zipfile\np=sys.argv[1]\nd=sys.argv[2]\nz=zipfile.ZipFile(p)\nif not z.namelist():\n  print('====== [NexusOps] Empty Configs: Skip Inject ======')\n  sys.exit(0)\nz.extractall(d)\nPY\n; \
+              n=\$(python3 -c 'import zipfile,sys; z=zipfile.ZipFile(sys.argv[1]); print(len(z.namelist()))' \"\$tmp\"); \
+              if [ \"\${n:-0}\" -gt 0 ]; then python3 -m zipfile -e \"\$tmp\" \"${DEST_DIR%/}\" >/dev/null; \
+              else echo '====== [NexusOps] Empty Configs: Skip Inject ======'; fi; \
             else echo unzip/python3 not found; exit 1; fi; \
             rm -f \"\$tmp\"; \
           else \
