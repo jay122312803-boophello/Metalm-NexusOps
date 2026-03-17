@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Icon from '../components/Icon.jsx'
 import { useAuth } from '../contexts/AuthContext.jsx'
 
@@ -128,6 +128,39 @@ export default function Login() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('nexusops_login_remember') || ''
+      const on = raw === '1'
+      setRemember(on)
+      if (on) {
+        setUsername(localStorage.getItem('nexusops_login_username') || '')
+        setPassword(localStorage.getItem('nexusops_login_password') || '')
+      }
+    } catch {
+    }
+  }, [])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('nexusops_login_remember', remember ? '1' : '0')
+      if (!remember) {
+        localStorage.removeItem('nexusops_login_username')
+        localStorage.removeItem('nexusops_login_password')
+      }
+    } catch {
+    }
+  }, [remember])
+
+  useEffect(() => {
+    if (!remember) return
+    try {
+      localStorage.setItem('nexusops_login_username', username || '')
+      localStorage.setItem('nexusops_login_password', password || '')
+    } catch {
+    }
+  }, [remember, username, password])
+
   const submit = async () => {
     setError('')
     setSubmitting(true)
@@ -136,6 +169,16 @@ export default function Login() {
       if (!res?.ok) {
         setError(res?.detail || '登录失败')
         return
+      }
+      try {
+        if (remember) {
+          localStorage.setItem('nexusops_login_username', username || '')
+          localStorage.setItem('nexusops_login_password', password || '')
+        } else {
+          localStorage.removeItem('nexusops_login_username')
+          localStorage.removeItem('nexusops_login_password')
+        }
+      } catch {
       }
       try {
         localStorage.setItem('nexusops_nav', JSON.stringify({ page: 'overview' }))

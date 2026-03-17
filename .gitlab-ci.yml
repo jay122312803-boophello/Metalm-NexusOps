@@ -57,13 +57,8 @@ deploy:
       fi
 
       if [ -n "${NEXUSOPS_CONFIG_ZIP_URL:-}" ]; then
-        if [ -z "${NEXUSOPS_API_TOKEN:-}" ] && [ -n "${api_base:-}" ] && [ -n "${NEXUSOPS_API_USER:-}" ] && [ -n "${NEXUSOPS_API_PASS:-}" ]; then
-          login_json="$(curl -fsSL -X POST "${api_base%/}/api/auth/login" -H "Content-Type: application/json" \
-            -d "{\"username\":\"${NEXUSOPS_API_USER}\",\"password\":\"${NEXUSOPS_API_PASS}\"}")"
-          NEXUSOPS_API_TOKEN="$(printf "%s" "$login_json" | jq -r '.token // empty')"
-        fi
         if [ -z "${NEXUSOPS_API_TOKEN:-}" ]; then
-          echo "!! [NexusOps] 下载配置需要鉴权：请设置 NEXUSOPS_API_TOKEN（建议 masked 变量），或提供 NEXUSOPS_API_USER/NEXUSOPS_API_PASS + NEXUSOPS_API_BASE_URL"
+          echo "!! [NexusOps] 下载配置需要鉴权：未收到 NEXUSOPS_API_TOKEN"
           exit 22
         fi
       fi

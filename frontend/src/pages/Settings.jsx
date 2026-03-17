@@ -71,6 +71,9 @@ export default function Settings({ initialTab }) {
   const [rbacPermsOpen, setRbacPermsOpen] = useState(null)
   const [rbacPermPick, setRbacPermPick] = useState([])
   const [rbacSaving, setRbacSaving] = useState(false)
+  const [rbacResetOpen, setRbacResetOpen] = useState(null)
+  const [rbacResetForm, setRbacResetForm] = useState({ password: '', confirm: '' })
+  const [rbacResetError, setRbacResetError] = useState(null)
   const rbacEverLoadedRef = useRef(false)
   const rbacInFlightRef = useRef(false)
   const [rbacDeleteTarget, setRbacDeleteTarget] = useState(null)
@@ -786,6 +789,18 @@ export default function Settings({ initialTab }) {
                                   <Icon name="right-from-bracket" />
                                 </button>
                               </Tooltip>
+                              <Tooltip content="修改密码">
+                                <button
+                                  className="btn btn-ghost btn-sm"
+                                  onClick={() => {
+                                    setRbacResetError(null)
+                                    setRbacResetForm({ password: '', confirm: '' })
+                                    setRbacResetOpen(u)
+                                  }}
+                                >
+                                  <Icon name="key" />
+                                </button>
+                              </Tooltip>
                               <Tooltip content="删除账号">
                                 <button
                                   className="btn btn-ghost btn-sm"
@@ -1423,6 +1438,88 @@ export default function Settings({ initialTab }) {
               )
             })}
           </div>
+        </Modal>
+      ) : null}
+
+      {rbacResetOpen ? (
+        <Modal
+          title={`修改密码 - ${rbacResetOpen.username}`}
+          onClose={() => (rbacSaving ? null : setRbacResetOpen(null))}
+          footer={[
+            <button key="c" className="btn btn-outline" onClick={() => setRbacResetOpen(null)} disabled={rbacSaving}>
+              取消
+            </button>,
+            <button
+              key="ok"
+              className="btn btn-primary"
+              onClick={async () => {
+                setRbacResetError(null)
+                const p1 = String(rbacResetForm.password || '')
+                const p2 = String(rbacResetForm.confirm || '')
+                if (!p1) {
+                  setRbacResetError('请输入新密码')
+                  return
+                }
+                if (p1 !== p2) {
+                  setRbacResetError('两次输入的密码不一致')
+                  return
+                }
+                setRbacSaving(true)
+                try {
+                  const res = await api.post(`/api/admin/users/${rbacResetOpen.id}/reset_password`, { password: p1 })
+                  if (res?.ok) {
+                    setRbacResetOpen(null)
+                    setRbacResetForm({ password: '', confirm: '' })
+                  }
+                } catch (e) {
+                  setRbacResetError(e?.message || '修改失败')
+                } finally {
+                  setRbacSaving(false)
+                }
+              }}
+              disabled={rbacSaving}
+            >
+              <Icon name={rbacSaving ? 'spinner fa-spin' : 'check'} /> {rbacSaving ? '保存中...' : '保存'}
+            </button>
+          ]}
+        >
+          <div className="form-item">
+            <label className="form-label">
+              新密码 <span className="req-star">*</span>
+            </label>
+            <input
+              className="form-input"
+              type="password"
+              value={rbacResetForm.password}
+              onChange={(e) => setRbacResetForm({ ...rbacResetForm, password: e.target.value })}
+            />
+          </div>
+          <div className="form-item" style={{ marginBottom: 0 }}>
+            <label className="form-label">
+              确认密码 <span className="req-star">*</span>
+            </label>
+            <input
+              className="form-input"
+              type="password"
+              value={rbacResetForm.confirm}
+              onChange={(e) => setRbacResetForm({ ...rbacResetForm, confirm: e.target.value })}
+            />
+          </div>
+          {rbacResetError ? (
+            <div
+              style={{
+                marginTop: 12,
+                padding: '10px 12px',
+                borderRadius: 10,
+                border: '1px solid rgba(239,68,68,0.25)',
+                background: 'rgba(239,68,68,0.06)',
+                color: '#b91c1c',
+                fontSize: 13
+              }}
+            >
+              {rbacResetError}
+            </div>
+          ) : null}
         </Modal>
       ) : null}
 
