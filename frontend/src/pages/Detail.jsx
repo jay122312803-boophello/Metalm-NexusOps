@@ -189,6 +189,56 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
     )
   }
 
+  const statusTone = (state) => {
+    const s = String(state || '').toLowerCase()
+    if (s === 'running') return 'ok'
+    if (s === 'restarting' || s === 'paused') return 'warn'
+    if (s === 'dead' || s === 'exited') return 'bad'
+    if (s === 'created' || s === 'unknown') return 'idle'
+    return 'bad'
+  }
+
+  const formatUptime = (v) => {
+    const s = String(v || '').trim()
+    if (!s) return ''
+    const cleaned = s
+      .replace(/^up\s+/i, '')
+      .replace(/\bago\b/i, '')
+      .replace(/\s*\(.*?\)\s*/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    const m = cleaned.match(/(\d+)\s+(second|minute|hour|day)s?\b/i)
+    if (!m) {
+      if (/about\s+an?\s+hour/i.test(cleaned)) return '1h'
+      if (/about\s+a?\s+minute/i.test(cleaned)) return '1m'
+      if (/less\s+than\s+a\s+minute/i.test(cleaned)) return '<1m'
+      return cleaned || ''
+    }
+    const n = m[1]
+    const unit = m[2].toLowerCase()
+    const abbr = unit === 'second' ? 's' : unit === 'minute' ? 'm' : unit === 'hour' ? 'h' : 'd'
+    return `${n}${abbr}`
+  }
+
+  const renderStatusCell = (c) => {
+    const st = String(c?.State || 'unknown')
+    const tone = statusTone(st)
+    if (tone === 'ok') {
+      return (
+        <span style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+          <span className="status-dot online" />
+        </span>
+      )
+    }
+    const dotClass = tone === 'warn' ? 'canceled' : tone === 'idle' ? 'idle' : 'offline'
+    return (
+      <span style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+        <span className={`status-dot ${dotClass}`} />
+        <span style={{ fontWeight: 800, color: tone === 'warn' ? '#92400e' : tone === 'idle' ? 'var(--text-sub)' : '#b91c1c' }}>{st}</span>
+      </span>
+    )
+  }
+
   useEffect(() => {
     async function init() {
       const tasks = await api.get('/api/deployments')
@@ -926,76 +976,66 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
                         </div>
                       ) : null
                     })()}
-                    {monitorGroups.map((g) => {
-                      const list = Array.isArray(g?.containers) ? g.containers : []
-                      const running = list.filter((c) => String(c?.State || '').toLowerCase() === 'running').length
-                      const total = list.length
-                      const fullPath = String(g.compose_path || '')
-                      const workspace = workspaceFromPrefix(monitorDestDir || commonPrefixPath([fullPath]))
-                      const rel = relFrom(workspace, fullPath)
-                      const relPath = rel.rel || fullPath
-                      const main = relPath ? relPath.split('/').filter(Boolean).slice(-1)[0] : fullPath.split('/').filter(Boolean).slice(-1)[0] || '-'
-                      const open = monitorOpenByPath[fullPath] ?? true
-                      return (
-                        <details
-                          key={g.compose_path}
-                          open={open}
-                          onToggle={(ev) => {
-                            const isOpen = !!ev.currentTarget.open
-                            setMonitorOpenByPath((p) => ({ ...p, [fullPath]: isOpen }))
-                          }}
-                        >
-                          <summary
-                            style={{
-                              listStyle: 'none',
-                              cursor: 'pointer',
-                              padding: '12px 14px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              borderBottom: '1px solid var(--border)',
-                              background: 'linear-gradient(to right, #ffffff, #f8fafc)'
-                            }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                              <Icon name="chevron-right" style={{ color: 'rgba(100,116,139,0.9)', transform: open ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 120ms ease' }} />
-                              <Icon name="layer-group" style={{ color: 'rgba(100,116,139,0.9)' }} />
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                                  <span style={{ fontWeight: 800, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {main}
-                                  </span>
+                    <table className="repo-table monitor-table" style={{ width: '100%' }}>
+                      <thead>
+                        <tr>
+                          <th>容器</th>
+                          <th style={{ width: 120, textAlign: 'center' }}>状态</th>
+                          <th>镜像</th>
+                          <th>端口</th>
+                          <th style={{ textAlign: 'right', width: 100 }}>运行时长</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {monitorGroups.flatMap((g) => {
+                          const list = Array.isArray(g?.containers) ? g.containers : []
+                          const fullPath = String(g?.compose_path || '')
+                          const running = list.filter((c) => String(c?.State || '').toLowerCase() === 'running').length
+                          const total = list.length
+                          const workspace = workspaceFromPrefix(monitorDestDir || commonPrefixPath([fullPath]))
+                          const rel = relFrom(workspace, fullPath)
+                          const relPath = rel.rel || fullPath
+                          const main = relPath ? relPath.split('/').filter(Boolean).slice(-1)[0] : fullPath.split('/').filter(Boolean).slice(-1)[0] || '-'
+                          const open = monitorOpenByPath[fullPath] ?? true
+                          const rows = []
+                          rows.push(
+                            <tr
+                              key={`grp-${fullPath}`}
+                              className="monitor-group-row"
+                              onClick={() => setMonitorOpenByPath((p) => ({ ...p, [fullPath]: !open }))}
+                              style={{ cursor: 'pointer' }}
+                            >
+                              <td colSpan={5} className="monitor-group-cell">
+                                <div className="monitor-group-inner">
+                                  <div className="monitor-group-left">
+                                    <Icon name="chevron-right" className="monitor-group-chevron" style={{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)' }} />
+                                    <Icon name="layer-group" style={{ color: 'rgba(100,116,139,0.9)' }} />
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                                      <div style={{ fontWeight: 800, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{main}</div>
+                                      <Tooltip content={fullPath}>
+                                        <div style={{ color: 'var(--text-sub)', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{relPath}</div>
+                                      </Tooltip>
+                                    </div>
+                                  </div>
+                                  <div className="monitor-group-right">
+                                    <span className={`status-dot ${running === total && total > 0 ? 'online' : 'offline'}`} />
+                                    <span className="monitor-group-count">{running}/{total} 运行中</span>
+                                  </div>
                                 </div>
-                                <Tooltip content={fullPath}>
-                                  <span style={{ color: 'var(--text-sub)', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {relPath}
-                                  </span>
-                                </Tooltip>
-                              </div>
-                            </div>
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                              <span className={`status-dot ${running === total && total > 0 ? 'online' : 'offline'}`} />
-                              <span style={{ color: 'var(--text-sub)', fontSize: 12, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>
-                                {running}/{total} 运行中
-                              </span>
-                            </span>
-                          </summary>
-                          <div style={{ padding: 0 }}>
-                            <table className="repo-table" style={{ width: '100%' }}>
-                              <thead>
-                                <tr>
-                                  <th>容器</th>
-                                  <th>状态</th>
-                                  <th>镜像</th>
-                                  <th>端口</th>
-                                  <th style={{ textAlign: 'right' }}>运行时长</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {list.length ? (
-                                  list.map((c, idx) => (
-                                    <tr key={c?.Name || `${g.compose_path}-${idx}`}>
-                                      <td className="monitor-cell-mono" style={{ maxWidth: 340 }}>
+                              </td>
+                            </tr>
+                          )
+                          if (open) {
+                            if (list.length) {
+                              list.forEach((c, idx) => {
+                                const isLast = idx === list.length - 1
+                                rows.push(
+                                  <tr key={`row-${fullPath}-${c?.Name || idx}`} className="monitor-row">
+                                    <td className="monitor-cell-mono" style={{ maxWidth: 360 }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                                        <span style={{ color: 'rgba(100,116,139,0.55)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>
+                                          {isLast ? '└─' : '├─'}
+                                        </span>
                                         {c?.Name ? (
                                           <Tooltip content={String(c.Name)}>
                                             <span className="monitor-ellipsis">{String(c.Name)}</span>
@@ -1003,45 +1043,43 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
                                         ) : (
                                           ''
                                         )}
-                                      </td>
-                                      <td>
-                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                                          <span className={`status-dot ${String(c?.State || '').toLowerCase() === 'running' ? 'online' : 'offline'}`} />
-                                          <span style={{ color: String(c?.State || '').toLowerCase() === 'running' ? 'var(--text-sub)' : 'var(--text-main)' }}>
-                                            {String(c?.State || 'unknown')}
-                                          </span>
-                                        </span>
-                                      </td>
-                                      <td className="monitor-cell-mono" style={{ color: 'var(--text-sub)', fontSize: 13 }}>
-                                        {c?.Image ? (
-                                          <Tooltip content={String(c.Image)}>
-                                            <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>{ellipsis(shortImage(c.Image), 42)}</span>
-                                          </Tooltip>
-                                        ) : (
-                                          ''
-                                        )}
-                                      </td>
-                                      <td className="monitor-cell-mono" style={{ color: 'var(--text-sub)', fontSize: 13 }}>
-                                        {renderPorts(c)}
-                                      </td>
-                                      <td className="monitor-cell-mono" style={{ color: 'var(--text-sub)', fontSize: 13, textAlign: 'right' }}>
-                                        {c?.Uptime || ''}
-                                      </td>
-                                    </tr>
-                                  ))
-                                ) : (
-                                  <tr>
-                                    <td colSpan={5} style={{ padding: 14, color: 'var(--text-sub)' }}>
-                                      未发现容器或 compose 命令不可用
+                                      </div>
+                                    </td>
+                                    <td style={{ width: 120 }}>
+                                      {renderStatusCell(c)}
+                                    </td>
+                                    <td className="monitor-cell-mono" style={{ color: 'var(--text-sub)', fontSize: 13 }}>
+                                      {c?.Image ? (
+                                        <Tooltip content={String(c.Image)}>
+                                          <span className="monitor-ellipsis">{ellipsis(shortImage(c.Image), 46)}</span>
+                                        </Tooltip>
+                                      ) : (
+                                        ''
+                                      )}
+                                    </td>
+                                    <td className="monitor-cell-mono" style={{ color: 'var(--text-sub)', fontSize: 13 }}>
+                                      {renderPorts(c)}
+                                    </td>
+                                    <td className="monitor-cell-mono" style={{ color: 'var(--text-sub)', fontSize: 13, textAlign: 'right' }}>
+                                      {formatUptime(c?.Uptime)}
                                     </td>
                                   </tr>
-                                )}
-                              </tbody>
-                            </table>
-                          </div>
-                        </details>
-                      )
-                    })}
+                                )
+                              })
+                            } else {
+                              rows.push(
+                                <tr key={`empty-${fullPath}`}>
+                                  <td colSpan={5} style={{ padding: 14, color: 'var(--text-sub)' }}>
+                                    未发现容器或 compose 命令不可用
+                                  </td>
+                                </tr>
+                              )
+                            }
+                          }
+                          return rows
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 ) : (
                   <div style={{ padding: 16, color: 'var(--text-sub)' }}>暂无监控数据</div>

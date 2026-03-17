@@ -340,6 +340,13 @@ body {
 .monitor-cell-mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
+.monitor-table td { line-height: 1.35; }
+.monitor-group-row td { padding: 12px 16px; background: linear-gradient(to right, #ffffff, #f8fafc); }
+.monitor-group-inner { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.monitor-group-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.monitor-group-right { display: inline-flex; align-items: center; gap: 8px; }
+.monitor-group-count { color: var(--text-sub); font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+.monitor-group-chevron { color: rgba(100,116,139,0.9); transition: transform 120ms ease; }
 @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
 
 .grid-servers { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 24px; justify-content: start; }
