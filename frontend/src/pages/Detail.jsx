@@ -997,7 +997,7 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
                         </div>
                       ) : null
                     })()}
-                    <table className="repo-table monitor-table" style={{ width: '100%' }}>
+                    <table className="repo-table monitor-table" style={{ width: '100%', tableLayout: 'fixed' }}>
                       <thead>
                         <tr>
                           <th>容器</th>
