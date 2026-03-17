@@ -127,18 +127,25 @@ export default function Login() {
   const [remember, setRemember] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [hydrated, setHydrated] = useState(false)
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem('nexusops_login_remember') || ''
-      const on = raw === '1'
+      const raw = localStorage.getItem('nexusops_login_remember')
+      const on = raw === '0' ? false : true
       setRemember(on)
+      const u = localStorage.getItem('nexusops_login_username') || ''
+      const p = localStorage.getItem('nexusops_login_password') || ''
       if (on) {
-        setUsername(localStorage.getItem('nexusops_login_username') || '')
-        setPassword(localStorage.getItem('nexusops_login_password') || '')
+        setUsername(u)
+        setPassword(p)
+      } else if (u || p) {
+        setUsername(u)
+        setPassword(p)
       }
     } catch {
     }
+    setHydrated(true)
   }, [])
 
   useEffect(() => {
@@ -154,12 +161,13 @@ export default function Login() {
 
   useEffect(() => {
     if (!remember) return
+    if (!hydrated) return
     try {
       localStorage.setItem('nexusops_login_username', username || '')
       localStorage.setItem('nexusops_login_password', password || '')
     } catch {
     }
-  }, [remember, username, password])
+  }, [hydrated, remember, username, password])
 
   const submit = async () => {
     setError('')
