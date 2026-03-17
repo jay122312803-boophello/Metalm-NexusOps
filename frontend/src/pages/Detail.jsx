@@ -873,32 +873,53 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
           </div>
 
           <div className="deploy-meta">
-            <div className="meta-item">
-              <div className="meta-label">枝干 (Branch)</div>
-              <div className="meta-value">{repo?.branch || '-'}</div>
-            </div>
-            <div className="meta-item">
-              <div className="meta-label">目标主机 (Server)</div>
-              <div className="meta-value meta-mono">{`${server?.ssh_user || 'metalm'} @ ${server?.address || '-'}`}</div>
-            </div>
-            <div className="meta-item">
-              <div className="meta-label">源目录 (Source Dir)</div>
-              <div className="meta-value meta-mono">{(task?.input_dir || '').trim() ? task.input_dir : './'}</div>
-            </div>
-            <div className="meta-item">
-              <div className="meta-label">部署路径 (Deploy Path)</div>
-              <div className="meta-value meta-mono">{(task?.dest_dir || '').trim() ? task.dest_dir : server?.deploy_path || '-'}</div>
-            </div>
-            <div className="meta-item">
-              <div className="meta-label">挂载配置</div>
-              <div className="meta-value">{`${mountPaths.length} 项`}</div>
-              {mountPaths.length ? (
-                <div className="meta-files">
-                  {mountPaths.map((p) => (
-                    <div key={p}>{p}</div>
-                  ))}
-                </div>
-              ) : null}
+            <div className="deploy-meta-title">部署配置详情</div>
+            <div className="deploy-meta-grid">
+              <div className="deploy-meta-label">仓库分支</div>
+              <div className="deploy-meta-value">{repo?.branch || '-'}</div>
+
+              <div className="deploy-meta-label">服务器主机</div>
+              <div className="deploy-meta-value deploy-meta-mono">
+                <Tooltip content={`${server?.ssh_user || 'metalm'} @ ${server?.address || '-'}`}>
+                  <span className="deploy-meta-ellipsis">{`${server?.ssh_user || 'metalm'} @ ${server?.address || '-'}`}</span>
+                </Tooltip>
+              </div>
+
+              <div className="deploy-meta-label">源路径</div>
+              <div className="deploy-meta-value deploy-meta-mono">
+                <Tooltip content={(task?.input_dir || '').trim() ? task.input_dir : './'}>
+                  <span className="deploy-meta-ellipsis">{(task?.input_dir || '').trim() ? task.input_dir : './'}</span>
+                </Tooltip>
+              </div>
+
+              <div className="deploy-meta-label">部署路径</div>
+              <div className="deploy-meta-value deploy-meta-mono">
+                <Tooltip content={(task?.dest_dir || '').trim() ? task.dest_dir : server?.deploy_path || '-'}>
+                  <span className="deploy-meta-ellipsis">{(task?.dest_dir || '').trim() ? task.dest_dir : server?.deploy_path || '-'}</span>
+                </Tooltip>
+              </div>
+
+              <div className="deploy-meta-label">挂载配置</div>
+              <div className="deploy-meta-value">
+                {mountPaths.length ? (
+                  <Tooltip content={mountPaths.join('\n')}>
+                    <div className="deploy-meta-mounts">
+                      {mountPaths.slice(0, 2).map((p) => (
+                        <span
+                          key={p}
+                          className="badge badge-gray"
+                          style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', fontSize: 12 }}
+                        >
+                          {String(p).split('/').filter(Boolean).slice(-1)[0] || p}
+                        </span>
+                      ))}
+                      {mountPaths.length > 2 ? <span className="deploy-meta-more">+{mountPaths.length - 2}</span> : null}
+                    </div>
+                  </Tooltip>
+                ) : (
+                  <span style={{ color: 'var(--text-sub)', fontSize: 13 }}>无</span>
+                )}
+              </div>
             </div>
           </div>
         </div>
