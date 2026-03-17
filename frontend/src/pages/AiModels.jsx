@@ -318,7 +318,7 @@ export default function AiModels() {
                   <div className="form-item" style={{ marginBottom: 0 }}>
                     <label className="form-label">最大上下文轮数</label>
                     <input
-                      className="form-input"
+                      className="form-input ai-number-input"
                       type="number"
                       min={1}
                       max={50}
@@ -338,7 +338,7 @@ export default function AiModels() {
                 </button>
                 {form.id ? (
                   <button
-                    className="btn btn-danger"
+                    className="btn btn-danger btn-ghostdanger"
                     type="button"
                     onClick={() => setDeleteOpen(true)}
                     disabled={saving || testing || form.is_active}
