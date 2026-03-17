@@ -1,4 +1,5 @@
 import os
+import posixpath
 import uuid
 from datetime import datetime
 
@@ -14,6 +15,35 @@ from ...auth.deps import require_permission
 from ...auth.security import create_access_token
 
 router = APIRouter()
+
+def _norm_posix(p: str) -> str:
+    s = (p or "").strip().replace("\\", "/")
+    if not s:
+        return ""
+    if not s.startswith("/"):
+        return ""
+    return posixpath.normpath(s)
+
+
+def _validate_dest_dir(dest_dir: str | None, deploy_path: str | None) -> str | None:
+    if dest_dir is None:
+        return None
+    raw = str(dest_dir).strip().replace("\\", "/")
+    if raw == "":
+        return None
+
+    base = _norm_posix(str(deploy_path or ""))
+    if not base:
+        raise HTTPException(status_code=400, detail="该服务器未配置部署路径，请先在系统设置-服务器管理中设置。")
+
+    cand = _norm_posix(raw)
+    if not cand:
+        raise HTTPException(status_code=400, detail="服务器目标路径必须为绝对路径（以 / 开头）。")
+
+    prefix = base if base.endswith("/") else f"{base}/"
+    if cand == base or cand.startswith(prefix):
+        return cand
+    raise HTTPException(status_code=400, detail=f"服务器目标路径必须位于服务器部署路径下：{base}")
 
 
 @router.get("")
@@ -56,12 +86,13 @@ async def create_deployment(req: CreateDeploymentRequest, user=Depends(require_p
             raise HTTPException(status_code=404, detail="Server configuration not found")
         if not r or r.created_by_user_id != user.id:
             raise HTTPException(status_code=404, detail="Repository configuration not found")
+        dest_dir = _validate_dest_dir(data.get("dest_dir"), s.deploy_path)
         d = Deployment(
             name=name,
             server_id=server_id,
             repo_id=repo_id,
             input_dir=(data.get("input_dir") or None),
-            dest_dir=(data.get("dest_dir") or None),
+            dest_dir=dest_dir,
             deploy_script=(data.get("deploy_script") or None),
             created_by_user_id=user.id,
         )
@@ -132,6 +163,13 @@ async def update_deployment(dep_id: str, req: UpdateDeploymentRequest, user=Depe
             if not r or r.created_by_user_id != user.id:
                 raise HTTPException(status_code=404, detail="Repository configuration not found")
             data["repo_id"] = rid
+
+        effective_server_id = data.get("server_id") or d.server_id
+        s = session.get(Server, effective_server_id)
+        if not s or s.created_by_user_id != user.id:
+            raise HTTPException(status_code=404, detail="Server configuration not found")
+        effective_dest_dir = data["dest_dir"] if "dest_dir" in data else d.dest_dir
+        data["dest_dir"] = _validate_dest_dir(effective_dest_dir, s.deploy_path)
 
         for k, v in data.items():
             if k in {"input_dir", "dest_dir", "deploy_script"} and v is not None and str(v).strip() == "":

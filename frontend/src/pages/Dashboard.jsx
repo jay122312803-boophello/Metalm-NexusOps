@@ -37,6 +37,39 @@ export default function Dashboard({ onNavigate }) {
   const monitorIntervalsRef = useRef({})
   const monitorTimeoutsRef = useRef({})
 
+  const normPosix = (p) => {
+    const s = String(p || '').trim().replace(/\\/g, '/')
+    if (!s) return ''
+    const abs = s.startsWith('/')
+    const parts = s.split('/').filter((x) => x && x !== '.')
+    const stack = []
+    for (const part of parts) {
+      if (part === '..') {
+        if (stack.length) stack.pop()
+        else return ''
+      } else {
+        stack.push(part)
+      }
+    }
+    return (abs ? '/' : '') + stack.join('/')
+  }
+
+  const validateDestDir = (destDir, deployPath) => {
+    const baseRaw = String(deployPath || '').trim()
+    if (!baseRaw) return { ok: false, message: '该服务器未配置部署路径，请先在系统设置-服务器管理中设置。' }
+    const base = normPosix(baseRaw)
+    if (!base || !base.startsWith('/')) return { ok: false, message: '服务器部署路径必须为绝对路径（以 / 开头）。' }
+
+    const raw = String(destDir || '').trim()
+    if (!raw) return { ok: false, message: `服务器目标路径不能为空，且必须位于：${base} 下。` }
+    const cand = normPosix(raw)
+    if (!cand || !cand.startsWith('/')) return { ok: false, message: '服务器目标路径必须为绝对路径（以 / 开头）。' }
+
+    const prefix = base.endsWith('/') ? base : `${base}/`
+    if (cand === base || cand.startsWith(prefix)) return { ok: true, base, cand }
+    return { ok: false, message: `服务器目标路径必须位于服务器部署路径下：${base}` }
+  }
+
   const load = async () => {
     const ts = await api.get('/api/deployments')
     const sv = await api.get('/api/servers')
@@ -160,10 +193,26 @@ export default function Dashboard({ onNavigate }) {
   }
 
   const handleCreate = async () => {
-    if (!newTask.name || !newTask.server_id || !newTask.repo_id) return alert('请完善必填项')
-    if (!newTask.input_dir || !newTask.dest_dir) return alert('请填写同步源目录与目标路径')
-    if (editingTaskId) await api.put(`/api/deployments/${editingTaskId}`, newTask)
-    else await api.post('/api/deployments', newTask)
+    const selectedServer = servers.find((s) => s.id === newTask.server_id) || null
+    const destCheck = validateDestDir(newTask.dest_dir, selectedServer?.deploy_path || '')
+    if (!newTask.name || !newTask.server_id || !newTask.repo_id) {
+      toast.error('请完善必填项')
+      return
+    }
+    if (!newTask.input_dir) {
+      toast.error('请填写同步源目录')
+      return
+    }
+    if (!destCheck.ok) {
+      toast.error(destCheck.message || '服务器目标路径不合法')
+      return
+    }
+    const res = editingTaskId ? await api.put(`/api/deployments/${editingTaskId}`, newTask) : await api.post('/api/deployments', newTask)
+    if (!(res?.ok || res?.id)) {
+      const d = res?.detail
+      toast.error(typeof d === 'string' ? d : '保存失败')
+      return
+    }
     setDrawerOpen(false)
     setNewTask({})
     setEditingTaskId(null)
@@ -555,6 +604,37 @@ export default function Dashboard({ onNavigate }) {
               value={newTask.dest_dir || ''}
               onChange={(e) => setNewTask({ ...newTask, dest_dir: e.target.value })}
             />
+            {newTask.server_id ? (
+              (() => {
+                const selectedServer = servers.find((s) => s.id === newTask.server_id) || null
+                const check = validateDestDir(newTask.dest_dir, selectedServer?.deploy_path || '')
+                if (check.ok) {
+                  return (
+                    <div style={{ marginTop: 8, color: 'var(--text-sub)', fontSize: 12 }}>
+                      需位于服务器部署路径下：<span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>{check.base}</span>
+                    </div>
+                  )
+                }
+                return (
+                  <div
+                    style={{
+                      marginTop: 10,
+                      padding: '10px 12px',
+                      borderRadius: 10,
+                      border: '1px solid rgba(239,68,68,0.22)',
+                      background: 'rgba(239,68,68,0.06)',
+                      color: '#991b1b',
+                      fontSize: 12,
+                      lineHeight: 1.5
+                    }}
+                  >
+                    {check.message}
+                  </div>
+                )
+              })()
+            ) : (
+              <div style={{ marginTop: 8, color: 'var(--text-sub)', fontSize: 12 }}>先选择目标服务器以获取可用路径范围</div>
+            )}
           </div>
           <div className="form-item">
             <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
