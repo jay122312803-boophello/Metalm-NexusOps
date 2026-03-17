@@ -14,6 +14,11 @@ from ...db.session import run_db
 
 router = APIRouter()
 
+def _is_protected_role(r: Role) -> bool:
+    code = (r.code or "").strip().lower()
+    name = (r.name or "").strip()
+    return code == "admin" or name == "管理员"
+
 def _kick_user_sessions(uid: uuid.UUID) -> None:
     r = get_redis()
     if r is None:
@@ -120,6 +125,8 @@ async def set_role_permissions(role_id: str, req: SetRolePermissionsRequest):
         r = session.get(Role, rid)
         if not r or r.is_deleted:
             raise HTTPException(status_code=404, detail="Role not found")
+        if _is_protected_role(r):
+            raise HTTPException(status_code=400, detail="管理员角色不可修改权限")
         session.exec(delete(RolePermission).where(RolePermission.role_id == rid))
         for pid in pids:
             session.add(RolePermission(role_id=rid, permission_id=pid))
@@ -140,7 +147,7 @@ async def delete_role(role_id: str, user=Depends(require_permission("rbac:manage
         r = session.get(Role, rid)
         if not r or r.is_deleted:
             raise HTTPException(status_code=404, detail="Role not found")
-        if (r.code or "").strip().lower() == "admin":
+        if _is_protected_role(r):
             raise HTTPException(status_code=400, detail="admin 角色不可删除")
         used = session.exec(select(UserRole.user_id).where(UserRole.role_id == rid).limit(1)).first()
         if used:
@@ -216,6 +223,20 @@ async def update_user(user_id: str, req: UpdateUserRequest):
         u = session.get(User, uid)
         if not u or u.is_deleted:
             raise HTTPException(status_code=404, detail="User not found")
+        if req.is_active is not None and not bool(req.is_active):
+            if (u.username or "").strip().lower() == "admin":
+                raise HTTPException(status_code=400, detail="admin 账号不可禁用")
+            admin_role = session.exec(
+                select(Role.id)
+                .select_from(UserRole)
+                .join(Role, Role.id == UserRole.role_id)
+                .where(UserRole.user_id == uid)
+                .where(Role.is_deleted == False)
+                .where((Role.code == "admin") | (Role.name == "管理员"))
+                .limit(1)
+            ).first()
+            if admin_role:
+                raise HTTPException(status_code=400, detail="管理员账号不可禁用")
         if req.display_name is not None:
             u.display_name = req.display_name
         if req.is_active is not None:

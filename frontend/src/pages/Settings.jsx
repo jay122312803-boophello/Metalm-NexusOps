@@ -6,6 +6,7 @@ import Select from '../components/Select.jsx'
 import Tooltip from '../components/Tooltip.jsx'
 import Can from '../components/Can.jsx'
 import { api } from '../services/api.js'
+import { toast } from '../services/toast.js'
 import { useAuth } from '../contexts/AuthContext.jsx'
 
 export default function Settings({ initialTab }) {
@@ -20,6 +21,21 @@ export default function Settings({ initialTab }) {
   const [drawerType, setDrawerType] = useState(null)
   const auth = useAuth()
   const currentUserId = auth?.user?.id ? String(auth.user.id) : ''
+  const isProtectedRole = (r) => {
+    const code = String(r?.code || '').trim().toLowerCase()
+    const name = String(r?.name || '').trim()
+    return code === 'admin' || name === '管理员'
+  }
+  const isProtectedUser = (u) => {
+    const un = String(u?.username || '').trim().toLowerCase()
+    if (un === 'admin') return true
+    const ids = Array.isArray(u?.role_ids) ? u.role_ids : []
+    return ids.some((rid) => {
+      const r = roleById?.[rid]
+      if (!r) return false
+      return String(r.code || '').trim().toLowerCase() === 'admin' || String(r.name || '').trim() === '管理员'
+    })
+  }
   const [activeTab, setActiveTab] = useState(() => {
     const direct = normalizeTab(initialTab)
     if (direct) return direct
@@ -772,6 +788,10 @@ export default function Settings({ initialTab }) {
                                 <button
                                   className="btn btn-ghost btn-sm"
                                   onClick={async () => {
+                                    if (isProtectedUser(u)) {
+                                      toast.error('管理员账号不允许禁用')
+                                      return
+                                    }
                                     await api.put(`/api/admin/users/${u.id}`, { is_active: !u.is_active })
                                     loadRbac()
                                   }}
@@ -867,15 +887,27 @@ export default function Settings({ initialTab }) {
                             <td style={{ color: 'var(--text-sub)' }}>{Array.isArray(r.permission_ids) ? r.permission_ids.length : 0}</td>
                             <td>
                               <Tooltip content="配置权限">
-                                <button className="btn btn-ghost btn-sm" onClick={() => setRbacPermsOpen(r)}>
+                                <button
+                                  className="btn btn-ghost btn-sm"
+                                  onClick={() => {
+                                    if (isProtectedRole(r)) {
+                                      toast.error('系统内置角色「管理员」不允许修改权限')
+                                      return
+                                    }
+                                    setRbacPermsOpen(r)
+                                  }}
+                                >
                                   <Icon name="sliders" />
                                 </button>
                               </Tooltip>
                               <Tooltip content="删除角色">
                                 <button
                                   className="btn btn-ghost btn-sm"
-                                  disabled={String(r.code || '').toLowerCase() === 'admin'}
                                   onClick={() => {
+                                    if (isProtectedRole(r)) {
+                                      toast.error('系统内置角色「管理员」不允许删除')
+                                      return
+                                    }
                                     setRbacDeleteError(null)
                                     setRbacDeleteTarget({ type: 'role', id: r.id, name: r.name || '角色', code: r.code })
                                   }}
