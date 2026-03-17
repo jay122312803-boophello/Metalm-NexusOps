@@ -73,6 +73,17 @@ export default function History({ onNavigate, initialPreset }) {
     return `${d.toLocaleDateString()} ${d.toLocaleTimeString()}`
   }
 
+  const fmtTsCompact = (v) => {
+    const t = v ? Date.parse(v) : NaN
+    if (!Number.isFinite(t)) return '-'
+    const d = new Date(t)
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const dd = String(d.getDate()).padStart(2, '0')
+    const hh = String(d.getHours()).padStart(2, '0')
+    const mi = String(d.getMinutes()).padStart(2, '0')
+    return `${mm}/${dd} ${hh}:${mi}`
+  }
+
   const filteredHistory = history.filter((h) => {
     const q = (query || '').trim().toLowerCase()
     if (!q) return true
@@ -107,7 +118,6 @@ export default function History({ onNavigate, initialPreset }) {
           <div className="action-right">
             <Select
               className="action-select"
-              style={{ width: 180 }}
               value={selectedServerId}
               onChange={(v) => setSelectedServerId(v)}
               align="right"
@@ -115,7 +125,6 @@ export default function History({ onNavigate, initialPreset }) {
             />
             <Select
               className="action-select"
-              style={{ width: 180 }}
               value={selectedStatus}
               onChange={(v) => setSelectedStatus(v)}
               align="right"
@@ -126,15 +135,16 @@ export default function History({ onNavigate, initialPreset }) {
 
         <div className="panel-body">
           <div className="card">
-            <table className="repo-table" style={{ width: '100%' }}>
+            <div className="table-scroll">
+              <table className="repo-table history-table" style={{ width: '100%' }}>
           <thead>
             <tr>
-              <th style={{ width: 60 }}>状态</th>
-              <th style={{ width: 320 }}>任务说明</th>
-              <th style={{ width: 220 }}>CI 信息</th>
-              <th>变量参数</th>
-              <th style={{ width: 190 }}>触发时间</th>
-              <th style={{ width: 170 }}>操作</th>
+              <th className="history-col-status">状态</th>
+              <th className="history-col-task">任务说明</th>
+              <th className="history-col-ci">CI 信息</th>
+              <th className="history-col-vars">变量参数</th>
+              <th className="history-col-time">触发时间</th>
+              <th className="history-col-actions">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -155,18 +165,22 @@ export default function History({ onNavigate, initialPreset }) {
                   style={{ cursor: 'pointer' }}
                   onClick={() => (onNavigate ? onNavigate('detail', h.deployment_id, { historyId: h.id }) : null)}
                 >
-                  <td>{getStatusIcon(h.status)}</td>
-                  <td>
+                  <td className="history-col-status">{getStatusIcon(h.status)}</td>
+                  <td className="history-col-task">
                     <div style={{ fontWeight: 500 }}>{`Deploy ${rName}`}</div>
                     <div style={{ fontSize: 12, color: 'var(--text-sub)' }}>{`To: ${sName}`}</div>
                   </td>
                   <td>
-                    <div>{pipelineText}</div>
-                    {h.web_url ? (
-                      <a href={h.web_url} target="_blank" style={{ fontSize: 12, color: 'var(--info)' }}>
-                        View in GitLab
-                      </a>
-                    ) : null}
+                    <div className="history-ci">
+                      <span className="history-ci-pill">{pipelineText.replace('Pipeline ', '')}</span>
+                      {h.web_url ? (
+                        <Tooltip content="在 GitLab 打开">
+                          <a className="history-ci-link" href={h.web_url} target="_blank" onClick={(ev) => ev.stopPropagation()}>
+                            <Icon name="arrow-up-right-from-square" />
+                          </a>
+                        </Tooltip>
+                      ) : null}
+                    </div>
                   </td>
                   <td>
                     {!h.variables ? (
@@ -200,51 +214,62 @@ export default function History({ onNavigate, initialPreset }) {
                       </div>
                     )}
                   </td>
-                  <td className="history-time">
-                    <Tooltip content={h.created_at ? new Date(h.created_at).toLocaleString() : ''}>{fmtTs(h.created_at)}</Tooltip>
+                  <td className="history-time history-col-time">
+                    <Tooltip content={h.created_at ? new Date(h.created_at).toLocaleString() : ''}>
+                      <span className="history-time-pill">{fmtTsCompact(h.created_at)}</span>
+                    </Tooltip>
                   </td>
-                  <td>
-                    <div className="history-actions">
-                      <button
-                        className="btn btn-primary btn-action"
-                        onClick={(ev) => {
-                          ev.stopPropagation()
-                          onNavigate ? onNavigate('detail', h.deployment_id, { historyId: h.id }) : null
-                        }}
-                      >
-                        <Icon name="circle-info" /> 查看详情
-                      </button>
-                      <Can perm="deploy:manage">
+                  <td className="history-col-actions">
+                    <div className="history-actions" style={{ justifyContent: 'center' }}>
+                      <Tooltip content="查看详情">
                         <button
-                          className="btn btn-primary btn-action"
-                          onClick={async (ev) => {
-                            ev.stopPropagation()
-                            setRedeployError(null)
-                            setRedeployTarget({
-                              history_id: h.id,
-                              deployment_id: h.deployment_id,
-                              deployment_name: h.deployment_name,
-                              server_name: h.server_snapshot?.name,
-                              repo_name: h.repo_snapshot?.name,
-                              ref: h.ref,
-                              created_at: h.created_at
-                            })
-                          }}
-                        >
-                          <Icon name="rocket" /> 重新部署
-                        </button>
-                      </Can>
-                      <Can perm="audit:manage">
-                        <button
-                          className="btn btn-danger btn-action"
+                          className="icon-btn history-action-btn primary"
+                          type="button"
                           onClick={(ev) => {
                             ev.stopPropagation()
-                            setDeleteError(null)
-                            setDeleteTarget({ id: h.id, deployment_id: h.deployment_id, status: h.status, created_at: h.created_at })
+                            onNavigate ? onNavigate('detail', h.deployment_id, { historyId: h.id }) : null
                           }}
                         >
-                          <Icon name="trash" /> 删除
+                          <Icon name="circle-info" />
                         </button>
+                      </Tooltip>
+                      <Can perm="deploy:manage">
+                        <Tooltip content="重新部署">
+                          <button
+                            className="icon-btn history-action-btn primary"
+                            type="button"
+                            onClick={async (ev) => {
+                              ev.stopPropagation()
+                              setRedeployError(null)
+                              setRedeployTarget({
+                                history_id: h.id,
+                                deployment_id: h.deployment_id,
+                                deployment_name: h.deployment_name,
+                                server_name: h.server_snapshot?.name,
+                                repo_name: h.repo_snapshot?.name,
+                                ref: h.ref,
+                                created_at: h.created_at
+                              })
+                            }}
+                          >
+                            <Icon name="rocket" />
+                          </button>
+                        </Tooltip>
+                      </Can>
+                      <Can perm="audit:manage">
+                        <Tooltip content="删除">
+                          <button
+                            className="icon-btn history-action-btn danger"
+                            type="button"
+                            onClick={(ev) => {
+                              ev.stopPropagation()
+                              setDeleteError(null)
+                              setDeleteTarget({ id: h.id, deployment_id: h.deployment_id, status: h.status, created_at: h.created_at })
+                            }}
+                          >
+                            <Icon name="trash" />
+                          </button>
+                        </Tooltip>
                       </Can>
                     </div>
                   </td>
@@ -259,7 +284,8 @@ export default function History({ onNavigate, initialPreset }) {
               </tr>
             ) : null}
           </tbody>
-            </table>
+              </table>
+            </div>
           </div>
         </div>
 
