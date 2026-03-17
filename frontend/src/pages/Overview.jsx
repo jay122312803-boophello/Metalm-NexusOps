@@ -153,18 +153,33 @@ const niceStep = (maxVal) => {
 }
 
 function TrendChart({ data, onNavigate }) {
-  const height = 220
-  const padLeft = 54
-  const padRight = 24
-  const padTop = 16
-  const padBottom = 44
-  const w = 1000
+  const [chartW, setChartW] = useState(0)
+  const compact = chartW > 0 && chartW < 620
+  const height = compact ? 190 : 220
+  const padLeft = compact ? 46 : 62
+  const padRight = 22
+  const padTop = compact ? 14 : 26
+  const padBottom = compact ? 28 : 44
+  const w = Math.max(360, chartW || 1000)
   const h = height
   const wrapRef = useRef(null)
   const tooltipRef = useRef(null)
   const hideTimerRef = useRef(null)
   const [hover, setHover] = useState(null)
   const [tipSize, setTipSize] = useState({ w: 0, h: 0 })
+
+  useEffect(() => {
+    const el = wrapRef.current
+    if (!el) return
+    const sync = () => {
+      const rect = el.getBoundingClientRect()
+      const next = Math.max(0, Math.round(rect.width || 0))
+      setChartW((p) => (p === next ? p : next))
+    }
+    sync()
+    window.addEventListener('resize', sync)
+    return () => window.removeEventListener('resize', sync)
+  }, [])
 
   const series = useMemo(() => {
     const arr = Array.isArray(data) ? data : []
@@ -210,7 +225,7 @@ function TrendChart({ data, onNavigate }) {
       sucArea: area(sucD, sucPts),
       failArea: area(failD, failPts)
     }
-  }, [data])
+  }, [data, h, padBottom, padLeft, padRight, padTop, w])
 
   const setHoverFromEvent = (ev, i) => {
     const el = wrapRef.current
@@ -265,10 +280,10 @@ function TrendChart({ data, onNavigate }) {
   }, [hover?.i, hover?.date])
 
   return (
-    <div className="card" style={{ padding: 18 }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
+    <div className="card" style={{ padding: compact ? 14 : 18 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: compact ? 6 : 10, gap: 10, flexWrap: 'wrap' }}>
         <div style={{ fontWeight: 800, color: 'var(--text-main)' }}>近 7 天部署趋势</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontSize: 12, color: 'var(--text-sub)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontSize: 12, color: 'var(--text-sub)', flexWrap: 'wrap' }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <span className="legend-dot" style={{ background: 'var(--success)' }} /> 成功
           </span>
@@ -325,8 +340,16 @@ function TrendChart({ data, onNavigate }) {
             </linearGradient>
           </defs>
 
-          <text x={padLeft} y={12} fontSize="16" fill="rgba(100,116,139,0.82)" fontWeight="650">
-            部署次数（次）
+          <text
+            x={padLeft}
+            y={compact ? 8 : 10}
+            fontSize={compact ? 12 : 13}
+            fill="rgba(100,116,139,0.82)"
+            fontWeight="800"
+            dominantBaseline="hanging"
+            style={{ letterSpacing: 0.2 }}
+          >
+            {compact ? '部署次数' : '部署次数（次）'}
           </text>
           {series.ticks.map((t) => (
             <g key={t}>
@@ -338,7 +361,16 @@ function TrendChart({ data, onNavigate }) {
                 stroke="rgba(148,163,184,0.18)"
                 strokeWidth="1"
               />
-              <text x={padLeft - 10} y={series.toY(t) + 4} textAnchor="end" fontSize="18" fill="rgba(148,163,184,0.92)">
+              <text
+                x={padLeft - (compact ? 8 : 10)}
+                y={series.toY(t)}
+                textAnchor="end"
+                dominantBaseline="middle"
+                fontSize={compact ? 11 : 12}
+                fill="rgba(100,116,139,0.78)"
+                fontWeight="800"
+                fontFamily="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+              >
                 {t}
               </text>
             </g>
@@ -368,6 +400,7 @@ function TrendChart({ data, onNavigate }) {
             const anchor = isFirst ? 'start' : isLast ? 'end' : 'middle'
             const dx = isFirst ? 6 : isLast ? -6 : 0
             const active = hover?.i === i
+            const showX = !compact || isFirst || isLast || i % 2 === 0
             return (
               <g key={p.date || i}>
                 <rect
@@ -408,9 +441,19 @@ function TrendChart({ data, onNavigate }) {
                 ) : null}
                 {active ? <circle cx={p.x} cy={p.y} r="9" fill="rgba(16,185,129,0.10)" /> : null}
                 {active && series.failMax > 0 ? <circle cx={series.failPts[i]?.x} cy={series.failPts[i]?.y} r="10" fill="rgba(239,68,68,0.10)" /> : null}
-                <text x={p.x + dx} y={h - 12} textAnchor={anchor} fontSize="18" fill="rgba(148,163,184,0.92)">
-                  {dayLabel(p.date)}
-                </text>
+                {showX ? (
+                  <text
+                    x={p.x + dx}
+                    y={h - (compact ? 8 : 14)}
+                    textAnchor={anchor}
+                    fontSize={compact ? 11 : 12}
+                    fill="rgba(100,116,139,0.78)"
+                    fontWeight="800"
+                    fontFamily="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+                  >
+                    {dayLabel(p.date)}
+                  </text>
+                ) : null}
               </g>
             )
           })}

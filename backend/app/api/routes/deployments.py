@@ -10,10 +10,13 @@ from sqlmodel import select
 
 from ...db.models import Deployment, DeploymentHistory, Repo, Server, TaskConfig
 from ...db.session import run_db
-from ...schemas import CreateDeploymentRequest, TriggerDeploymentRequest, UpdateDeploymentRequest
+from ...schemas import CreateDeploymentRequest, FeishuTestRequest, TriggerDeploymentRequest, UpdateDeploymentRequest
 from ...auth.deps import require_permission
 from ...auth.redis_client import get_redis
 from ...auth.security import create_access_token
+from ...notify.feishu import send_feishu_text
+from ...notify.history_status import update_history_status
+from ...notify.deploy_notify import mark_notified, mark_notify_error
 
 router = APIRouter()
 
@@ -60,6 +63,11 @@ async def list_deployments(user=Depends(require_permission("deploy:manage"))):
                 "input_dir": d.input_dir,
                 "dest_dir": d.dest_dir,
                 "deploy_script": d.deploy_script,
+                "feishu_webhook_url": getattr(d, "feishu_webhook_url", None),
+                "feishu_secret": None,
+                "has_feishu_secret": bool((getattr(d, "feishu_secret", None) or "").strip()),
+                "notify_on_success": bool(getattr(d, "notify_on_success", True)),
+                "notify_on_failed": bool(getattr(d, "notify_on_failed", False)),
                 "created_at": d.created_at.isoformat() if d.created_at else None,
             }
             for d in rows
@@ -95,6 +103,10 @@ async def create_deployment(req: CreateDeploymentRequest, user=Depends(require_p
             input_dir=(data.get("input_dir") or None),
             dest_dir=dest_dir,
             deploy_script=(data.get("deploy_script") or None),
+            feishu_webhook_url=(str(data.get("feishu_webhook_url") or "").strip() or None),
+            feishu_secret=(str(data.get("feishu_secret") or "").strip() or None),
+            notify_on_success=(True if data.get("notify_on_success") is None else bool(data.get("notify_on_success"))),
+            notify_on_failed=(False if data.get("notify_on_failed") is None else bool(data.get("notify_on_failed"))),
             created_by_user_id=user.id,
         )
         session.add(d)
@@ -108,6 +120,11 @@ async def create_deployment(req: CreateDeploymentRequest, user=Depends(require_p
             "input_dir": d.input_dir,
             "dest_dir": d.dest_dir,
             "deploy_script": d.deploy_script,
+            "feishu_webhook_url": getattr(d, "feishu_webhook_url", None),
+            "feishu_secret": None,
+            "has_feishu_secret": bool((getattr(d, "feishu_secret", None) or "").strip()),
+            "notify_on_success": bool(getattr(d, "notify_on_success", True)),
+            "notify_on_failed": bool(getattr(d, "notify_on_failed", False)),
             "created_at": d.created_at.isoformat() if d.created_at else None,
         }
 
@@ -128,6 +145,11 @@ async def get_deployment(dep_id: str, user=Depends(require_permission("deploy:ma
             "input_dir": d.input_dir,
             "dest_dir": d.dest_dir,
             "deploy_script": d.deploy_script,
+            "feishu_webhook_url": getattr(d, "feishu_webhook_url", None),
+            "feishu_secret": None,
+            "has_feishu_secret": bool((getattr(d, "feishu_secret", None) or "").strip()),
+            "notify_on_success": bool(getattr(d, "notify_on_success", True)),
+            "notify_on_failed": bool(getattr(d, "notify_on_failed", False)),
             "created_at": d.created_at.isoformat() if d.created_at else None,
         }
 
@@ -172,8 +194,11 @@ async def update_deployment(dep_id: str, req: UpdateDeploymentRequest, user=Depe
         effective_dest_dir = data["dest_dir"] if "dest_dir" in data else d.dest_dir
         data["dest_dir"] = _validate_dest_dir(effective_dest_dir, s.deploy_path)
 
+        if "feishu_secret" in data and data["feishu_secret"] is not None and str(data["feishu_secret"]).strip() == "":
+            data.pop("feishu_secret", None)
+
         for k, v in data.items():
-            if k in {"input_dir", "dest_dir", "deploy_script"} and v is not None and str(v).strip() == "":
+            if k in {"input_dir", "dest_dir", "deploy_script", "feishu_webhook_url", "feishu_secret"} and v is not None and str(v).strip() == "":
                 v = None
             setattr(d, k, v)
 
@@ -368,6 +393,16 @@ async def trigger_deployment(dep_id: str, request: Request, req: TriggerDeployme
                 pass
 
         variables_for_history = {k: v for k, v in variables.items() if k not in {"SERVER_SSH_KEY", "NEXUSOPS_GIT_HTTP_TOKEN", "NEXUSOPS_API_TOKEN"}}
+        desc = payload.get("deploy_description")
+        desc = (str(desc).strip() if desc is not None else "")[:2000]
+        send_flag = payload.get("send_notification_flag")
+        if send_flag is None:
+            send_flag = bool((getattr(d, "feishu_webhook_url", None) or "").strip())
+        variables_for_history["__deploy_description"] = desc
+        variables_for_history["__send_notification_flag"] = bool(send_flag)
+        triggered_by = (getattr(user, "display_name", None) or getattr(user, "username", None) or "").strip()
+        if triggered_by:
+            variables_for_history["__triggered_by"] = triggered_by
         h.variables = variables_for_history
         session.add(h)
         session.commit()
@@ -421,14 +456,28 @@ async def trigger_deployment(dep_id: str, request: Request, req: TriggerDeployme
                 body = resp.json() if resp is not None else None
             except Exception:
                 body = (resp.text[:2000] if resp is not None else None)
-            h.status = "failed"
-            session.add(h)
+            notify_payload = update_history_status(session, h.id, "failed", h.web_url)
             session.commit()
+            if notify_payload:
+                url2, secret2, text2 = notify_payload
+                try:
+                    send_feishu_text(url2, text2, secret=secret2)
+                    mark_notified(session, h.id)
+                except Exception as e:
+                    mark_notify_error(session, h.id, f"{type(e).__name__}: {str(e)}")
+                session.commit()
             raise HTTPException(status_code=status_code, detail={"gitlab_error": body})
         except requests.RequestException as e:
-            h.status = "failed"
-            session.add(h)
+            notify_payload = update_history_status(session, h.id, "failed", h.web_url)
             session.commit()
+            if notify_payload:
+                url2, secret2, text2 = notify_payload
+                try:
+                    send_feishu_text(url2, text2, secret=secret2)
+                    mark_notified(session, h.id)
+                except Exception as e2:
+                    mark_notify_error(session, h.id, f"{type(e2).__name__}: {str(e2)}")
+                session.commit()
             raise HTTPException(status_code=502, detail=str(e))
 
         h.pipeline_id = data.get("id")
@@ -440,5 +489,35 @@ async def trigger_deployment(dep_id: str, request: Request, req: TriggerDeployme
         session.refresh(h)
 
         return {"ok": True, "pipeline": data, "history_id": str(h.id), "config_files": config_files}
+
+    return await run_db(_work)
+
+
+@router.post("/feishu/test")
+async def test_feishu(req: FeishuTestRequest, user=Depends(require_permission("deploy:manage"))):
+    payload = req.model_dump()
+
+    def _work(session):
+        did = (payload.get("deployment_id") or "").strip() or None
+        d = None
+        if did:
+            try:
+                d = session.get(Deployment, uuid.UUID(did))
+            except Exception:
+                d = None
+            if not d or d.created_by_user_id != user.id:
+                raise HTTPException(status_code=404, detail="Deployment not found")
+
+        url = (payload.get("webhook_url") or "").strip() or (getattr(d, "feishu_webhook_url", None) or "").strip()
+        secret = (payload.get("secret") or "").strip() or (getattr(d, "feishu_secret", None) or "").strip()
+        if not url:
+            raise HTTPException(status_code=400, detail="请先填写飞书机器人 URL")
+
+        msg = f"[✅ 测试] NexusOps 飞书通知已连通\n账号：{(getattr(user, 'display_name', None) or getattr(user, 'username', None) or '').strip() or '-'}"
+        try:
+            send_feishu_text(url, msg, secret=secret or None)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        return {"ok": True}
 
     return await run_db(_work)

@@ -37,6 +37,11 @@ class Deployment(BaseModel):
     input_dir: Optional[str] = None
     dest_dir: Optional[str] = None
     deploy_script: Optional[str] = None
+    feishu_webhook_url: Optional[str] = None
+    feishu_secret: Optional[str] = None
+    has_feishu_secret: Optional[bool] = None
+    notify_on_success: Optional[bool] = True
+    notify_on_failed: Optional[bool] = False
     created_at: Optional[str] = None
 
 
@@ -101,6 +106,10 @@ class CreateDeploymentRequest(BaseModel):
     input_dir: Optional[str] = None
     dest_dir: Optional[str] = None
     deploy_script: Optional[str] = None
+    feishu_webhook_url: Optional[str] = None
+    feishu_secret: Optional[str] = None
+    notify_on_success: Optional[bool] = True
+    notify_on_failed: Optional[bool] = False
 
 
 class UpdateDeploymentRequest(BaseModel):
@@ -110,7 +119,19 @@ class UpdateDeploymentRequest(BaseModel):
     input_dir: Optional[str] = None
     dest_dir: Optional[str] = None
     deploy_script: Optional[str] = None
+    feishu_webhook_url: Optional[str] = None
+    feishu_secret: Optional[str] = None
+    notify_on_success: Optional[bool] = None
+    notify_on_failed: Optional[bool] = None
 
 
 class TriggerDeploymentRequest(BaseModel):
     variables: Optional[Dict[str, Any]] = None
+    deploy_description: Optional[str] = None
+    send_notification_flag: Optional[bool] = None
+
+
+class FeishuTestRequest(BaseModel):
+    deployment_id: Optional[str] = None
+    webhook_url: Optional[str] = None
+    secret: Optional[str] = None

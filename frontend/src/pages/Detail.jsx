@@ -29,6 +29,8 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
   const [draftAction, setDraftAction] = useState(null)
   const [terminalFull, setTerminalFull] = useState(false)
   const [triggerOpen, setTriggerOpen] = useState(false)
+  const [triggerDesc, setTriggerDesc] = useState('')
+  const [triggerSendNotify, setTriggerSendNotify] = useState(false)
   const [historyNavOpen, setHistoryNavOpen] = useState(false)
   const [discardOpen, setDiscardOpen] = useState(false)
   const [pendingTrigger, setPendingTrigger] = useState(false)
@@ -457,7 +459,10 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
     setLogs(['>> Initializing deployment sequence...', '>> Connecting to GitLab API...'])
     setPipelineStatus('pending')
     try {
-      const res = await api.post(`/api/deployments/${taskId}/trigger`, {})
+      const res = await api.post(`/api/deployments/${taskId}/trigger`, {
+        deploy_description: triggerDesc,
+        send_notification_flag: triggerSendNotify
+      })
       if (res.ok) {
         addLog(`>> Trigger successful! Pipeline ID: ${res.pipeline?.id}`)
         addLog(`>> Web URL: ${res.pipeline?.web_url}`)
@@ -793,6 +798,9 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
                     setPendingTrigger(true)
                     setDiscardOpen(true)
                   } else {
+                    const hasWebhook = !!String(task?.feishu_webhook_url || '').trim()
+                    setTriggerDesc('')
+                    setTriggerSendNotify(hasWebhook)
                     setTriggerOpen(true)
                   }
                 }}
@@ -1352,6 +1360,30 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
               <div style={{ color: 'var(--text-sub)' }}>地址</div>
               <div style={{ fontFamily: 'monospace' }}>{server?.address || '-'}</div>
             </div>
+            <div style={{ height: 1, background: 'var(--border)', margin: '12px 0 6px 0' }} />
+            <div style={{ fontWeight: 800, color: 'var(--text-main)' }}>📝 本次部署描述 (可选)</div>
+            <textarea
+              className="form-input"
+              style={{ minHeight: 96, resize: 'vertical' }}
+              placeholder="简要描述本次部署的内容，将随飞书通知发送..."
+              value={triggerDesc}
+              onChange={(e) => setTriggerDesc(e.target.value)}
+            />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                <div style={{ fontWeight: 800, color: 'var(--text-main)' }}>发送飞书通知</div>
+                <div style={{ fontSize: 12, color: 'var(--text-sub)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {String(task?.feishu_webhook_url || '').trim() ? '按实例配置的时机发送（可临时关闭）' : '未配置机器人 URL'}
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={triggerSendNotify}
+                disabled={!String(task?.feishu_webhook_url || '').trim()}
+                onChange={(e) => setTriggerSendNotify(e.target.checked)}
+                style={{ width: 18, height: 18 }}
+              />
+            </div>
           </div>
         </Modal>
       ) : null}
@@ -1422,7 +1454,10 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
                 setDiscardOpen(false)
                 if (pendingTrigger) {
                   setPendingTrigger(false)
-                  await handleTrigger()
+                  const hasWebhook = !!String(task?.feishu_webhook_url || '').trim()
+                  setTriggerDesc('')
+                  setTriggerSendNotify(hasWebhook)
+                  setTriggerOpen(true)
                 }
               }}
               disabled={deploying}

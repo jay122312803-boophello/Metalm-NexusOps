@@ -11,6 +11,7 @@ import { toast } from '../services/toast.js'
 const monitorStorageKey = 'nexusops_monitor_summary_v1'
 
 export default function Dashboard({ onNavigate }) {
+  const FEISHU_SECRET_MASK = '••••••••'
   const [tasks, setTasks] = useState([])
   const [servers, setServers] = useState([])
   const [repos, setRepos] = useState([])
@@ -18,6 +19,7 @@ export default function Dashboard({ onNavigate }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [newTask, setNewTask] = useState({})
   const [editingTaskId, setEditingTaskId] = useState(null)
+  const [showFeishuSecret, setShowFeishuSecret] = useState(false)
   const [openMenuId, setOpenMenuId] = useState(null)
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -207,13 +209,20 @@ export default function Dashboard({ onNavigate }) {
       toast.error(destCheck.message || '服务器目标路径不合法')
       return
     }
-    const res = editingTaskId ? await api.put(`/api/deployments/${editingTaskId}`, newTask) : await api.post('/api/deployments', newTask)
+    const payload = { ...newTask }
+    const masked = payload.feishu_secret === FEISHU_SECRET_MASK
+    if (editingTaskId && payload.has_feishu_secret && (masked || String(payload.feishu_secret || '').trim() === '')) {
+      delete payload.feishu_secret
+    }
+    delete payload.has_feishu_secret
+    const res = editingTaskId ? await api.put(`/api/deployments/${editingTaskId}`, payload) : await api.post('/api/deployments', payload)
     if (!(res?.ok || res?.id)) {
       const d = res?.detail
       toast.error(typeof d === 'string' ? d : '保存失败')
       return
     }
     setDrawerOpen(false)
+    setShowFeishuSecret(false)
     setNewTask({})
     setEditingTaskId(null)
     load()
@@ -221,7 +230,8 @@ export default function Dashboard({ onNavigate }) {
 
   const openCreate = () => {
     setEditingTaskId(null)
-    setNewTask({})
+    setNewTask({ notify_on_success: true, notify_on_failed: false })
+    setShowFeishuSecret(false)
     setDrawerOpen(true)
   }
 
@@ -233,8 +243,14 @@ export default function Dashboard({ onNavigate }) {
       repo_id: t.repo_id,
       input_dir: t.input_dir || './',
       dest_dir: t.dest_dir || '',
-      deploy_script: t.deploy_script || ''
+      deploy_script: t.deploy_script || '',
+      feishu_webhook_url: t.feishu_webhook_url || '',
+      feishu_secret: t.has_feishu_secret ? FEISHU_SECRET_MASK : '',
+      has_feishu_secret: !!t.has_feishu_secret,
+      notify_on_success: t.notify_on_success !== false,
+      notify_on_failed: !!t.notify_on_failed
     })
+    setShowFeishuSecret(false)
     setDrawerOpen(true)
   }
 
@@ -539,119 +555,203 @@ export default function Dashboard({ onNavigate }) {
             </button>
           ]}
         >
-          <div className="form-item">
-            <label className="form-label">
-              实例名称 <span className="req-star">*</span>
-            </label>
-            <input
-              className="form-input"
-              placeholder="Nexus 智能体部署"
-              value={newTask.name || ''}
-              onChange={(e) => setNewTask({ ...newTask, name: e.target.value })}
-            />
-          </div>
-          <div className="form-item">
-            <label className="form-label">
-              选择目标服务器 <span className="req-star">*</span>
-            </label>
-            <Select
-              className="form-input"
-              value={newTask.server_id || ''}
-              placeholder="请选择..."
-              onChange={(v) => setNewTask({ ...newTask, server_id: v })}
-              options={[
-                { value: '', label: '请选择...' },
-                ...servers.map((s) => ({ value: s.id, label: `${s.name} (${s.address})` }))
-              ]}
-              popWidth={360}
-            />
-          </div>
-          <div className="form-item">
-            <label className="form-label">
-              选择来源仓库 <span className="req-star">*</span>
-            </label>
-            <Select
-              className="form-input"
-              value={newTask.repo_id || ''}
-              placeholder="请选择..."
-              onChange={(v) => setNewTask({ ...newTask, repo_id: v })}
-              options={[
-                { value: '', label: '请选择...' },
-                ...repos.map((r) => ({ value: r.id, label: `${r.name} [${r.branch || 'master'}]` }))
-              ]}
-              popWidth={360}
-            />
+          <div className="instance-form-section">
+            <div className="instance-form-section-title">基础信息</div>
+            <div className="form-item">
+              <label className="form-label">
+                实例名称 <span className="req-star">*</span>
+              </label>
+              <input
+                className="form-input"
+                placeholder="Nexus 智能体部署"
+                value={newTask.name || ''}
+                onChange={(e) => setNewTask({ ...newTask, name: e.target.value })}
+              />
+            </div>
+            <div className="form-grid-2">
+              <div className="form-item" style={{ marginBottom: 0 }}>
+                <label className="form-label">
+                  目标服务器 <span className="req-star">*</span>
+                </label>
+                <Select
+                  className="form-input"
+                  value={newTask.server_id || ''}
+                  placeholder="请选择..."
+                  onChange={(v) => setNewTask({ ...newTask, server_id: v })}
+                  options={[
+                    { value: '', label: '请选择...' },
+                    ...servers.map((s) => ({ value: s.id, label: `${s.name} (${s.address})` }))
+                  ]}
+                  popWidth={360}
+                />
+              </div>
+              <div className="form-item" style={{ marginBottom: 0 }}>
+                <label className="form-label">
+                  来源仓库 <span className="req-star">*</span>
+                </label>
+                <Select
+                  className="form-input"
+                  value={newTask.repo_id || ''}
+                  placeholder="请选择..."
+                  onChange={(v) => setNewTask({ ...newTask, repo_id: v })}
+                  options={[
+                    { value: '', label: '请选择...' },
+                    ...repos.map((r) => ({ value: r.id, label: `${r.name} [${r.branch || 'master'}]` }))
+                  ]}
+                  popWidth={360}
+                />
+              </div>
+            </div>
           </div>
 
-          <div className="form-item">
-            <label className="form-label">
-              同步源目录 <span className="req-star">*</span>
-            </label>
-            <input
-              className="form-input"
-              placeholder="./develop/backend_frontend/"
-              value={newTask.input_dir || ''}
-              onChange={(e) => setNewTask({ ...newTask, input_dir: e.target.value })}
-            />
+          <div className="instance-form-section">
+            <div className="instance-form-section-title">构建与部署</div>
+            <div className="form-item">
+              <label className="form-label">
+                同步源目录 <span className="req-star">*</span>
+              </label>
+              <input
+                className="form-input"
+                placeholder="./develop/backend_frontend/"
+                value={newTask.input_dir || ''}
+                onChange={(e) => setNewTask({ ...newTask, input_dir: e.target.value })}
+              />
+            </div>
+            <div className="form-item">
+              <label className="form-label">
+                服务器目标路径 <span className="req-star">*</span>
+              </label>
+              <input
+                className="form-input"
+                placeholder="/home/metalm/deploy/App_A/"
+                value={newTask.dest_dir || ''}
+                onChange={(e) => setNewTask({ ...newTask, dest_dir: e.target.value })}
+              />
+              {newTask.server_id ? (
+                (() => {
+                  const selectedServer = servers.find((s) => s.id === newTask.server_id) || null
+                  const check = validateDestDir(newTask.dest_dir, selectedServer?.deploy_path || '')
+                  if (check.ok) {
+                    return (
+                      <div className="form-hint">
+                        需位于服务器部署路径下：<span className="mono">{check.base}</span>
+                      </div>
+                    )
+                  }
+                  return <div className="form-alert">{check.message}</div>
+                })()
+              ) : (
+                <div className="form-hint">先选择目标服务器以获取可用路径范围</div>
+              )}
+            </div>
+            <div className="form-item" style={{ marginBottom: 0 }}>
+              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                自定义执行脚本
+                <Tooltip content="部署时在目标服务器执行，用于启动/重启服务">
+                  <button type="button" className="icon-btn" onClick={() => setScriptHelpOpen(true)}>
+                    <Icon name="circle-question" />
+                  </button>
+                </Tooltip>
+              </label>
+              <textarea
+                className="form-input code-textarea"
+                placeholder={'chmod +x down.sh up.sh\nsh down.sh\ndocker-compose up -d'}
+                value={newTask.deploy_script || ''}
+                onChange={(e) => setNewTask({ ...newTask, deploy_script: e.target.value })}
+              />
+            </div>
           </div>
-          <div className="form-item">
-            <label className="form-label">
-              服务器目标路径 <span className="req-star">*</span>
-            </label>
-            <input
-              className="form-input"
-              placeholder="/home/metalm/deploy/App_A/"
-              value={newTask.dest_dir || ''}
-              onChange={(e) => setNewTask({ ...newTask, dest_dir: e.target.value })}
-            />
-            {newTask.server_id ? (
-              (() => {
-                const selectedServer = servers.find((s) => s.id === newTask.server_id) || null
-                const check = validateDestDir(newTask.dest_dir, selectedServer?.deploy_path || '')
-                if (check.ok) {
-                  return (
-                    <div style={{ marginTop: 8, color: 'var(--text-sub)', fontSize: 12 }}>
-                      需位于服务器部署路径下：<span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>{check.base}</span>
-                    </div>
-                  )
-                }
-                return (
-                  <div
-                    style={{
-                      marginTop: 10,
-                      padding: '10px 12px',
-                      borderRadius: 10,
-                      border: '1px solid rgba(239,68,68,0.22)',
-                      background: 'rgba(239,68,68,0.06)',
-                      color: '#991b1b',
-                      fontSize: 12,
-                      lineHeight: 1.5
-                    }}
-                  >
-                    {check.message}
-                  </div>
-                )
-              })()
-            ) : (
-              <div style={{ marginTop: 8, color: 'var(--text-sub)', fontSize: 12 }}>先选择目标服务器以获取可用路径范围</div>
-            )}
-          </div>
-          <div className="form-item">
-            <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              自定义执行脚本
-              <Tooltip content="部署时在目标服务器执行，用于启动/重启服务">
-                <button type="button" className="icon-btn" onClick={() => setScriptHelpOpen(true)}>
-                  <Icon name="circle-question" />
+
+          <div className="instance-form-section">
+            <div className="instance-form-section-head">
+              <div className="instance-form-section-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Icon name="bullhorn" /> 告警与通知
+              </div>
+              <Tooltip content="发送一条测试消息到飞书">
+                <button
+                  type="button"
+                  className="icon-btn"
+                  disabled={!String(newTask.feishu_webhook_url || '').trim() && !editingTaskId}
+                  onClick={async () => {
+                    try {
+                      const res = await api.post('/api/deployments/feishu/test', {
+                        deployment_id: editingTaskId || null,
+                        webhook_url: newTask.feishu_webhook_url || null,
+                        secret: String(newTask.feishu_secret || '').trim() === FEISHU_SECRET_MASK ? null : (newTask.feishu_secret || null)
+                      })
+                      if (res?.ok) toast.success('飞书通知测试成功')
+                      else toast.error(typeof res?.detail === 'string' ? res.detail : '测试失败')
+                    } catch (e) {
+                      toast.error(String(e?.message || '测试失败'))
+                    }
+                  }}
+                >
+                  <Icon name="paper-plane" />
                 </button>
               </Tooltip>
-            </label>
-            <textarea
-              className="form-input"
-              style={{ minHeight: 140, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}
-              placeholder={'chmod +x down.sh up.sh\nsh down.sh\ndocker-compose up -d'}
-              value={newTask.deploy_script || ''}
-              onChange={(e) => setNewTask({ ...newTask, deploy_script: e.target.value })}
-            />
+            </div>
+
+            <div className="form-item">
+              <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                飞书机器人 URL
+                <Tooltip content="留空则不发送通知">
+                  <span className="help-dot">?</span>
+                </Tooltip>
+              </label>
+              <input
+                className="form-input"
+                placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..."
+                value={newTask.feishu_webhook_url || ''}
+                onChange={(e) => setNewTask({ ...newTask, feishu_webhook_url: e.target.value })}
+              />
+            </div>
+
+            <div className="form-grid-2">
+              <div className="form-item" style={{ marginBottom: 0 }}>
+                <label className="form-label">加签密钥 (Secret)</label>
+                <div className="input-wrap">
+                  <input
+                    className="form-input"
+                    type={showFeishuSecret ? 'text' : 'password'}
+                    placeholder="选填"
+                    value={newTask.feishu_secret || ''}
+                    onFocus={() => {
+                      if (newTask.has_feishu_secret && String(newTask.feishu_secret || '') === FEISHU_SECRET_MASK) {
+                        setNewTask({ ...newTask, feishu_secret: '' })
+                      }
+                    }}
+                    onChange={(e) => setNewTask({ ...newTask, feishu_secret: e.target.value, has_feishu_secret: true })}
+                  />
+                  <Tooltip content={showFeishuSecret ? '隐藏' : '显示'}>
+                    <div className="input-toggle" onClick={() => setShowFeishuSecret((v) => !v)}>
+                      <Icon name={showFeishuSecret ? 'eye-slash' : 'eye'} />
+                    </div>
+                  </Tooltip>
+                </div>
+              </div>
+              <div className="form-item" style={{ marginBottom: 0 }}>
+                <label className="form-label">默认发送时机</label>
+                <div className="inline-checks">
+                  <label className="inline-check">
+                    <input
+                      type="checkbox"
+                      checked={newTask.notify_on_success !== false}
+                      onChange={(e) => setNewTask({ ...newTask, notify_on_success: e.target.checked })}
+                    />
+                    成功
+                  </label>
+                  <label className="inline-check">
+                    <input
+                      type="checkbox"
+                      checked={!!newTask.notify_on_failed}
+                      onChange={(e) => setNewTask({ ...newTask, notify_on_failed: e.target.checked })}
+                    />
+                    失败
+                  </label>
+                </div>
+              </div>
+            </div>
+            {newTask.has_feishu_secret ? <div className="form-hint" style={{ marginTop: 10 }}>密钥已保存，留空不变；输入新值覆盖。</div> : null}
           </div>
         </Drawer>
       ) : null}

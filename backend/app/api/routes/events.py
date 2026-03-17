@@ -13,6 +13,9 @@ from ...auth.deps import require_permission
 from ...db.models import Deployment, DeploymentHistory, Repo, TaskConfig, TaskConfigSnapshot, TaskConfigSnapshotFile
 from ...db.session import run_db
 from .configs import ensure_snapshot, ensure_snapshot_if_success
+from ...notify.feishu import send_feishu_text
+from ...notify.history_status import update_history_status
+from ...notify.deploy_notify import mark_notified, mark_notify_error
 
 router = APIRouter()
 
@@ -354,10 +357,16 @@ async def history_events(history_id: str, user=Depends(require_permission("audit
                                     h = session.get(DeploymentHistory, hid)
                                     if not h:
                                         return
-                                    h.status = new_status
-                                    h.web_url = new_web_url
-                                    session.add(h)
+                                    notify_payload = update_history_status(session, hid, new_status, new_web_url)
                                     session.commit()
+                                    if notify_payload:
+                                        url2, secret2, text2 = notify_payload
+                                        try:
+                                            send_feishu_text(url2, text2, secret=secret2)
+                                            mark_notified(session, hid)
+                                        except Exception as e:
+                                            mark_notify_error(session, hid, f"{type(e).__name__}: {str(e)}")
+                                        session.commit()
 
                                 await run_db(_update_work)
                     except Exception:

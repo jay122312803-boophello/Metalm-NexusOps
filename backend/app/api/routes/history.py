@@ -10,6 +10,9 @@ from ...db.models import Deployment, DeploymentHistory, Repo, Server
 from ...db.session import run_db
 from ...auth.deps import require_permission
 from .configs import ensure_snapshot_if_success
+from ...notify.feishu import send_feishu_text
+from ...notify.history_status import update_history_status
+from ...notify.deploy_notify import mark_notified, mark_notify_error
 
 router = APIRouter()
 
@@ -76,10 +79,16 @@ async def get_history(
                 if new_status and new_status != old_status:
                     obj = session.get(DeploymentHistory, hid)
                     if obj:
-                        obj.status = new_status
-                        obj.web_url = new_web_url
-                        session.add(obj)
+                        notify_payload = update_history_status(session, obj.id, new_status, new_web_url)
                         session.commit()
+                        if notify_payload:
+                            url2, secret2, text2 = notify_payload
+                            try:
+                                send_feishu_text(url2, text2, secret=secret2)
+                                mark_notified(session, obj.id)
+                            except Exception as e:
+                                mark_notify_error(session, obj.id, f"{type(e).__name__}: {str(e)}")
+                            session.commit()
             except Exception:
                 continue
 
@@ -167,10 +176,16 @@ async def check_pipeline_status(history_id: str, user=Depends(require_permission
                     new_status = data.get("status")
                     new_web_url = data.get("web_url")
                     if new_status:
-                        h.status = new_status
-                        h.web_url = new_web_url
-                        session.add(h)
+                        notify_payload = update_history_status(session, h.id, new_status, new_web_url)
                         session.commit()
+                        if notify_payload:
+                            url2, secret2, text2 = notify_payload
+                            try:
+                                send_feishu_text(url2, text2, secret=secret2)
+                                mark_notified(session, h.id)
+                            except Exception as e:
+                                mark_notify_error(session, h.id, f"{type(e).__name__}: {str(e)}")
+                            session.commit()
                     return {"status": new_status or h.status, "pipeline": data}
             except Exception:
                 pass
