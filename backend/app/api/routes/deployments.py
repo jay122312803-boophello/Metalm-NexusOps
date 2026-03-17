@@ -349,8 +349,10 @@ async def trigger_deployment(dep_id: str, request: Request, req: TriggerDeployme
 
         variables["NEXUSOPS_HISTORY_ID"] = str(h.id)
         if api_base:
-            variables["NEXUSOPS_API_URL"] = api_base
-            variables["NEXUSOPS_API_BASE_URL"] = api_base
+            if "NEXUSOPS_API_URL" not in variables:
+                variables["NEXUSOPS_API_URL"] = api_base
+            if "NEXUSOPS_API_BASE_URL" not in variables:
+                variables["NEXUSOPS_API_BASE_URL"] = api_base
             if "NEXUSOPS_CONFIG_ZIP_URL" not in variables:
                 variables["NEXUSOPS_CONFIG_ZIP_URL"] = f"{api_base}/api/deployments/{d.id}/configs.zip"
 
