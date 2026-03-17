@@ -21,6 +21,8 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
   const [monitorLoading, setMonitorLoading] = useState(false)
   const [monitorError, setMonitorError] = useState(null)
   const [monitorGroups, setMonitorGroups] = useState([])
+  const [monitorDestDir, setMonitorDestDir] = useState('')
+  const [monitorOpenByPath, setMonitorOpenByPath] = useState({})
   const [monitorReload, setMonitorReload] = useState(0)
   const [monitorEnabled, setMonitorEnabled] = useState(false)
   const [showDraftTip, setShowDraftTip] = useState(true)
@@ -52,6 +54,139 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
 
   const addLog = (msg) => {
     setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`])
+  }
+
+  const ellipsis = (s, max) => {
+    const v = String(s || '')
+    if (!v) return '-'
+    if (v.length <= max) return v
+    return `${v.slice(0, max)}…`
+  }
+
+  const shortImage = (img) => {
+    const s = String(img || '').trim()
+    if (!s) return ''
+    if (!s.includes('/')) return s
+    const parts = s.split('/').filter(Boolean)
+    return parts[parts.length - 1] || s
+  }
+
+  const normPath = (p) => {
+    const s = String(p || '').trim().replace(/\\/g, '/')
+    if (!s) return ''
+    const abs = s.startsWith('/')
+    const segs = s.split('/').filter((x) => x && x !== '.')
+    const out = []
+    for (const it of segs) {
+      if (it === '..') {
+        if (out.length) out.pop()
+        else return ''
+      } else out.push(it)
+    }
+    return (abs ? '/' : '') + out.join('/')
+  }
+
+  const commonPrefixPath = (paths) => {
+    const list = (paths || []).map((p) => normPath(p)).filter(Boolean)
+    if (!list.length) return ''
+    const segs = list.map((p) => p.split('/').filter(Boolean))
+    let pref = segs[0]
+    for (let i = 1; i < segs.length; i++) {
+      const cur = segs[i]
+      let j = 0
+      while (j < pref.length && j < cur.length && pref[j] === cur[j]) j++
+      pref = pref.slice(0, j)
+      if (!pref.length) break
+    }
+    return pref.length ? `/${pref.join('/')}` : ''
+  }
+
+  const workspaceFromPrefix = (p) => {
+    const segs = normPath(p).split('/').filter(Boolean)
+    if (!segs.length) return ''
+    const idx = segs.lastIndexOf('deploy')
+    if (idx >= 1) return `/${segs.slice(0, idx + 1).join('/')}`
+    return `/${segs.slice(0, Math.min(3, segs.length)).join('/')}`
+  }
+
+  const relFrom = (base, full) => {
+    const b = normPath(base)
+    const f = normPath(full)
+    if (!b || !f) return { base: b, rel: f }
+    const pref = b.endsWith('/') ? b : `${b}/`
+    if (f === b) return { base: b, rel: '' }
+    if (f.startsWith(pref)) return { base: b, rel: f.slice(pref.length) }
+    return { base: b, rel: f.startsWith('/') ? f.slice(1) : f }
+  }
+
+  const dedupPorts = (parts) => {
+    const seen = new Set()
+    const out = []
+    for (const raw of parts) {
+      const s = String(raw || '').trim()
+      if (!s) continue
+      const m = s.match(/^(?:(\S+?):)?(\d+)->(\d+\/\w+)$/)
+      if (m) {
+        const hp = m[2]
+        const tp = m[3]
+        const key = `${hp}->${tp}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        out.push(`${hp} -> ${tp}`)
+        continue
+      }
+      if (seen.has(s)) continue
+      seen.add(s)
+      out.push(s)
+    }
+    return out
+  }
+
+  const renderPorts = (c) => {
+    const raw = c?.Ports
+    let parts = []
+    if (typeof raw === 'string') {
+      const s = raw.trim()
+      if (!s || s === '-') return null
+      parts = s.split(',').map((x) => x.trim()).filter(Boolean)
+    } else if (Array.isArray(c?.Publishers)) {
+      parts = c.Publishers.map((p) => {
+        if (!p || typeof p !== 'object') return ''
+        const hp = p.PublishedPort ?? p.publishedPort ?? p.hostPort
+        const tp = p.TargetPort ?? p.targetPort ?? p.containerPort
+        const proto = p.Protocol ?? p.protocol
+        const ip = p.URL ?? p.url ?? p.HostIP ?? p.hostIp
+        const left = hp ? String(hp) : ''
+        const right = tp ? String(tp) : ''
+        const mid = left && right ? `${left}->${right}` : left || right
+        return [ip, mid, proto].filter(Boolean).join(' ')
+      }).filter((x) => String(x).trim() !== '')
+    }
+    parts = dedupPorts(parts)
+    if (!parts.length) return null
+    const full = parts.join(', ')
+    const show = parts.slice(0, 2)
+    const more = parts.length - show.length
+    return (
+      <Tooltip content={full}>
+        <div style={{ display: 'flex', flexWrap: 'nowrap', gap: 6, alignItems: 'center', overflow: 'hidden' }}>
+          {show.map((p) => (
+            <span
+              key={p}
+              className="badge badge-gray"
+              style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', fontSize: 12 }}
+            >
+              {p}
+            </span>
+          ))}
+          {more > 0 ? (
+            <span style={{ color: 'var(--text-sub)', fontSize: 12, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>
+              +{more}
+            </span>
+          ) : null}
+        </div>
+      </Tooltip>
+    )
   }
 
   useEffect(() => {
@@ -119,6 +254,7 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
         if (!alive) return
         if (res?.ok) {
           setMonitorGroups(Array.isArray(res.groups) ? res.groups : [])
+          setMonitorDestDir(typeof res.dest_dir === 'string' ? res.dest_dir : '')
         } else {
           const d = res?.detail
           setMonitorError(typeof d === 'string' ? d : d ? JSON.stringify(d) : '监控失败')
@@ -769,15 +905,46 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
 
               <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
                 {monitorLoading && monitorGroups.length === 0 ? (
-                  <div style={{ padding: 16, color: 'var(--text-sub)' }}>加载中...</div>
+                  <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div className="skeleton-line" style={{ width: '34%' }} />
+                    <div className="skeleton-line" style={{ width: '56%' }} />
+                    <div className="skeleton-line" style={{ width: '48%' }} />
+                    <div className="skeleton-line" style={{ width: '62%' }} />
+                  </div>
                 ) : monitorGroups.length ? (
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    {(() => {
+                      const paths = monitorGroups.map((g) => g?.compose_path).filter(Boolean)
+                      const common = commonPrefixPath(paths)
+                      const workspace = workspaceFromPrefix(monitorDestDir || common)
+                      const showWorkspace = workspace && workspace.startsWith('/') && workspace.length > 1
+                      return showWorkspace ? (
+                        <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)', background: '#ffffff' }}>
+                          <div style={{ fontSize: 12, color: 'var(--text-sub)' }}>
+                            当前工作空间：<span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>{workspace}</span>
+                          </div>
+                        </div>
+                      ) : null
+                    })()}
                     {monitorGroups.map((g) => {
                       const list = Array.isArray(g?.containers) ? g.containers : []
                       const running = list.filter((c) => String(c?.State || '').toLowerCase() === 'running').length
                       const total = list.length
+                      const fullPath = String(g.compose_path || '')
+                      const workspace = workspaceFromPrefix(monitorDestDir || commonPrefixPath([fullPath]))
+                      const rel = relFrom(workspace, fullPath)
+                      const relPath = rel.rel || fullPath
+                      const main = relPath ? relPath.split('/').filter(Boolean).slice(-1)[0] : fullPath.split('/').filter(Boolean).slice(-1)[0] || '-'
+                      const open = monitorOpenByPath[fullPath] ?? true
                       return (
-                        <details key={g.compose_path} open>
+                        <details
+                          key={g.compose_path}
+                          open={open}
+                          onToggle={(ev) => {
+                            const isOpen = !!ev.currentTarget.open
+                            setMonitorOpenByPath((p) => ({ ...p, [fullPath]: isOpen }))
+                          }}
+                        >
                           <summary
                             style={{
                               listStyle: 'none',
@@ -791,13 +958,26 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
                             }}
                           >
                             <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                              <Icon name="chevron-right" style={{ color: 'rgba(100,116,139,0.9)', transform: open ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 120ms ease' }} />
                               <Icon name="layer-group" style={{ color: 'rgba(100,116,139,0.9)' }} />
-                              <span style={{ fontWeight: 700, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {g.compose_path}
-                              </span>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                                  <span style={{ fontWeight: 800, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {main}
+                                  </span>
+                                </div>
+                                <Tooltip content={fullPath}>
+                                  <span style={{ color: 'var(--text-sub)', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {relPath}
+                                  </span>
+                                </Tooltip>
+                              </div>
                             </div>
-                            <span style={{ color: 'var(--text-sub)', fontSize: 12, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>
-                              {running}/{total} running
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                              <span className={`status-dot ${running === total && total > 0 ? 'online' : 'offline'}`} />
+                              <span style={{ color: 'var(--text-sub)', fontSize: 12, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>
+                                {running}/{total} 运行中
+                              </span>
                             </span>
                           </summary>
                           <div style={{ padding: 0 }}>
@@ -808,26 +988,50 @@ export default function Detail({ taskId, historyId, onBack, onNavigate }) {
                                   <th>状态</th>
                                   <th>镜像</th>
                                   <th>端口</th>
+                                  <th style={{ textAlign: 'right' }}>运行时长</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {list.length ? (
                                   list.map((c, idx) => (
                                     <tr key={c?.Name || `${g.compose_path}-${idx}`}>
-                                      <td style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>{c?.Name || '-'}</td>
+                                      <td className="monitor-cell-mono" style={{ maxWidth: 340 }}>
+                                        {c?.Name ? (
+                                          <Tooltip content={String(c.Name)}>
+                                            <span className="monitor-ellipsis">{String(c.Name)}</span>
+                                          </Tooltip>
+                                        ) : (
+                                          ''
+                                        )}
+                                      </td>
                                       <td>
                                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                                           <span className={`status-dot ${String(c?.State || '').toLowerCase() === 'running' ? 'online' : 'offline'}`} />
-                                          {String(c?.State || 'unknown')}
+                                          <span style={{ color: String(c?.State || '').toLowerCase() === 'running' ? 'var(--text-sub)' : 'var(--text-main)' }}>
+                                            {String(c?.State || 'unknown')}
+                                          </span>
                                         </span>
                                       </td>
-                                      <td style={{ color: 'var(--text-sub)', fontSize: 13 }}>{c?.Image || '-'}</td>
-                                      <td style={{ color: 'var(--text-sub)', fontSize: 13 }}>{c?.Ports || '-'}</td>
+                                      <td className="monitor-cell-mono" style={{ color: 'var(--text-sub)', fontSize: 13 }}>
+                                        {c?.Image ? (
+                                          <Tooltip content={String(c.Image)}>
+                                            <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' }}>{ellipsis(shortImage(c.Image), 42)}</span>
+                                          </Tooltip>
+                                        ) : (
+                                          ''
+                                        )}
+                                      </td>
+                                      <td className="monitor-cell-mono" style={{ color: 'var(--text-sub)', fontSize: 13 }}>
+                                        {renderPorts(c)}
+                                      </td>
+                                      <td className="monitor-cell-mono" style={{ color: 'var(--text-sub)', fontSize: 13, textAlign: 'right' }}>
+                                        {c?.Uptime || ''}
+                                      </td>
                                     </tr>
                                   ))
                                 ) : (
                                   <tr>
-                                    <td colSpan={4} style={{ padding: 14, color: 'var(--text-sub)' }}>
+                                    <td colSpan={5} style={{ padding: 14, color: 'var(--text-sub)' }}>
                                       未发现容器或 compose 命令不可用
                                     </td>
                                   </tr>
