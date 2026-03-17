@@ -9,6 +9,17 @@ export default function BaseLayout({ page, setPage, breadcrumb, children }) {
   const u = auth?.user
   const name = u?.display_name || u?.username || ''
   const avatar = (name || 'U').slice(0, 1).toUpperCase()
+
+  const downloadGuide = () => {
+    const base = (import.meta.env?.BASE_URL || '/').replace(/\/?$/, '/')
+    const url = `${base}nexusops_user_guide.md`
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'NexusOps-用户指南.md'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+  }
   return (
     <div className="app-layout">
       <ToastHost />
@@ -75,6 +86,9 @@ export default function BaseLayout({ page, setPage, breadcrumb, children }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <button className="icon-btn" type="button" title="通知">
                 <Icon name="bell" />
+              </button>
+              <button className="icon-btn" type="button" title="下载用户指南" onClick={downloadGuide}>
+                <Icon name="book" />
               </button>
               <button className="icon-btn" type="button" title="退出登录" onClick={() => auth?.logout?.()}>
                 <Icon name="right-from-bracket" />
