@@ -17,6 +17,7 @@ from ...auth.security import create_access_token
 from ...notify.feishu import send_feishu_text
 from ...notify.history_status import update_history_status
 from ...notify.deploy_notify import mark_notified, mark_notify_error
+from ...utils.datetime_fmt import iso_app
 
 router = APIRouter()
 
@@ -68,7 +69,7 @@ async def list_deployments(user=Depends(require_permission("deploy:manage"))):
                 "has_feishu_secret": bool((getattr(d, "feishu_secret", None) or "").strip()),
                 "notify_on_success": bool(getattr(d, "notify_on_success", True)),
                 "notify_on_failed": bool(getattr(d, "notify_on_failed", False)),
-                "created_at": d.created_at.isoformat() if d.created_at else None,
+                "created_at": iso_app(d.created_at),
             }
             for d in rows
         ]
@@ -125,7 +126,7 @@ async def create_deployment(req: CreateDeploymentRequest, user=Depends(require_p
             "has_feishu_secret": bool((getattr(d, "feishu_secret", None) or "").strip()),
             "notify_on_success": bool(getattr(d, "notify_on_success", True)),
             "notify_on_failed": bool(getattr(d, "notify_on_failed", False)),
-            "created_at": d.created_at.isoformat() if d.created_at else None,
+            "created_at": iso_app(d.created_at),
         }
 
     return await run_db(_work)
@@ -150,7 +151,7 @@ async def get_deployment(dep_id: str, user=Depends(require_permission("deploy:ma
             "has_feishu_secret": bool((getattr(d, "feishu_secret", None) or "").strip()),
             "notify_on_success": bool(getattr(d, "notify_on_success", True)),
             "notify_on_failed": bool(getattr(d, "notify_on_failed", False)),
-            "created_at": d.created_at.isoformat() if d.created_at else None,
+            "created_at": iso_app(d.created_at),
         }
 
     return await run_db(_work)

@@ -3,7 +3,6 @@ import uuid
 
 import requests
 from fastapi import APIRouter, Depends, HTTPException, Query
-from datetime import datetime
 
 from sqlmodel import select
 
@@ -14,6 +13,7 @@ from .configs import ensure_snapshot_if_success
 from ...notify.feishu import send_feishu_text
 from ...notify.history_status import update_history_status
 from ...notify.deploy_notify import mark_notified, mark_notify_error
+from ...utils.datetime_fmt import iso_app, iso_now_app
 
 router = APIRouter()
 
@@ -135,8 +135,8 @@ async def get_history(
                     "status": h.status,
                     "ref": h.ref,
                     "web_url": h.web_url,
-                    "created_at": h.created_at.isoformat() if h.created_at else None,
-                    "finished_at": h.finished_at.isoformat() if h.finished_at else None,
+                    "created_at": iso_app(h.created_at),
+                    "finished_at": iso_app(h.finished_at),
                     "server_snapshot": h.server_snapshot,
                     "repo_snapshot": h.repo_snapshot,
                     "variables": h.variables,
@@ -284,7 +284,7 @@ async def cancel_history(history_id: str, user=Depends(require_permission("deplo
         who = (getattr(user, "display_name", None) or getattr(user, "username", None) or "").strip()
         if who:
             vars_["__canceled_by"] = who
-        vars_["__canceled_at"] = datetime.utcnow().isoformat()
+        vars_["__canceled_at"] = iso_now_app()
         h.variables = vars_
         update_history_status(session, h.id, "canceled", h.web_url)
         session.commit()

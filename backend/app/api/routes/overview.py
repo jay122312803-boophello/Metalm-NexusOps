@@ -9,6 +9,7 @@ from sqlmodel import select
 from ...auth.deps import require_permission
 from ...db.models import Deployment, DeploymentHistory, Repo, Server
 from ...db.session import run_db
+from ...utils.datetime_fmt import iso_app
 
 router = APIRouter()
 
@@ -124,10 +125,7 @@ async def get_overview(user=Depends(require_permission("overview:read"))):
 
         feed = []
         for hid, deployment_id, created_at, status, ref, dep_name, server_name, repo_name, repo_branch, pipeline_id in feed_rows:
-            ts = None
-            if created_at:
-                created_utc = created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
-                ts = created_utc.isoformat()
+            ts = iso_app(created_at)
             branch = (ref or repo_branch or "").strip() or None
             feed.append(
                 {

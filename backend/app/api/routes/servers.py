@@ -11,6 +11,7 @@ from ...db.models import Server
 from ...db.session import run_db
 from sqlalchemy.exc import IntegrityError
 from ...ssh import ssh_exec
+from ...utils.datetime_fmt import iso_app
 
 router = APIRouter()
 _metrics_cache: dict[str, tuple[float, dict]] = {}
@@ -48,7 +49,7 @@ async def list_servers(user=Depends(require_permission("infra:manage"))):
                 "ssh_key_configured": bool(s.ssh_key),
                 "deploy_path": s.deploy_path,
                 "description": s.description,
-                "created_at": s.created_at.isoformat() if s.created_at else None,
+                "created_at": iso_app(s.created_at),
             }
             for s in rows
         ]
@@ -92,7 +93,7 @@ async def create_server(req: CreateServerRequest, user=Depends(require_permissio
             "ssh_key_configured": bool(s.ssh_key),
             "deploy_path": s.deploy_path,
             "description": s.description,
-            "created_at": s.created_at.isoformat() if s.created_at else None,
+            "created_at": iso_app(s.created_at),
         }
 
     return await run_db(_work)
@@ -113,7 +114,7 @@ async def get_server(server_id: str, user=Depends(require_permission("infra:mana
             "ssh_key_configured": bool(s.ssh_key),
             "deploy_path": s.deploy_path,
             "description": s.description,
-            "created_at": s.created_at.isoformat() if s.created_at else None,
+            "created_at": iso_app(s.created_at),
         }
 
     return await run_db(_work)

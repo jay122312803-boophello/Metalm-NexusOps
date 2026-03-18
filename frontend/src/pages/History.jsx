@@ -69,22 +69,40 @@ export default function History({ onNavigate, initialPreset }) {
     return v || '未知'
   }
 
+  const tzParts = (d) => {
+    const parts = new Intl.DateTimeFormat('zh-CN', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    }).formatToParts(d)
+    const out = {}
+    for (const p of parts) {
+      if (p.type !== 'literal') out[p.type] = p.value
+    }
+    return out
+  }
+
   const fmtTs = (v) => {
     const t = v ? Date.parse(v) : NaN
     if (!Number.isFinite(t)) return '-'
     const d = new Date(t)
-    return `${d.toLocaleDateString()} ${d.toLocaleTimeString()}`
+    const p = tzParts(d)
+    const ymd = `${p.year}/${p.month}/${p.day}`
+    const hms = `${p.hour}:${p.minute}:${p.second}`
+    return `${ymd} ${hms}`
   }
 
   const fmtTsCompact = (v) => {
     const t = v ? Date.parse(v) : NaN
     if (!Number.isFinite(t)) return '-'
     const d = new Date(t)
-    const mm = String(d.getMonth() + 1).padStart(2, '0')
-    const dd = String(d.getDate()).padStart(2, '0')
-    const hh = String(d.getHours()).padStart(2, '0')
-    const mi = String(d.getMinutes()).padStart(2, '0')
-    return `${mm}/${dd} ${hh}:${mi}`
+    const p = tzParts(d)
+    return `${p.month}/${p.day} ${p.hour}:${p.minute}`
   }
 
   const filteredHistory = history.filter((h) => {
@@ -220,7 +238,7 @@ export default function History({ onNavigate, initialPreset }) {
                     )}
                   </td>
                   <td className="history-time history-col-time">
-                    <Tooltip content={h.created_at ? new Date(h.created_at).toLocaleString() : ''}>
+                    <Tooltip content={fmtTs(h.created_at)}>
                       <span className="history-time-pill">{fmtTsCompact(h.created_at)}</span>
                     </Tooltip>
                   </td>

@@ -10,6 +10,7 @@ from sqlmodel import select, Session
 
 from ..db.models import Deployment, DeploymentHistory, Repo, Server, TaskConfig
 from ..db.session import engine
+from ..utils.datetime_fmt import iso_app
 
 def _get_user_id(config: dict) -> uuid.UUID:
     """Helper to extract user_id from config"""
@@ -57,7 +58,7 @@ def query_deployment_status(*, user_id: uuid.UUID, deployment_name: str) -> dict
         return {
             "deployment_name": dep.name,
             "status": hist.status,
-            "last_updated": hist.created_at.isoformat() if hist.created_at else None,
+            "last_updated": iso_app(hist.created_at),
             "pipeline_id": hist.pipeline_id,
             "web_url": hist.web_url,
             "ref": hist.ref,
@@ -73,7 +74,7 @@ def query_list_deployments(*, user_id: uuid.UUID, limit: int = 5) -> list[dict]:
             .limit(limit)
         ).all()
         return [
-            {"name": d.name, "server": s_name, "created_at": d.created_at.isoformat() if d.created_at else None}
+            {"name": d.name, "server": s_name, "created_at": iso_app(d.created_at)}
             for d, s_name in deps
         ]
 
@@ -271,7 +272,7 @@ def query_history_detail(*, user_id: uuid.UUID, history_id: str) -> dict:
             "deployment_name": d.name,
             "server_name": s.name if s else None,
             "repo_name": r.name if r else None,
-            "created_at": h.created_at.isoformat() if h.created_at else None,
+            "created_at": iso_app(h.created_at),
             "status": h.status,
             "pipeline_id": h.pipeline_id,
             "web_url": h.web_url,

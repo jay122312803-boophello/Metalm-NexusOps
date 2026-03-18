@@ -11,6 +11,7 @@ from sqlmodel import select
 from ...auth.deps import require_permission
 from ...db.models import Deployment, DeploymentHistory, TaskConfig, TaskConfigSnapshot, TaskConfigSnapshotFile
 from ...db.session import run_db
+from ...utils.datetime_fmt import iso_app
 
 router = APIRouter()
 
@@ -41,7 +42,7 @@ async def list_task_configs(dep_id: str, user=Depends(require_permission("deploy
             {
                 "id": str(c.id),
                 "rel_path": c.rel_path,
-                "updated_at": c.updated_at.isoformat() if c.updated_at else None,
+                "updated_at": iso_app(c.updated_at),
             }
             for c in rows
         ]
@@ -69,7 +70,7 @@ async def create_task_config(dep_id: str, body: dict, user=Depends(require_permi
         session.add(c)
         session.commit()
         session.refresh(c)
-        return {"id": str(c.id), "rel_path": c.rel_path, "content": c.content, "updated_at": c.updated_at.isoformat()}
+        return {"id": str(c.id), "rel_path": c.rel_path, "content": c.content, "updated_at": iso_app(c.updated_at)}
 
     return await run_db(_work)
 
@@ -89,7 +90,7 @@ async def get_task_config(dep_id: str, config_id: str, user=Depends(require_perm
             "id": str(c.id),
             "rel_path": c.rel_path,
             "content": c.content,
-            "updated_at": c.updated_at.isoformat() if c.updated_at else None,
+            "updated_at": iso_app(c.updated_at),
         }
 
     return await run_db(_work)
@@ -115,7 +116,7 @@ async def update_task_config(dep_id: str, config_id: str, body: dict, user=Depen
         session.add(c)
         session.commit()
         session.refresh(c)
-        return {"ok": True, "updated_at": c.updated_at.isoformat()}
+        return {"ok": True, "updated_at": iso_app(c.updated_at)}
 
     return await run_db(_work)
 
@@ -134,7 +135,7 @@ async def rename_task_config(dep_id: str, config_id: str, body: dict, user=Depen
         if not c or c.deployment_id != did:
             raise HTTPException(404, "Config not found")
         if c.rel_path == rel_path:
-            return {"ok": True, "rel_path": c.rel_path, "updated_at": c.updated_at.isoformat() if c.updated_at else None}
+            return {"ok": True, "rel_path": c.rel_path, "updated_at": iso_app(c.updated_at)}
 
         exists = session.exec(
             select(TaskConfig).where(TaskConfig.deployment_id == did, TaskConfig.rel_path == rel_path)
@@ -147,7 +148,7 @@ async def rename_task_config(dep_id: str, config_id: str, body: dict, user=Depen
         session.add(c)
         session.commit()
         session.refresh(c)
-        return {"ok": True, "rel_path": c.rel_path, "updated_at": c.updated_at.isoformat() if c.updated_at else None}
+        return {"ok": True, "rel_path": c.rel_path, "updated_at": iso_app(c.updated_at)}
 
     return await run_db(_work)
 
@@ -239,7 +240,7 @@ async def list_snapshot_configs(history_id: str, user=Depends(require_permission
             "readonly": True,
             "snapshot_ready": True,
             "files": [
-                {"id": str(f.id), "rel_path": f.rel_path, "updated_at": f.created_at.isoformat() if f.created_at else None}
+                {"id": str(f.id), "rel_path": f.rel_path, "updated_at": iso_app(f.created_at)}
                 for f in rows
             ],
         }

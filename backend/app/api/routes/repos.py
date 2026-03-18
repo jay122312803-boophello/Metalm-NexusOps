@@ -4,6 +4,7 @@ from ...schemas import CreateRepoRequest, UpdateRepoRequest
 from ...db.models import Repo
 from ...db.session import run_db
 from ...auth.deps import require_permission
+from ...utils.datetime_fmt import iso_app
 import uuid
 from sqlalchemy.exc import IntegrityError
 
@@ -23,7 +24,7 @@ async def list_repos(user=Depends(require_permission("infra:manage"))):
                 "project_id": r.project_id,
                 "auth": {"trigger": bool(r.trigger_token), "private": bool(r.private_token)},
                 "description": r.description,
-                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "created_at": iso_app(r.created_at),
             }
             for r in rows
         ]
@@ -62,7 +63,7 @@ async def create_repo(req: CreateRepoRequest, user=Depends(require_permission("i
             "project_id": r.project_id,
             "auth": {"trigger": bool(r.trigger_token), "private": bool(r.private_token)},
             "description": r.description,
-            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "created_at": iso_app(r.created_at),
         }
 
     return await run_db(_work)
@@ -84,7 +85,7 @@ async def get_repo(repo_id: str, user=Depends(require_permission("infra:manage")
             "private_token": None,
             "auth": {"trigger": bool(r.trigger_token), "private": bool(r.private_token)},
             "description": r.description,
-            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "created_at": iso_app(r.created_at),
         }
 
     return await run_db(_work)

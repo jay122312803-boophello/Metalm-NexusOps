@@ -11,6 +11,7 @@ from sqlmodel import select
 from ...auth.deps import require_permission
 from ...db.models import AIModelConfig
 from ...db.session import run_db
+from ...utils.datetime_fmt import iso_app
 
 router = APIRouter()
 
@@ -93,8 +94,8 @@ def _to_out(m: AIModelConfig) -> AIModelConfigOut:
         max_history=int(m.max_history or 0),
         is_active=bool(m.is_active),
         has_key=bool((m.api_key or "").strip()),
-        created_at=m.created_at.isoformat() if m.created_at else None,
-        updated_at=m.updated_at.isoformat() if m.updated_at else None,
+        created_at=iso_app(m.created_at),
+        updated_at=iso_app(m.updated_at),
     )
 
 
