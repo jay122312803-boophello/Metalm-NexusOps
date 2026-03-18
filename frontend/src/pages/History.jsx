@@ -19,6 +19,9 @@ export default function History({ onNavigate, initialPreset }) {
   const [redeployTarget, setRedeployTarget] = useState(null)
   const [redeploying, setRedeploying] = useState(false)
   const [redeployError, setRedeployError] = useState(null)
+  const [cancelTarget, setCancelTarget] = useState(null)
+  const [canceling, setCanceling] = useState(false)
+  const [cancelError, setCancelError] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState(null)
@@ -152,6 +155,8 @@ export default function History({ onNavigate, initialPreset }) {
               const sName = h.server_snapshot?.name || 'Unknown Server'
               const rName = h.repo_snapshot?.name || 'Unknown Repo'
               const pipelineText = h.pipeline_id ? `Pipeline #${h.pipeline_id}` : '手动触发'
+              const stLower = String(h.status || '').toLowerCase()
+              const canCancel = (stLower === 'pending' || stLower === 'running') && !!h.pipeline_id
               const varKeys = Object.keys(h.variables || {})
               const hintVars = []
               const pick = (k) => {
@@ -234,6 +239,31 @@ export default function History({ onNavigate, initialPreset }) {
                         </button>
                       </Tooltip>
                       <Can perm="deploy:manage">
+                        {canCancel ? (
+                          <Tooltip content="停止部署">
+                            <button
+                              className="icon-btn history-action-btn warning"
+                              type="button"
+                              onClick={(ev) => {
+                                ev.stopPropagation()
+                                setCancelError(null)
+                                setCancelTarget({
+                                  id: h.id,
+                                  deployment_id: h.deployment_id,
+                                  pipeline_id: h.pipeline_id,
+                                  web_url: h.web_url,
+                                  status: h.status,
+                                  server_name: h.server_snapshot?.name,
+                                  repo_name: h.repo_snapshot?.name,
+                                  ref: h.ref,
+                                  created_at: h.created_at
+                                })
+                              }}
+                            >
+                              <Icon name="ban" />
+                            </button>
+                          </Tooltip>
+                        ) : null}
                         <Tooltip content="重新部署">
                           <button
                             className="icon-btn history-action-btn primary"
@@ -391,6 +421,95 @@ export default function History({ onNavigate, initialPreset }) {
                 }}
               >
                 {redeployError}
+              </div>
+            ) : null}
+          </div>
+        </Modal>
+      ) : null}
+
+      {cancelTarget ? (
+        <Modal
+          danger
+          title="停止部署"
+          onClose={() => (canceling ? null : setCancelTarget(null))}
+          footer={[
+            <button key="c" className="btn btn-outline" onClick={() => setCancelTarget(null)} disabled={canceling}>
+              取消
+            </button>,
+            <button
+              key="ok"
+              className="btn btn-danger"
+              onClick={async () => {
+                setCanceling(true)
+                setCancelError(null)
+                try {
+                  const res = await api.post(`/api/history/${cancelTarget.id}/cancel`, {})
+                  if (res?.ok) {
+                    setCancelTarget(null)
+                    const qs = new URLSearchParams()
+                    if (selectedServerId && selectedServerId !== 'all') qs.set('server_id', selectedServerId)
+                    if (selectedStatus && selectedStatus !== 'all') qs.set('status', selectedStatus)
+                    const url = qs.toString() ? `/api/history?${qs.toString()}` : '/api/history'
+                    const h = await api.get(url)
+                    setHistory(Array.isArray(h?.history) ? h.history : [])
+                  } else {
+                    const d = res?.detail
+                    setCancelError(typeof d === 'string' ? d : d ? JSON.stringify(d) : '取消失败')
+                  }
+                } finally {
+                  setCanceling(false)
+                }
+              }}
+              disabled={canceling}
+            >
+              <Icon name={canceling ? 'spinner fa-spin' : 'ban'} /> {canceling ? '取消中...' : '确认停止'}
+            </button>
+          ]}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 14 }}>
+            <div style={{ color: 'var(--text-sub)' }}>将请求 GitLab 取消该条 CI Pipeline（排队中/运行中均会被终止）。</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 8, marginTop: 8 }}>
+              <div style={{ color: 'var(--text-sub)' }}>Pipeline</div>
+              <div style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace', fontSize: 12 }}>
+                #{cancelTarget.pipeline_id}
+              </div>
+              <div style={{ color: 'var(--text-sub)' }}>仓库</div>
+              <div>{cancelTarget.repo_name || '-'}</div>
+              <div style={{ color: 'var(--text-sub)' }}>分支</div>
+              <div>
+                <span className="badge badge-gray" style={{ fontFamily: 'inherit' }}>
+                  {cancelTarget.ref || '-'}
+                </span>
+              </div>
+              <div style={{ color: 'var(--text-sub)' }}>服务器</div>
+              <div>{cancelTarget.server_name || '-'}</div>
+              {cancelTarget.web_url ? (
+                <>
+                  <div style={{ color: 'var(--text-sub)' }}>GitLab</div>
+                  <a
+                    href={cancelTarget.web_url}
+                    target="_blank"
+                    onClick={(ev) => ev.stopPropagation()}
+                    style={{ color: 'var(--primary-dark)', textDecoration: 'none' }}
+                  >
+                    打开链接 <Icon name="arrow-up-right-from-square" />
+                  </a>
+                </>
+              ) : null}
+            </div>
+            {cancelError ? (
+              <div
+                style={{
+                  marginTop: 6,
+                  padding: '10px 12px',
+                  borderRadius: 10,
+                  border: '1px solid rgba(239,68,68,0.25)',
+                  background: 'rgba(239,68,68,0.06)',
+                  color: '#b91c1c',
+                  fontSize: 13
+                }}
+              >
+                {cancelError}
               </div>
             ) : null}
           </div>

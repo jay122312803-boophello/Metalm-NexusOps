@@ -3,6 +3,7 @@ import uuid
 
 import requests
 from fastapi import APIRouter, Depends, HTTPException, Query
+from datetime import datetime
 
 from sqlmodel import select
 
@@ -213,5 +214,81 @@ async def delete_history(history_id: str, user=Depends(require_permission("audit
         session.delete(h)
         session.commit()
         return {"ok": True}
+
+    return await run_db(_work)
+
+
+@router.post("/{history_id}/cancel")
+async def cancel_history(history_id: str, user=Depends(require_permission("deploy:manage"))):
+    def _work(session):
+        gitlab_url = (os.getenv("GITLAB_BASE_URL") or "https://gitlab.xuelangyun.com").rstrip("/")
+        verify_tls = (os.getenv("GITLAB_TLS_INSECURE") or "").strip() != "1"
+
+        try:
+            hid = uuid.UUID(history_id)
+        except Exception:
+            raise HTTPException(400, "Invalid history id")
+
+        h = session.get(DeploymentHistory, hid)
+        if not h:
+            raise HTTPException(status_code=404, detail="History not found")
+        d = session.get(Deployment, h.deployment_id)
+        if not d or d.created_by_user_id != user.id:
+            raise HTTPException(status_code=404, detail="History not found")
+
+        st0 = str(h.status or "").lower().strip()
+        if st0 in {"success", "failed", "canceled"}:
+            return {"ok": True, "status": h.status, "pipeline_id": h.pipeline_id}
+
+        pid = h.pipeline_id
+        if not pid:
+            raise HTTPException(status_code=400, detail="未获取到 pipeline_id，无法取消")
+
+        r = session.get(Repo, d.repo_id) if d else None
+        proj = ((r.project_id if r else None) or os.getenv("GITLAB_PROJECT") or "").strip()
+        token = ((r.private_token if r else None) or "").strip() or (os.getenv("PRIVATE_TOKEN") or "").strip() or None
+        try:
+            snap = h.repo_snapshot
+            if isinstance(snap, dict):
+                ci_repo_id = str(snap.get("ci_repo_id") or "").strip()
+                if ci_repo_id:
+                    rr = session.get(Repo, uuid.UUID(ci_repo_id))
+                    p2 = str((rr.project_id or "") if rr else "").strip()
+                    t2 = str((rr.private_token or "") if rr else "").strip()
+                    if p2:
+                        proj = p2
+                    if t2:
+                        token = t2
+        except Exception:
+            pass
+
+        if not proj or not token:
+            raise HTTPException(status_code=400, detail="未配置 GitLab Project ID 或 PRIVATE_TOKEN，无法取消")
+
+        cancel_url = f"{gitlab_url}/api/v4/projects/{requests.utils.quote(proj, safe='')}/pipelines/{int(pid)}/cancel"
+        headers = {"PRIVATE-TOKEN": token}
+        resp = None
+        try:
+            resp = requests.post(cancel_url, headers=headers, verify=verify_tls, timeout=12)
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"调用 GitLab 取消失败: {type(e).__name__}: {str(e)}")
+
+        if not resp.ok:
+            try:
+                body = resp.json()
+            except Exception:
+                body = (resp.text or "")[:2000]
+            raise HTTPException(status_code=400, detail={"gitlab_error": body, "status_code": resp.status_code})
+
+        vars_ = dict(h.variables or {})
+        who = (getattr(user, "display_name", None) or getattr(user, "username", None) or "").strip()
+        if who:
+            vars_["__canceled_by"] = who
+        vars_["__canceled_at"] = datetime.utcnow().isoformat()
+        h.variables = vars_
+        update_history_status(session, h.id, "canceled", h.web_url)
+        session.commit()
+        session.refresh(h)
+        return {"ok": True, "status": h.status, "pipeline_id": h.pipeline_id}
 
     return await run_db(_work)

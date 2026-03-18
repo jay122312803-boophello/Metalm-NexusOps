@@ -315,6 +315,7 @@ body {
 .history-action-btn { width: 34px; height: 34px; border-radius: 10px; border: 1px solid rgba(226,232,240,0.95); background: rgba(255,255,255,0.9); box-shadow: var(--shadow-sm); }
 .history-action-btn:hover { box-shadow: var(--shadow-md); }
 .history-action-btn.primary { border-color: rgba(22,163,74,0.18); background: rgba(22,163,74,0.10); color: var(--primary-dark); }
+.history-action-btn.warning { border-color: rgba(245,158,11,0.22); background: rgba(245,158,11,0.10); color: #92400e; }
 .history-action-btn.danger { border-color: rgba(239,68,68,0.22); background: rgba(239,68,68,0.10); color: #991b1b; }
 .history-ci { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .history-ci-pill { display: inline-flex; align-items: center; padding: 4px 8px; border-radius: 999px; border: 1px solid rgba(226,232,240,0.95); background: rgba(255,255,255,0.9); color: var(--text-main); font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: nowrap; }
