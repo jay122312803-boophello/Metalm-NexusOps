@@ -6,6 +6,7 @@ from sqlmodel import Session
 
 from ..db.models import DeploymentHistory
 from .deploy_notify import build_feishu_text
+from ..utils.datetime_fmt import now_app_dt
 
 
 def update_history_status(session: Session, history_id, new_status: str, web_url: str | None = None):
@@ -27,7 +28,7 @@ def update_history_status(session: Session, history_id, new_status: str, web_url
 
     terminal = new_s in {"success", "failed", "canceled", "skipped", "manual"}
     if terminal and h.finished_at is None:
-        h.finished_at = datetime.utcnow()
+        h.finished_at = now_app_dt()
         changed = True
 
     notify_payload = None

@@ -18,6 +18,7 @@ from ...notify.feishu import send_feishu_text
 from ...notify.history_status import update_history_status
 from ...notify.deploy_notify import mark_notified, mark_notify_error
 from ...utils.datetime_fmt import iso_app
+from ...utils.datetime_fmt import now_app_dt
 
 router = APIRouter()
 
@@ -350,7 +351,7 @@ async def trigger_deployment(dep_id: str, request: Request, req: TriggerDeployme
             status="pending",
             ref=src_ref,
             web_url=None,
-            created_at=datetime.utcnow(),
+            created_at=now_app_dt(),
             server_snapshot={
                 "id": str(s.id),
                 "name": s.name,

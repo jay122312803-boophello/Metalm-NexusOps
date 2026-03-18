@@ -12,6 +12,36 @@ const monitorStorageKey = 'nexusops_monitor_summary_v1'
 
 export default function Dashboard({ onNavigate }) {
   const FEISHU_SECRET_MASK = '••••••••'
+  const parseTs = (v) => {
+    const s = String(v || '').trim()
+    if (!s) return NaN
+    const hasTz = /([zZ]|[+-]\d\d:\d\d)$/.test(s)
+    return Date.parse(hasTz ? s : `${s}Z`)
+  }
+  const tzParts = (d) => {
+    const parts = new Intl.DateTimeFormat('zh-CN', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    }).formatToParts(d)
+    const out = {}
+    for (const p of parts) {
+      if (p.type !== 'literal') out[p.type] = p.value
+    }
+    return out
+  }
+  const fmtShanghai = (v, compact) => {
+    const t = parseTs(v)
+    if (!Number.isFinite(t)) return '-'
+    const p = tzParts(new Date(t))
+    if (compact) return `${p.month}/${p.day} ${p.hour}:${p.minute}`
+    return `${p.year}/${p.month}/${p.day} ${p.hour}:${p.minute}:${p.second}`
+  }
   const [tasks, setTasks] = useState([])
   const [servers, setServers] = useState([])
   const [repos, setRepos] = useState([])
@@ -397,7 +427,7 @@ export default function Dashboard({ onNavigate }) {
                   <span className="info-key">上次部署</span>
                   {last?.created_at ? (
                     <>
-                      <span className="info-time">{new Date(last.created_at).toLocaleString()}</span>
+                      <span className="info-time">{fmtShanghai(last.created_at, false)}</span>
                       {last?.status ? (
                         <Tooltip content={last.pipeline_id ? `Pipeline #${last.pipeline_id}` : ''}>
                           <span
@@ -452,8 +482,8 @@ export default function Dashboard({ onNavigate }) {
                           异常 {monitorSummaryById[t.id].failed}
                         </span>
                         {monitorSummaryById[t.id].ts ? (
-                          <Tooltip content={new Date(monitorSummaryById[t.id].ts).toLocaleString()}>
-                            <span className="info-hint">{new Date(monitorSummaryById[t.id].ts).toLocaleTimeString()}</span>
+                          <Tooltip content={fmtShanghai(monitorSummaryById[t.id].ts, false)}>
+                            <span className="info-hint">{fmtShanghai(monitorSummaryById[t.id].ts, true)}</span>
                           </Tooltip>
                         ) : null}
                       </>

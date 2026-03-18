@@ -69,6 +69,13 @@ export default function History({ onNavigate, initialPreset }) {
     return v || '未知'
   }
 
+  const parseTs = (v) => {
+    const s = String(v || '').trim()
+    if (!s) return NaN
+    const hasTz = /([zZ]|[+-]\d\d:\d\d)$/.test(s)
+    return Date.parse(hasTz ? s : `${s}Z`)
+  }
+
   const tzParts = (d) => {
     const parts = new Intl.DateTimeFormat('zh-CN', {
       timeZone: 'Asia/Shanghai',
@@ -88,7 +95,7 @@ export default function History({ onNavigate, initialPreset }) {
   }
 
   const fmtTs = (v) => {
-    const t = v ? Date.parse(v) : NaN
+    const t = parseTs(v)
     if (!Number.isFinite(t)) return '-'
     const d = new Date(t)
     const p = tzParts(d)
@@ -98,7 +105,7 @@ export default function History({ onNavigate, initialPreset }) {
   }
 
   const fmtTsCompact = (v) => {
-    const t = v ? Date.parse(v) : NaN
+    const t = parseTs(v)
     if (!Number.isFinite(t)) return '-'
     const d = new Date(t)
     const p = tzParts(d)

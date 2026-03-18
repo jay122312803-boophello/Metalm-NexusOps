@@ -26,3 +26,7 @@ def iso_app(dt: datetime | None) -> str | None:
 
 def iso_now_app() -> str:
     return datetime.now(tz=_TZ).isoformat(timespec="seconds")
+
+
+def now_app_dt() -> datetime:
+    return datetime.now(tz=_TZ)
