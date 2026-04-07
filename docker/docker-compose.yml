@@ -1,7 +1,10 @@
+name: metalm-nexusops
+
 services:
   backend:
     image: ${NEXUSOPS_BACKEND_IMAGE:-registry.xuelangyun.com/shuzhi-amd64/metalm/nexusops-backend:latest}
     platform: ${NEXUSOPS_PLATFORM:-linux/amd64}
+    container_name: nexusops-backend
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:${NEXUSOPS_PG_PASS:-metalm2024}@${NEXUSOPS_PG_HOST:-nexusops-pg}:5432/nexusops_db
@@ -20,6 +23,7 @@ services:
   frontend:
     image: ${NEXUSOPS_FRONTEND_IMAGE:-registry.xuelangyun.com/shuzhi-amd64/metalm/nexusops-frontend:latest}
     platform: ${NEXUSOPS_PLATFORM:-linux/amd64}
+    container_name: nexusops-frontend
     restart: unless-stopped
     ports:
       - "18488:80"
