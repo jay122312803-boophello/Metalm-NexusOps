@@ -67,6 +67,28 @@ async def init_db() -> None:
             except Exception:
                 pass
 
+            conn.execute(
+                text(
+                    """
+                    DO $$
+                    BEGIN
+                      IF EXISTS (
+                        SELECT 1
+                        FROM information_schema.columns
+                        WHERE table_name = 'deployment_history'
+                          AND column_name = 'pipeline_id'
+                          AND data_type = 'integer'
+                      ) THEN
+                        ALTER TABLE deployment_history
+                        ALTER COLUMN pipeline_id TYPE bigint
+                        USING pipeline_id::bigint;
+                      END IF;
+                    END
+                    $$;
+                    """
+                )
+            )
+
             conn.execute(text("ALTER TABLE servers ADD COLUMN IF NOT EXISTS ssh_key text"))
             conn.execute(text("ALTER TABLE servers ADD COLUMN IF NOT EXISTS environment text"))
             conn.execute(text("ALTER TABLE servers ALTER COLUMN environment SET DEFAULT 'OTHER'"))

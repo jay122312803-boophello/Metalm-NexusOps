@@ -16,6 +16,9 @@ fi
 
 NEXUSOPS_API_BASE_URL="$(printf "%s" "${NEXUSOPS_API_BASE_URL:-}" | tr -d '\r\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
 NEXUSOPS_CONFIG_ZIP_URL="$(printf "%s" "${NEXUSOPS_CONFIG_ZIP_URL:-}" | tr -d '\r\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+if [ "${ENVIRONMENT:-dev}" != "prod" ]; then
+  NEXUSOPS_CONFIG_ZIP_URL=""
+fi
 api_base="${NEXUSOPS_API_BASE_URL:-}"
 if [ -n "${api_base:-}" ]; then
   case "${api_base}" in

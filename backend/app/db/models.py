@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Optional, Dict
 
-from sqlalchemy import Column, UniqueConstraint
+from sqlalchemy import BigInteger, Column, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 
@@ -65,7 +65,7 @@ class DeploymentHistory(SQLModel, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     deployment_id: uuid.UUID
-    pipeline_id: Optional[int] = None
+    pipeline_id: Optional[int] = Field(default=None, sa_column=Column(BigInteger))
     status: Optional[str] = None
     ref: Optional[str] = None
     web_url: Optional[str] = None
