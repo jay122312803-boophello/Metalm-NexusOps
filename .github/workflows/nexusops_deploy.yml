@@ -40,6 +40,11 @@ on:
         required: false
         type: string
 
+      ENVIRONMENT:
+        required: false
+        type: string
+        default: dev
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -82,5 +87,6 @@ jobs:
           NEXUSOPS_API_TOKEN: ${{ github.event.client_payload.nexusops.NEXUSOPS_API_TOKEN || secrets.NEXUSOPS_API_TOKEN }}
           NEXUSOPS_GIT_HTTP_TOKEN: ${{ github.event.client_payload.nexusops.NEXUSOPS_GIT_HTTP_TOKEN || secrets.NEXUSOPS_GIT_HTTP_TOKEN }}
           NEXUSOPS_HISTORY_ID: ${{ github.event.client_payload.nexusops.NEXUSOPS_HISTORY_ID || inputs.NEXUSOPS_HISTORY_ID }}
+          ENVIRONMENT: ${{ github.event.client_payload.nexusops.ENVIRONMENT || inputs.ENVIRONMENT || 'dev' }}
         run: |
           sh ci/nexusops_deploy.sh

@@ -105,8 +105,8 @@ echo "====== [NexusOps] Sync Done ======"
 ssh "$SERVER_USER@$SERVER_HOST" "mkdir -p '${DEST_DIR%/}/.nexusops'"
 rsync -rz --no-perms --no-owner --no-group remote_executor.sh "$SERVER_USER@$SERVER_HOST:${DEST_DIR%/}/.nexusops/remote_executor.sh"
 
-if [ -n "${NEXUSOPS_CONFIG_ZIP_URL:-}" ] && [ "${test:-}" != "true" ]; then
-  echo "====== [NexusOps] Download Configs ======"
+if [ -n "${NEXUSOPS_CONFIG_ZIP_URL:-}" ] && [ "${ENVIRONMENT:-dev}" = "prod" ]; then
+  echo "====== [NexusOps] Download Configs (prod environment) ======"
   tmp_local="/tmp/nexusops-configs.zip"
   rm -f "$tmp_local"
   curl -fsSL -H "Authorization: Bearer ${NEXUSOPS_API_TOKEN}" "$NEXUSOPS_CONFIG_ZIP_URL" -o "$tmp_local"
@@ -115,9 +115,9 @@ if [ -n "${NEXUSOPS_CONFIG_ZIP_URL:-}" ] && [ "${test:-}" != "true" ]; then
 fi
 
 ssh "$SERVER_USER@$SERVER_HOST" "set -e; \
-  if [ \"${test:-}\" = \"true\" ]; then \
-    echo '====== [NexusOps] Test Mode: Skip Config Inject ======'; \
-  elif [ -n \"${NEXUSOPS_CONFIG_ZIP_URL:-}\" ]; then \
+  if [ \"\${ENVIRONMENT:-dev}\" != \"prod\" ]; then \
+    echo '====== [NexusOps] Dev Environment: Skip Config Inject ======'; \
+  elif [ -n \"\${NEXUSOPS_CONFIG_ZIP_URL:-}\" ]; then \
     echo '====== [NexusOps] Inject Configs ======'; \
     tmp=\"${DEST_DIR%/}/.nexusops/configs.zip\"; \
     mkdir -p \"${DEST_DIR%/}/.nexusops\"; \
