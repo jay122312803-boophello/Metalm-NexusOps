@@ -186,20 +186,15 @@ find "$DEST_DIR" -type f \\( -name "docker-compose.yml" -o -name "docker-compose
   work_dir="$(dirname "$f")"
   echo "##PATH##$work_dir"
   if cd "$work_dir" 2>/dev/null; then
-    docker compose ps --format json >/dev/null 2>&1
-    if [ $? -eq 0 ]; then
-      docker compose ps --format json 2>/dev/null
+    ids="$(docker compose ps -q 2>/dev/null || true)"
+    if [ -n "$ids" ] && command -v docker >/dev/null 2>&1; then
+      docker inspect $ids 2>/dev/null || echo "[]"
     else
-      docker-compose ps --format json >/dev/null 2>&1
-      if [ $? -eq 0 ]; then
-        docker-compose ps --format json 2>/dev/null
+      ids="$(docker-compose ps -q 2>/dev/null || true)"
+      if [ -n "$ids" ] && command -v docker >/dev/null 2>&1; then
+        docker inspect $ids 2>/dev/null || echo "[]"
       else
-        ids="$(docker-compose ps -q 2>/dev/null)"
-        if [ -n "$ids" ] && command -v docker >/dev/null 2>&1; then
-          docker inspect $ids 2>/dev/null || echo "[]"
-        else
-          echo "[]"
-        fi
+        echo "[]"
       fi
     fi
   else
