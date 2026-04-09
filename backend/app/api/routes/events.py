@@ -2,6 +2,8 @@ import json
 import os
 import uuid
 from datetime import datetime
+import io
+import zipfile
 
 import anyio
 import requests
@@ -16,8 +18,28 @@ from .configs import ensure_snapshot, ensure_snapshot_if_success
 from ...notify.feishu import send_feishu_text
 from ...notify.history_status import update_history_status
 from ...notify.deploy_notify import mark_notified, mark_notify_error
+from ...utils.datetime_fmt import iso_app
+from ...utils.github_api import download_workflow_logs_zip, get_workflow_run, parse_owner_repo
 
 router = APIRouter()
+
+
+def _map_github_run(status: str | None, conclusion: str | None) -> str:
+    st = (status or "").strip().lower()
+    cc = (conclusion or "").strip().lower()
+    if st in {"queued", "waiting", "requested"}:
+        return "pending"
+    if st in {"in_progress"}:
+        return "running"
+    if st == "completed":
+        if cc in {"success"}:
+            return "success"
+        if cc in {"cancelled", "skipped"}:
+            return "canceled"
+        if cc in {"failure", "timed_out", "action_required", "stale"}:
+            return "failed"
+        return "failed"
+    return "pending"
 
 
 def _sse(event: str, data: dict) -> str:
@@ -115,6 +137,8 @@ async def history_events(history_id: str, user=Depends(require_permission("audit
             warned_missing_token = False
             warned_jobs_fetch = False
             warned_trace_fetch: set[int] = set()
+            warned_github_trace = False
+            gh_logs_loaded = False
 
             saved_tail = ""
             try:
@@ -152,7 +176,7 @@ async def history_events(history_id: str, user=Depends(require_permission("audit
                 {
                     "history_id": history_id,
                     "deployment_id": base["deployment_id"],
-                    "created_at": base["history"].created_at.isoformat() if base["history"].created_at else None,
+                    "created_at": iso_app(base["history"].created_at),
                     "config_files": base["config_files"],
                     "pipeline_id": base["history"].pipeline_id,
                     "status": base["history"].status,
@@ -241,22 +265,42 @@ async def history_events(history_id: str, user=Depends(require_permission("audit
 
                 rr = base.get("ci_repo") or base.get("repo")
                 proj = ((rr.project_id if rr else None) or os.getenv("GITLAB_PROJECT") or "").strip()
-                token = ((rr.private_token if rr else None) or "").strip() or (os.getenv("PRIVATE_TOKEN") or "").strip() or None
+                token = ((rr.private_token if rr else None) or "").strip() or (os.getenv("GITHUB_PAT") or os.getenv("PRIVATE_TOKEN") or "").strip() or None
+                is_github = False
+                try:
+                    if rr and "github.com" in str(rr.url or "").lower():
+                        is_github = True
+                except Exception:
+                    pass
+                try:
+                    snap = base["history"].repo_snapshot or {}
+                    if isinstance(snap, dict):
+                        ci = str(snap.get("ci_project_id") or "").strip()
+                        o, p = parse_owner_repo(ci)
+                        if o and p:
+                            is_github = True
+                except Exception:
+                    pass
+                trace_enabled = enable_trace and (not is_github)
+                if is_github and enable_trace and not warned_github_trace:
+                    warned_github_trace = True
+                    yield _log("====== [NexusOps] GitHub Actions 模式：实时 trace 暂不支持，将在任务结束后尝试拉取日志 ======")
+                    await _flush()
 
-                if enable_trace and not pipeline_id and not warned_missing_pipeline:
+                if trace_enabled and not pipeline_id and not warned_missing_pipeline:
                     warned_missing_pipeline = True
                     yield _log("!! 未获取到 pipeline_id，无法回放/拉取 CI/CD 日志")
                     await _flush()
-                if enable_trace and pipeline_id and not proj and not warned_missing_proj:
+                if trace_enabled and pipeline_id and not proj and not warned_missing_proj:
                     warned_missing_proj = True
                     yield _log("!! 未配置 GitLab Project ID，无法回放/拉取 CI/CD 日志")
                     await _flush()
-                if enable_trace and pipeline_id and proj and not token and not warned_missing_token:
+                if trace_enabled and pipeline_id and proj and not token and not warned_missing_token:
                     warned_missing_token = True
                     yield _log("!! 未配置 GitLab PRIVATE_TOKEN，无法获取 CI/CD 任务日志")
                     await _flush()
 
-                if enable_trace and pipeline_id and proj and token:
+                if trace_enabled and pipeline_id and proj and token:
                     if last_pipeline_id != pipeline_id:
                         jobs = []
                         job_offsets = {}
@@ -327,11 +371,49 @@ async def history_events(history_id: str, user=Depends(require_permission("audit
                         if emitted >= 400:
                             break
                     await _flush()
-                elif not enable_trace:
+                elif (not enable_trace) and (not is_github):
                     yield _log("!! 已禁用 CI/CD trace 拉取（NEXUSOPS_SSE_TRACE=0）")
                     await _flush()
 
                 if status_now in {"success", "failed", "canceled"}:
+                    if is_github and pipeline_id and token and not gh_logs_loaded:
+                        owner, repo_name = parse_owner_repo(proj)
+                        if not owner or not repo_name:
+                            owner, repo_name = parse_owner_repo(str(getattr(rr, "url", "") or "").strip() if rr else "")
+                        if owner and repo_name:
+                            try:
+                                raw = await anyio.to_thread.run_sync(
+                                    lambda: download_workflow_logs_zip(
+                                        owner=owner,
+                                        repo=repo_name,
+                                        token=token,
+                                        run_id=int(pipeline_id),
+                                        base_url=(os.getenv("GITHUB_API_BASE_URL") or "https://api.github.com").strip() or "https://api.github.com",
+                                        timeout=30,
+                                    )
+                                )
+                                zf = zipfile.ZipFile(io.BytesIO(raw))
+                                lines: list[str] = []
+                                for n in zf.namelist():
+                                    if not n.lower().endswith(".txt"):
+                                        continue
+                                    try:
+                                        txt = zf.read(n).decode("utf-8", errors="replace")
+                                    except Exception:
+                                        continue
+                                    for ln in txt.splitlines()[-800:]:
+                                        if ln:
+                                            lines.append(ln)
+                                    if len(lines) > 2000:
+                                        lines = lines[-2000:]
+                                if lines:
+                                    yield _log("====== [GitHub Actions] Logs (tail) ======")
+                                    for ln in lines[-2000:]:
+                                        yield _log(ln)
+                                    await _flush(force=True)
+                            except Exception:
+                                pass
+                        gh_logs_loaded = True
                     if status_now == "success":
                         try:
                             await ensure_snapshot_if_success(hid)
@@ -343,7 +425,7 @@ async def history_events(history_id: str, user=Depends(require_permission("audit
                     break
 
                 pid = pipeline_id
-                if pid and proj and token:
+                if pid and proj and token and (not is_github):
                     url = f"{gitlab_url}/api/v4/projects/{requests.utils.quote(proj, safe='')}/pipelines/{pid}"
                     headers = {"PRIVATE-TOKEN": token}
                     try:
@@ -371,6 +453,42 @@ async def history_events(history_id: str, user=Depends(require_permission("audit
                                 await run_db(_update_work)
                     except Exception:
                         pass
+                if pid and proj and token and is_github:
+                    owner, repo_name = parse_owner_repo(proj)
+                    if not owner or not repo_name:
+                        owner, repo_name = parse_owner_repo(str(getattr(rr, "url", "") or "").strip() if rr else "")
+                    if owner and repo_name:
+                        try:
+                            data = await anyio.to_thread.run_sync(
+                                lambda: get_workflow_run(
+                                    owner=owner,
+                                    repo=repo_name,
+                                    token=token,
+                                    run_id=int(pid),
+                                    base_url=(os.getenv("GITHUB_API_BASE_URL") or "https://api.github.com").strip() or "https://api.github.com",
+                                    timeout=12,
+                                )
+                            )
+                            new_status = _map_github_run(str(data.get("status") or ""), str(data.get("conclusion") or ""))
+                            new_web_url = data.get("html_url") or st.get("web_url")
+                            if new_status and new_status != st.get("status"):
+                                def _update_work(session):
+                                    h = session.get(DeploymentHistory, hid)
+                                    if not h:
+                                        return
+                                    notify_payload = update_history_status(session, hid, new_status, new_web_url)
+                                    session.commit()
+                                    if notify_payload:
+                                        url2, secret2, text2 = notify_payload
+                                        try:
+                                            send_feishu_text(url2, text2, secret=secret2)
+                                            mark_notified(session, hid)
+                                        except Exception as e:
+                                            mark_notify_error(session, hid, f"{type(e).__name__}: {str(e)}")
+                                        session.commit()
+                                await run_db(_update_work)
+                        except Exception:
+                            pass
 
                 yield ":keepalive\n\n"
                 await anyio.sleep(2)

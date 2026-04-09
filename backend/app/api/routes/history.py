@@ -1,7 +1,6 @@
 import os
 import uuid
 
-import requests
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from sqlmodel import select
@@ -14,8 +13,92 @@ from ...notify.feishu import send_feishu_text
 from ...notify.history_status import update_history_status
 from ...notify.deploy_notify import mark_notified, mark_notify_error
 from ...utils.datetime_fmt import iso_app, iso_now_app
+from ...utils.github_api import cancel_workflow_run, get_workflow_run, list_workflow_runs, parse_owner_repo
 
 router = APIRouter()
+
+
+def _map_github_run(status: str | None, conclusion: str | None) -> str:
+    st = (status or "").strip().lower()
+    cc = (conclusion or "").strip().lower()
+    if st in {"queued", "waiting", "requested"}:
+        return "pending"
+    if st in {"in_progress"}:
+        return "running"
+    if st == "completed":
+        if cc in {"success"}:
+            return "success"
+        if cc in {"cancelled", "skipped"}:
+            return "canceled"
+        if cc in {"failure", "timed_out", "action_required", "stale"}:
+            return "failed"
+        return "failed"
+    return "pending"
+
+
+def _guess_github_owner_repo_and_token(
+    session,
+    repo: Repo | None,
+    snap: dict | None,
+) -> tuple[str | None, str | None, str | None]:
+    rr = repo
+    try:
+        if isinstance(snap, dict):
+            ci_repo_id = str(snap.get("ci_repo_id") or "").strip()
+            if ci_repo_id:
+                rr2 = session.get(Repo, uuid.UUID(ci_repo_id))
+                if rr2:
+                    rr = rr2
+    except Exception:
+        pass
+
+    slug = ""
+    try:
+        if isinstance(snap, dict):
+            slug = str((snap.get("ci_project_id") or "")).strip()
+    except Exception:
+        slug = ""
+
+    owner, repo_name = (None, None)
+    if slug:
+        owner, repo_name = parse_owner_repo(slug)
+    if not owner or not repo_name:
+        owner, repo_name = parse_owner_repo((rr.url or "").strip() if rr else "")
+    token = ((rr.private_token or "") if rr else "").strip() or (os.getenv("GITHUB_PAT") or "").strip() or (os.getenv("PRIVATE_TOKEN") or "").strip() or None
+    return owner, repo_name, token
+
+
+def _resolve_run_id(owner: str, repo_name: str, token: str, history_id: str) -> tuple[int | None, str | None]:
+    runs = list_workflow_runs(
+        owner=owner,
+        repo=repo_name,
+        token=token,
+        base_url=(os.getenv("GITHUB_API_BASE_URL") or "https://api.github.com").strip() or "https://api.github.com",
+        event="repository_dispatch",
+        per_page=30,
+    )
+    hid = str(history_id)
+    for r in runs:
+        s = ""
+        try:
+            s = " ".join(
+                [
+                    str(r.get("display_title") or ""),
+                    str(r.get("name") or ""),
+                    str(r.get("head_branch") or ""),
+                    str((r.get("head_commit") or {}).get("message") or ""),
+                ]
+            )
+        except Exception:
+            s = ""
+        if hid and hid in s:
+            rid = r.get("id")
+            try:
+                rid_int = int(rid)
+            except Exception:
+                rid_int = None
+            return rid_int, (r.get("html_url") or None)
+    return None, None
 
 
 @router.get("")
@@ -26,15 +109,12 @@ async def get_history(
     deployment_id: str | None = Query(default=None),
 ):
     def _work(session):
-        gitlab_url = (os.getenv("GITLAB_BASE_URL") or "https://gitlab.xuelangyun.com").rstrip("/")
-        verify_tls = (os.getenv("GITLAB_TLS_INSECURE") or "").strip() != "1"
-
         refresh_rows = session.exec(
             select(
                 DeploymentHistory.id,
                 DeploymentHistory.pipeline_id,
                 DeploymentHistory.status,
-                Repo.project_id,
+                Repo.url,
                 Repo.private_token,
                 DeploymentHistory.repo_snapshot,
             )
@@ -45,51 +125,55 @@ async def get_history(
             .limit(30)
         ).all()
 
-        ci_repo_cache: dict[str, tuple[str, str]] = {}
-        for hid, pid, old_status, proj_id, private_token, snap in refresh_rows:
-            proj = (proj_id or os.getenv("GITLAB_PROJECT") or "").strip()
-            token = (private_token or "").strip() or (os.getenv("PRIVATE_TOKEN") or "").strip() or None
-            try:
-                if isinstance(snap, dict):
-                    ci_repo_id = str(snap.get("ci_repo_id") or "").strip()
-                    if ci_repo_id:
-                        if ci_repo_id not in ci_repo_cache:
-                            rr = session.get(Repo, uuid.UUID(ci_repo_id))
-                            ci_repo_cache[ci_repo_id] = (
-                                str((rr.project_id or "") if rr else "").strip(),
-                                str((rr.private_token or "") if rr else "").strip(),
-                            )
-                        p2, t2 = ci_repo_cache.get(ci_repo_id) or ("", "")
-                        if p2:
-                            proj = p2
-                        if t2:
-                            token = t2
-            except Exception:
-                pass
-            if not pid or not proj or not token:
+        for hid, pid, old_status, repo_url, private_token, snap in refresh_rows:
+            owner, repo_name, token = _guess_github_owner_repo_and_token(session, None, snap) if snap else (None, None, None)
+            if (not owner or not repo_name) and repo_url:
+                owner, repo_name = parse_owner_repo(str(repo_url))
+                token = (str(private_token or "").strip() or (os.getenv("GITHUB_PAT") or "").strip() or (os.getenv("PRIVATE_TOKEN") or "").strip() or None)
+            if not owner or not repo_name or not token:
                 continue
-            url = f"{gitlab_url}/api/v4/projects/{requests.utils.quote(proj, safe='')}/pipelines/{pid}"
-            headers = {"PRIVATE-TOKEN": token}
+
+            obj = session.get(DeploymentHistory, hid)
+            if not obj:
+                continue
+
+            run_id = obj.pipeline_id
+            web_url = obj.web_url
+            if not run_id:
+                rid, url2 = _resolve_run_id(owner, repo_name, token, str(hid))
+                if rid:
+                    obj.pipeline_id = rid
+                    if url2:
+                        obj.web_url = url2
+                    session.add(obj)
+                    session.commit()
+                    run_id = rid
+                    web_url = obj.web_url
+
+            if not run_id:
+                continue
+
             try:
-                resp = requests.get(url, headers=headers, verify=verify_tls, timeout=8)
-                if not resp.ok:
-                    continue
-                data = resp.json()
-                new_status = data.get("status")
-                new_web_url = data.get("web_url")
+                data = get_workflow_run(
+                    owner=owner,
+                    repo=repo_name,
+                    token=token,
+                    run_id=int(run_id),
+                    base_url=(os.getenv("GITHUB_API_BASE_URL") or "https://api.github.com").strip() or "https://api.github.com",
+                )
+                new_status = _map_github_run(data.get("status"), data.get("conclusion"))
+                new_web_url = data.get("html_url") or web_url
                 if new_status and new_status != old_status:
-                    obj = session.get(DeploymentHistory, hid)
-                    if obj:
-                        notify_payload = update_history_status(session, obj.id, new_status, new_web_url)
+                    notify_payload = update_history_status(session, obj.id, new_status, new_web_url)
+                    session.commit()
+                    if notify_payload:
+                        url2, secret2, text2 = notify_payload
+                        try:
+                            send_feishu_text(url2, text2, secret=secret2)
+                            mark_notified(session, obj.id)
+                        except Exception as e:
+                            mark_notify_error(session, obj.id, f"{type(e).__name__}: {str(e)}")
                         session.commit()
-                        if notify_payload:
-                            url2, secret2, text2 = notify_payload
-                            try:
-                                send_feishu_text(url2, text2, secret=secret2)
-                                mark_notified(session, obj.id)
-                            except Exception as e:
-                                mark_notify_error(session, obj.id, f"{type(e).__name__}: {str(e)}")
-                            session.commit()
             except Exception:
                 continue
 
@@ -151,9 +235,6 @@ async def get_history(
 @router.get("/{history_id}/status")
 async def check_pipeline_status(history_id: str, user=Depends(require_permission("audit:read"))):
     def _work(session):
-        gitlab_url = (os.getenv("GITLAB_BASE_URL") or "https://gitlab.xuelangyun.com").rstrip("/")
-        verify_tls = (os.getenv("GITLAB_TLS_INSECURE") or "").strip() != "1"
-
         h = session.get(DeploymentHistory, uuid.UUID(history_id))
         if not h:
             raise HTTPException(404, "History not found")
@@ -163,31 +244,45 @@ async def check_pipeline_status(history_id: str, user=Depends(require_permission
             raise HTTPException(404, "History not found")
         r = session.get(Repo, d.repo_id) if d else None
 
-        pid = h.pipeline_id
-        proj = ((r.project_id if r else None) or os.getenv("GITLAB_PROJECT") or "").strip()
-        token = ((r.private_token if r else None) or "").strip() or (os.getenv("PRIVATE_TOKEN") or "").strip() or None
+        owner, repo_name, token = _guess_github_owner_repo_and_token(session, r, h.repo_snapshot if isinstance(h.repo_snapshot, dict) else None)
+        if not owner or not repo_name or not token:
+            return {"status": h.status, "pipeline": None}
 
-        if pid and proj and token:
-            url = f"{gitlab_url}/api/v4/projects/{requests.utils.quote(proj, safe='')}/pipelines/{pid}"
-            headers = {"PRIVATE-TOKEN": token}
+        run_id = h.pipeline_id
+        if not run_id:
+            rid, url2 = _resolve_run_id(owner, repo_name, token, str(h.id))
+            if rid:
+                h.pipeline_id = rid
+                if url2:
+                    h.web_url = url2
+                session.add(h)
+                session.commit()
+                session.refresh(h)
+                run_id = rid
+
+        if run_id:
             try:
-                resp = requests.get(url, headers=headers, verify=verify_tls, timeout=8)
-                if resp.ok:
-                    data = resp.json()
-                    new_status = data.get("status")
-                    new_web_url = data.get("web_url")
-                    if new_status:
-                        notify_payload = update_history_status(session, h.id, new_status, new_web_url)
+                data = get_workflow_run(
+                    owner=owner,
+                    repo=repo_name,
+                    token=token,
+                    run_id=int(run_id),
+                    base_url=(os.getenv("GITHUB_API_BASE_URL") or "https://api.github.com").strip() or "https://api.github.com",
+                )
+                new_status = _map_github_run(data.get("status"), data.get("conclusion"))
+                new_web_url = data.get("html_url") or h.web_url
+                if new_status:
+                    notify_payload = update_history_status(session, h.id, new_status, new_web_url)
+                    session.commit()
+                    if notify_payload:
+                        url2, secret2, text2 = notify_payload
+                        try:
+                            send_feishu_text(url2, text2, secret=secret2)
+                            mark_notified(session, h.id)
+                        except Exception as e:
+                            mark_notify_error(session, h.id, f"{type(e).__name__}: {str(e)}")
                         session.commit()
-                        if notify_payload:
-                            url2, secret2, text2 = notify_payload
-                            try:
-                                send_feishu_text(url2, text2, secret=secret2)
-                                mark_notified(session, h.id)
-                            except Exception as e:
-                                mark_notify_error(session, h.id, f"{type(e).__name__}: {str(e)}")
-                            session.commit()
-                    return {"status": new_status or h.status, "pipeline": data}
+                return {"status": new_status or h.status, "pipeline": data}
             except Exception:
                 pass
 
@@ -221,9 +316,6 @@ async def delete_history(history_id: str, user=Depends(require_permission("audit
 @router.post("/{history_id}/cancel")
 async def cancel_history(history_id: str, user=Depends(require_permission("deploy:manage"))):
     def _work(session):
-        gitlab_url = (os.getenv("GITLAB_BASE_URL") or "https://gitlab.xuelangyun.com").rstrip("/")
-        verify_tls = (os.getenv("GITLAB_TLS_INSECURE") or "").strip() != "1"
-
         try:
             hid = uuid.UUID(history_id)
         except Exception:
@@ -240,45 +332,36 @@ async def cancel_history(history_id: str, user=Depends(require_permission("deplo
         if st0 in {"success", "failed", "canceled"}:
             return {"ok": True, "status": h.status, "pipeline_id": h.pipeline_id}
 
-        pid = h.pipeline_id
-        if not pid:
-            raise HTTPException(status_code=400, detail="未获取到 pipeline_id，无法取消")
-
         r = session.get(Repo, d.repo_id) if d else None
-        proj = ((r.project_id if r else None) or os.getenv("GITLAB_PROJECT") or "").strip()
-        token = ((r.private_token if r else None) or "").strip() or (os.getenv("PRIVATE_TOKEN") or "").strip() or None
-        try:
-            snap = h.repo_snapshot
-            if isinstance(snap, dict):
-                ci_repo_id = str(snap.get("ci_repo_id") or "").strip()
-                if ci_repo_id:
-                    rr = session.get(Repo, uuid.UUID(ci_repo_id))
-                    p2 = str((rr.project_id or "") if rr else "").strip()
-                    t2 = str((rr.private_token or "") if rr else "").strip()
-                    if p2:
-                        proj = p2
-                    if t2:
-                        token = t2
-        except Exception:
-            pass
+        owner, repo_name, token = _guess_github_owner_repo_and_token(session, r, h.repo_snapshot if isinstance(h.repo_snapshot, dict) else None)
+        if not owner or not repo_name or not token:
+            raise HTTPException(status_code=400, detail="未配置 GitHub repo 或 token，无法取消")
 
-        if not proj or not token:
-            raise HTTPException(status_code=400, detail="未配置 GitLab Project ID 或 PRIVATE_TOKEN，无法取消")
+        run_id = h.pipeline_id
+        if not run_id:
+            rid, url2 = _resolve_run_id(owner, repo_name, token, str(h.id))
+            if rid:
+                h.pipeline_id = rid
+                if url2:
+                    h.web_url = url2
+                session.add(h)
+                session.commit()
+                session.refresh(h)
+                run_id = rid
 
-        cancel_url = f"{gitlab_url}/api/v4/projects/{requests.utils.quote(proj, safe='')}/pipelines/{int(pid)}/cancel"
-        headers = {"PRIVATE-TOKEN": token}
-        resp = None
+        if not run_id:
+            raise HTTPException(status_code=400, detail="未获取到 run_id，无法取消")
+
         try:
-            resp = requests.post(cancel_url, headers=headers, verify=verify_tls, timeout=12)
+            cancel_workflow_run(
+                owner=owner,
+                repo=repo_name,
+                token=token,
+                run_id=int(run_id),
+                base_url=(os.getenv("GITHUB_API_BASE_URL") or "https://api.github.com").strip() or "https://api.github.com",
+            )
         except Exception as e:
-            raise HTTPException(status_code=502, detail=f"调用 GitLab 取消失败: {type(e).__name__}: {str(e)}")
-
-        if not resp.ok:
-            try:
-                body = resp.json()
-            except Exception:
-                body = (resp.text or "")[:2000]
-            raise HTTPException(status_code=400, detail={"gitlab_error": body, "status_code": resp.status_code})
+            raise HTTPException(status_code=502, detail=f"调用 GitHub 取消失败: {type(e).__name__}: {str(e)}")
 
         vars_ = dict(h.variables or {})
         who = (getattr(user, "display_name", None) or getattr(user, "username", None) or "").strip()

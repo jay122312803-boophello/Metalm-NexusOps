@@ -1,0 +1,86 @@
+name: NexusOps Deploy
+run-name: NexusOps Deploy ${{ github.event.client_payload.nexusops.NEXUSOPS_HISTORY_ID || github.run_id }}
+
+on:
+  repository_dispatch:
+    types: [nexusops_deploy]
+  workflow_dispatch:
+    inputs:
+      NEXUSOPS_SOURCE_REPO_URL:
+        required: true
+        type: string
+      NEXUSOPS_SOURCE_REPO_REF:
+        required: false
+        type: string
+        default: master
+      INPUT_DIR:
+        required: false
+        type: string
+        default: ./
+      DEST_DIR:
+        required: true
+        type: string
+      SERVER_HOST:
+        required: true
+        type: string
+      SERVER_USER:
+        required: false
+        type: string
+        default: metalm
+      CUSTOM_DEPLOY_SCRIPT:
+        required: true
+        type: string
+      NEXUSOPS_API_BASE_URL:
+        required: false
+        type: string
+      NEXUSOPS_CONFIG_ZIP_URL:
+        required: false
+        type: string
+      NEXUSOPS_HISTORY_ID:
+        required: false
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare tools
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y rsync
+
+      - name: Setup SSH
+        env:
+          SERVER_SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+        run: |
+          if [ -z "${SERVER_SSH_KEY:-}" ]; then
+            echo "SERVER_SSH_KEY secret is required"
+            exit 22
+          fi
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf "%s\n" "${SERVER_SSH_KEY}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          eval "$(ssh-agent -s)"
+          ssh-add ~/.ssh/id_rsa
+          printf "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
+
+      - name: Deploy
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          NEXUSOPS_SOURCE_REPO_URL: ${{ github.event.client_payload.nexusops.NEXUSOPS_SOURCE_REPO_URL || inputs.NEXUSOPS_SOURCE_REPO_URL }}
+          NEXUSOPS_SOURCE_REPO_REF: ${{ github.event.client_payload.nexusops.NEXUSOPS_SOURCE_REPO_REF || inputs.NEXUSOPS_SOURCE_REPO_REF }}
+          INPUT_DIR: ${{ github.event.client_payload.nexusops.INPUT_DIR || inputs.INPUT_DIR }}
+          DEST_DIR: ${{ github.event.client_payload.nexusops.DEST_DIR || inputs.DEST_DIR }}
+          SERVER_HOST: ${{ github.event.client_payload.nexusops.SERVER_HOST || inputs.SERVER_HOST }}
+          SERVER_USER: ${{ github.event.client_payload.nexusops.SERVER_USER || inputs.SERVER_USER }}
+          CUSTOM_DEPLOY_SCRIPT: ${{ github.event.client_payload.nexusops.CUSTOM_DEPLOY_SCRIPT || inputs.CUSTOM_DEPLOY_SCRIPT }}
+          NEXUSOPS_API_BASE_URL: ${{ github.event.client_payload.nexusops.NEXUSOPS_API_BASE_URL || inputs.NEXUSOPS_API_BASE_URL }}
+          NEXUSOPS_CONFIG_ZIP_URL: ${{ github.event.client_payload.nexusops.NEXUSOPS_CONFIG_ZIP_URL || inputs.NEXUSOPS_CONFIG_ZIP_URL }}
+          NEXUSOPS_API_TOKEN: ${{ github.event.client_payload.nexusops.NEXUSOPS_API_TOKEN || secrets.NEXUSOPS_API_TOKEN }}
+          NEXUSOPS_GIT_HTTP_TOKEN: ${{ github.event.client_payload.nexusops.NEXUSOPS_GIT_HTTP_TOKEN || secrets.NEXUSOPS_GIT_HTTP_TOKEN }}
+          NEXUSOPS_HISTORY_ID: ${{ github.event.client_payload.nexusops.NEXUSOPS_HISTORY_ID || inputs.NEXUSOPS_HISTORY_ID }}
+        run: |
+          sh ci/nexusops_deploy.sh

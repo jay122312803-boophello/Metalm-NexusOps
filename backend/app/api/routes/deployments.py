@@ -19,6 +19,7 @@ from ...notify.history_status import update_history_status
 from ...notify.deploy_notify import mark_notified, mark_notify_error
 from ...utils.datetime_fmt import iso_app
 from ...utils.datetime_fmt import now_app_dt
+from ...utils.github_api import dispatch_repo_event, parse_owner_repo
 
 router = APIRouter()
 
@@ -299,27 +300,31 @@ async def trigger_deployment(dep_id: str, request: Request, req: TriggerDeployme
             and (((ci_repo.trigger_token or "").strip()) or ((ci_repo.private_token or "").strip()))
         )
 
-        project_id = (
+        ci_repo_slug = (
             ci_project
             or ((ci_repo.project_id or "").strip() if use_ci_repo else "")
             or (r.project_id or "")
-            or os.getenv("GITLAB_PROJECT")
-        )
-        if not project_id:
-            raise HTTPException(status_code=400, detail="Project ID not configured in repo")
+            or os.getenv("GITHUB_REPO")
+            or ""
+        ).strip()
+        owner, repo_name = parse_owner_repo(ci_repo_slug) if ci_repo_slug else (None, None)
+        if not owner or not repo_name:
+            rr = ci_repo if use_ci_repo else r
+            owner, repo_name = parse_owner_repo((rr.url or "").strip() if rr else "")
+        if not owner or not repo_name:
+            raise HTTPException(status_code=400, detail="GitHub repo not configured (need owner/repo or github.com URL)")
 
-        gitlab_url = (os.getenv("GITLAB_BASE_URL") or "https://gitlab.xuelangyun.com").rstrip("/")
-        trigger_ref = ((ci_repo.branch or "").strip() if use_ci_repo else "") or src_ref
-
+        github_token = None
         if ci_project:
-            trigger_token = (os.getenv("NEXUSOPS_CI_TRIGGER_TOKEN") or os.getenv("TRIGGER_TOKEN") or "").strip() or None
-            private_token = (os.getenv("NEXUSOPS_CI_PRIVATE_TOKEN") or os.getenv("PRIVATE_TOKEN") or "").strip() or None
+            github_token = (os.getenv("NEXUSOPS_CI_GITHUB_PAT") or os.getenv("GITHUB_PAT") or os.getenv("PRIVATE_TOKEN") or "").strip() or None
         elif use_ci_repo:
-            trigger_token = (ci_repo.trigger_token or "").strip() or None
-            private_token = (ci_repo.private_token or "").strip() or None
+            github_token = (ci_repo.private_token or "").strip() or None
         else:
-            trigger_token = (r.trigger_token or "").strip() or (os.getenv("TRIGGER_TOKEN") or "").strip() or None
-            private_token = (r.private_token or "").strip() or (os.getenv("PRIVATE_TOKEN") or "").strip() or None
+            github_token = (r.private_token or "").strip() or (os.getenv("GITHUB_PAT") or os.getenv("PRIVATE_TOKEN") or "").strip() or None
+        if not github_token:
+            raise HTTPException(status_code=400, detail="No GitHub token configured for repository")
+
+        event_type = (os.getenv("NEXUSOPS_GITHUB_EVENT_TYPE") or "nexusops_deploy").strip() or "nexusops_deploy"
 
         variables = {}
         req_vars = payload.get("variables") or {}
@@ -343,8 +348,6 @@ async def trigger_deployment(dep_id: str, request: Request, req: TriggerDeployme
         if (r.private_token or "").strip():
             variables["NEXUSOPS_GIT_HTTP_TOKEN"] = (r.private_token or "").strip()
 
-        verify_tls = (os.getenv("GITLAB_TLS_INSECURE") or "").strip() != "1"
-
         h = DeploymentHistory(
             deployment_id=d.id,
             pipeline_id=None,
@@ -365,8 +368,8 @@ async def trigger_deployment(dep_id: str, request: Request, req: TriggerDeployme
                 "url": r.url,
                 "branch": src_ref,
                 "project_id": (r.project_id or "").strip() or None,
-                "ci_project_id": project_id,
-                "ci_ref": trigger_ref,
+                "ci_project_id": f"{owner}/{repo_name}",
+                "ci_ref": src_ref,
                 "ci_repo_id": str(ci_repo.id) if use_ci_repo and ci_repo else None,
             },
             variables={},
@@ -431,33 +434,24 @@ async def trigger_deployment(dep_id: str, request: Request, req: TriggerDeployme
         except Exception:
             pass
 
-        resp = None
+        payload_for_ci = dict(variables_for_history)
         try:
-            if trigger_token:
-                url = f"{gitlab_url}/api/v4/projects/{requests.utils.quote(project_id, safe='')}/trigger/pipeline"
-                form = {"token": trigger_token, "ref": trigger_ref}
-                for k, v in variables.items():
-                    form[f"variables[{k}]"] = str(v)
-                resp = requests.post(url, data=form, verify=verify_tls, timeout=15)
-            elif private_token:
-                url = f"{gitlab_url}/api/v4/projects/{requests.utils.quote(project_id, safe='')}/pipeline"
-                headers = {"PRIVATE-TOKEN": private_token}
-                form = {"ref": trigger_ref}
-                for k, v in variables.items():
-                    form[f"variables[{k}]"] = str(v)
-                resp = requests.post(url, headers=headers, data=form, verify=verify_tls, timeout=15)
-            else:
-                raise HTTPException(status_code=400, detail="No token configured for repository")
+            tok = (variables.get("NEXUSOPS_API_TOKEN") or "").strip()
+            if tok:
+                payload_for_ci["NEXUSOPS_API_TOKEN"] = tok
+        except Exception:
+            pass
 
-            resp.raise_for_status()
-            data = resp.json()
-        except requests.HTTPError:
-            status_code = resp.status_code if resp is not None else 500
-            body = None
-            try:
-                body = resp.json() if resp is not None else None
-            except Exception:
-                body = (resp.text[:2000] if resp is not None else None)
+        try:
+            dispatch_repo_event(
+                owner=owner,
+                repo=repo_name,
+                token=github_token,
+                event_type=event_type,
+                client_payload={"nexusops": {k: (str(v) if v is not None else "") for k, v in payload_for_ci.items()}},
+                base_url=(os.getenv("GITHUB_API_BASE_URL") or "https://api.github.com").strip() or "https://api.github.com",
+            )
+        except Exception as e:
             notify_payload = update_history_status(session, h.id, "failed", h.web_url)
             session.commit()
             if notify_payload:
@@ -468,29 +462,17 @@ async def trigger_deployment(dep_id: str, request: Request, req: TriggerDeployme
                 except Exception as e:
                     mark_notify_error(session, h.id, f"{type(e).__name__}: {str(e)}")
                 session.commit()
-            raise HTTPException(status_code=status_code, detail={"gitlab_error": body})
-        except requests.RequestException as e:
-            notify_payload = update_history_status(session, h.id, "failed", h.web_url)
-            session.commit()
-            if notify_payload:
-                url2, secret2, text2 = notify_payload
-                try:
-                    send_feishu_text(url2, text2, secret=secret2)
-                    mark_notified(session, h.id)
-                except Exception as e2:
-                    mark_notify_error(session, h.id, f"{type(e2).__name__}: {str(e2)}")
-                session.commit()
             raise HTTPException(status_code=502, detail=str(e))
 
-        h.pipeline_id = data.get("id")
-        h.status = data.get("status")
+        h.pipeline_id = None
+        h.status = "pending"
         h.ref = src_ref
-        h.web_url = data.get("web_url")
+        h.web_url = None
         session.add(h)
         session.commit()
         session.refresh(h)
 
-        return {"ok": True, "pipeline": data, "history_id": str(h.id), "config_files": config_files}
+        return {"ok": True, "pipeline": None, "history_id": str(h.id), "config_files": config_files}
 
     return await run_db(_work)
 
