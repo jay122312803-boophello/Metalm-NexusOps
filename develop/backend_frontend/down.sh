@@ -1,1 +1,1 @@
-NETWORK=metalm-dev-net docker-compose down
+NETWORK=metalm-dev-net docker compose down
